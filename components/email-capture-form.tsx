@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { readResponsePayload } from "@/lib/http/read-response-payload";
 
 type EmailCaptureFormProps = {
   jobId: string;
@@ -24,11 +25,16 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
         body: JSON.stringify({ email, jobId, fileId })
       });
 
-      const payload = await response.json();
+      const payload = await readResponsePayload(response);
       if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to unlock download.");
+        const apiError = typeof payload?.error === "string" ? payload.error : null;
+        throw new Error(apiError ?? "Unable to unlock download.");
       }
-      onUnlocked(payload.downloadUrl);
+      const downloadUrl = typeof payload?.downloadUrl === "string" ? payload.downloadUrl : null;
+      if (!downloadUrl) {
+        throw new Error("Unlock response was empty or invalid.");
+      }
+      onUnlocked(downloadUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to submit email.");
     } finally {

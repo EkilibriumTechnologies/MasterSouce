@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useRef, useState } from "react";
 import { AudioCompare } from "@/components/audio-compare";
 import { EmailCaptureForm } from "@/components/email-capture-form";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
+import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
 type MasterResponse = {
@@ -84,12 +85,16 @@ export function UploadForm() {
 
       const response = await fetch("/api/master", { method: "POST", body: formData });
       setStatus("Mastering and generating previews...");
-      const payload = await response.json();
+      const payload = await readResponsePayload(response);
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Mastering failed.");
+        const apiError = typeof payload?.error === "string" ? payload.error : null;
+        throw new Error(apiError ?? "Mastering failed.");
       }
-      setResult(payload);
+      if (!payload || !("jobId" in payload) || !("previews" in payload) || !("download" in payload) || !("analysis" in payload)) {
+        throw new Error("Mastering response was empty or invalid.");
+      }
+      setResult(payload as MasterResponse);
       setStatus("Preview ready. Enter email to unlock final download.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error.");
