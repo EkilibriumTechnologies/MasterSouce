@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Work+Sans:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* shadcn base tokens - dark theme values */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    
+    --card: 222 47% 14%;
+    --card-foreground: 210 40% 98%;
+    
+    --popover: 222 47% 14%;
+    --popover-foreground: 210 40% 98%;
+    
+    --primary: 263 70% 50%;
+    --primary-foreground: 210 40% 98%;
+    
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 263 70% 50%;
+    
+    --radius: 0.75rem;
+    
+    /* Custom brand tokens */
+    --violet: 263 70% 60%;
+    --violet-glow: 263 70% 50%;
+    --indigo: 239 84% 67%;
+    --amber: 38 92% 50%;
+    --amber-glow: 38 92% 60%;
+    
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(263 70% 20%) 0%, hsl(222 47% 11%) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(217 33% 17% / 0.4) 0%, hsl(222 47% 14% / 0.6) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(263 70% 60%) 0%, hsl(239 84% 67%) 100%);
+    --gradient-glow: radial-gradient(circle at 50% 50%, hsl(263 70% 50% / 0.15) 0%, transparent 70%);
+  }
+  
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+}
+
+@layer utilities {
+  .gradient-text {
+    @apply bg-gradient-to-r from-violet via-indigo to-violet bg-clip-text text-transparent;
+  }
+  
+  .glass-card {
+    @apply bg-card/40 backdrop-blur-xl border border-border/50;
+  }
+  
+  .glow-violet {
+    box-shadow: 0 0 30px hsl(var(--violet-glow) / 0.3);
+  }
+  
+  .glow-amber {
+    box-shadow: 0 0 20px hsl(var(--amber-glow) / 0.4);
+  }
+}
