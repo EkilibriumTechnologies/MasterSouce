@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runMasteringPipeline } from "@/lib/audio/mastering-pipeline";
+import { hasAnyMetric, toPublicMetrics } from "@/lib/audio/public-analysis";
 import { GENRE_PRESETS, LOUDNESS_MODES } from "@/lib/genre-presets";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
@@ -164,6 +165,11 @@ export async function POST(request: NextRequest) {
     }
     const nextEntitlements = await getEntitlementsForUser(user);
 
+    const originalMetrics = toPublicMetrics(result.originalAnalysis);
+    const masteredMetrics = result.masteredAnalysis ? toPublicMetrics(result.masteredAnalysis) : null;
+    const hasMasteredMetrics = Boolean(masteredMetrics && hasAnyMetric(masteredMetrics));
+    const analysisPrimary = hasMasteredMetrics && masteredMetrics ? masteredMetrics : originalMetrics;
+
     const response = NextResponse.json({
       jobId,
       preset: GENRE_PRESETS[parsed.data.genre].label,
@@ -176,12 +182,15 @@ export async function POST(request: NextRequest) {
         requiresEmail: true as const,
         fileId: masteredRecord.id
       },
+      // See `MasterJobAnalysis` in `lib/api/master-analysis.ts` for field semantics.
       analysis: {
-        durationSec: result.analysis.durationSec,
-        integratedLufs: result.analysis.integratedLufs,
-        peakDb: result.analysis.peakDb,
-        crestDb: result.analysis.crestDb,
-        notes: result.analysis.notes
+        durationSec: analysisPrimary.durationSec,
+        integratedLufs: analysisPrimary.integratedLufs,
+        peakDb: analysisPrimary.peakDb,
+        crestDb: analysisPrimary.crestDb,
+        notes: result.originalAnalysis.notes,
+        original: originalMetrics,
+        ...(hasMasteredMetrics && masteredMetrics ? { mastered: masteredMetrics } : {})
       },
       quota: {
         usedThisMonth,

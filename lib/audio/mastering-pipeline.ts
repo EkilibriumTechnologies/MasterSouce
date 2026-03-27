@@ -20,7 +20,10 @@ export type MasteringRequest = {
 };
 
 export type MasteringResult = {
-  analysis: TrackAnalysis;
+  /** Analysis of the uploaded / pre-master file */
+  originalAnalysis: TrackAnalysis;
+  /** Analysis of the rendered master; null if post-render analysis failed */
+  masteredAnalysis: TrackAnalysis | null;
   masteredPath: string;
   previewPath: string;
   inputPreviewPath: string;
@@ -130,13 +133,13 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
   }
 
   await fs.mkdir(getTempRoot(), { recursive: true });
-  const analysis = await analyzeTrack(request.inputPath);
+  const originalAnalysis = await analyzeTrack(request.inputPath);
 
   const masteredPath = path.join(getTempRoot(), `${makeId(`mastered_${request.jobId}`)}.wav`);
   const previewPath = path.join(getTempRoot(), `${makeId(`preview_${request.jobId}`)}.mp3`);
   const inputPreviewPath = path.join(getTempRoot(), `${makeId(`inputpreview_${request.jobId}`)}.mp3`);
 
-  const masteringFilter = buildMasteringFilterChain(preset, analysis, request.loudnessMode);
+  const masteringFilter = buildMasteringFilterChain(preset, originalAnalysis, request.loudnessMode);
 
   await runFfmpeg([
     "-y",
@@ -188,8 +191,17 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
     ])
   ]);
 
+  let masteredAnalysis: TrackAnalysis | null = null;
+  try {
+    masteredAnalysis = await analyzeTrack(masteredPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[mastering-pipeline] post-master analysis failed:", msg);
+  }
+
   return {
-    analysis,
+    originalAnalysis,
+    masteredAnalysis,
     masteredPath,
     previewPath,
     inputPreviewPath,

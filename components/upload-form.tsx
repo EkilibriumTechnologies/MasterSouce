@@ -3,7 +3,9 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AudioCompare } from "@/components/audio-compare";
 import { EmailCaptureForm } from "@/components/email-capture-form";
+import { TrackAnalysisEnhancements } from "@/components/track-analysis-enhancements";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
+import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
@@ -17,13 +19,7 @@ type MasterResponse = {
     requiresEmail: true;
     fileId: string;
   };
-  analysis: {
-    durationSec: number | null;
-    integratedLufs: number | null;
-    peakDb: number | null;
-    crestDb: number | null;
-    notes: string[];
-  };
+  analysis: MasterJobAnalysis;
   quota?: {
     usedThisMonth: number;
     remainingFreeMasters: number;
@@ -176,25 +172,16 @@ export function UploadForm() {
       {result ? (
         <div style={resultAreaStyle}>
           <AudioCompare originalPreviewUrl={result.previews.original} masteredPreviewUrl={result.previews.mastered} />
-          <div style={analysisStyle}>
-            <p style={analysisTitleStyle}>Track analysis</p>
-            <p style={{ margin: 0, color: "#d6ddf8", lineHeight: 1.6 }}>
-              Length: {result.analysis.durationSec ?? "n/a"}s | LUFS: {result.analysis.integratedLufs ?? "n/a"} | Peak:{" "}
-              {result.analysis.peakDb ?? "n/a"} dB | Crest: {result.analysis.crestDb ?? "n/a"} dB
-            </p>
-            {result.quota ? (
-              <p style={{ margin: "10px 0 0", color: "#93f7d0" }}>
-                Free plan usage: {result.quota.usedThisMonth} used this month, {result.quota.remainingFreeMasters} remaining.
-              </p>
-            ) : null}
-            {result.analysis.notes.length ? (
-              <ul style={{ margin: "10px 0 0 18px", color: "#afbadf", lineHeight: 1.55 }}>
-                {result.analysis.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+          <TrackAnalysisEnhancements
+            analysis={result.analysis}
+            quotaLine={
+              result.quota ? (
+                <p style={{ margin: "12px 0 0", color: "#93f7d0" }}>
+                  Free plan usage: {result.quota.usedThisMonth} used this month, {result.quota.remainingFreeMasters} remaining.
+                </p>
+              ) : null
+            }
+          />
           {!downloadUrl ? (
             <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={setDownloadUrl} />
           ) : (
@@ -360,13 +347,6 @@ const errorStyle: React.CSSProperties = {
 };
 
 const resultAreaStyle: React.CSSProperties = { marginTop: "20px", display: "grid", gap: "16px" };
-const analysisStyle: React.CSSProperties = {
-  background: "linear-gradient(160deg, rgba(21, 29, 54, 0.72), rgba(12, 17, 34, 0.72))",
-  border: "1px solid rgba(134, 147, 204, 0.30)",
-  borderRadius: "16px",
-  padding: "18px"
-};
-const analysisTitleStyle: React.CSSProperties = { margin: "0 0 8px", color: "#eef2ff", fontWeight: 700 };
 
 const downloadStyle: React.CSSProperties = {
   display: "inline-flex",
