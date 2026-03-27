@@ -3,7 +3,10 @@ import { readFile, stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import { isJobUnlocked } from "@/lib/email/capture-email";
+import { getMasterJobUnlock, type MasterJobUnlockRow } from "@/lib/downloads/master-job-unlocks";
+import { recordMasteredDownloadAttempt } from "@/lib/downloads/record-mastered-download";
 import { cleanupExpiredTempFiles, findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
+import { isSupabaseConfigured } from "@/lib/supabase/admin";
 
 function getFilenameParam(request: NextRequest): string {
   const fallback = "audio-file.wav";
@@ -30,8 +33,26 @@ export async function GET(request: NextRequest) {
     }
 
     const isMasteredAsset = record.kind === "mastered";
-    if (isMasteredAsset && !isJobUnlocked(record.jobId)) {
-      return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
+    let masteredUnlock: MasterJobUnlockRow | null = null;
+    if (isMasteredAsset) {
+      if (isSupabaseConfigured()) {
+        try {
+          masteredUnlock = await getMasterJobUnlock(record.jobId);
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : "Unknown error";
+          console.error("[api/download] master_job_unlocks lookup failed", { jobId: record.jobId, detail });
+          return NextResponse.json({ error: "Download verification failed." }, { status: 500 });
+        }
+        if (!masteredUnlock || masteredUnlock.fileId !== record.id) {
+          if (isJobUnlocked(record.jobId)) {
+            masteredUnlock = null;
+          } else {
+            return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
+          }
+        }
+      } else if (!isJobUnlocked(record.jobId)) {
+        return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
+      }
     }
 
     const fileStats = await stat(record.filePath);
@@ -43,6 +64,29 @@ export async function GET(request: NextRequest) {
       // Helps some browsers treat the response as seekable media.
       "Accept-Ranges": "bytes"
     };
+
+    if (isMasteredAsset && isSupabaseConfigured() && masteredUnlock) {
+      try {
+        await recordMasteredDownloadAttempt({
+          normalizedEmail: masteredUnlock.normalizedEmail,
+          originalEmail: masteredUnlock.originalEmail ?? masteredUnlock.normalizedEmail,
+          jobId: record.jobId,
+          fileId: record.id,
+          requestMetadata: {
+            userAgent: request.headers.get("user-agent") ?? undefined,
+            accept: request.headers.get("accept") ?? undefined,
+            dl: forceDownload ? 1 : 0
+          }
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Unknown error";
+        console.error("[api/download] record_mastered_download_attempt failed (download still served)", {
+          jobId: record.jobId,
+          fileId: record.id,
+          detail
+        });
+      }
+    }
 
     // Buffer whole file for typical MVP sizes: <audio> + WebView players often break on Node web streams.
     const maxBuffered = 60 * 1024 * 1024;

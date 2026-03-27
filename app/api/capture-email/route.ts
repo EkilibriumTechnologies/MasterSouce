@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
+import { normalizeCaptureEmail } from "@/lib/email/normalize-capture-email";
+import { upsertMasterJobUnlock } from "@/lib/downloads/master-job-unlocks";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import { findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
 import {
@@ -15,31 +17,6 @@ const BodySchema = z.object({
   jobId: z.string().min(4),
   fileId: z.string().min(4)
 });
-
-const emailShape = z.string().email();
-
-/**
- * Normalizes plain emails plus accidental markdown / mailto payloads
- * (e.g. `[user@x.com](mailto:user@x.com)` from pasted rich text).
- */
-function normalizeCaptureEmail(raw: string): string | null {
-  let s = raw.trim();
-  const md = /^\[([^\]]*)\]\(mailto:([^)]+)\)$/i.exec(s);
-  if (md) {
-    s = md[2].trim();
-  } else {
-    const mdLoose = /\[([^\]]*)\]\(mailto:([^)]+)\)/i.exec(s);
-    if (mdLoose) {
-      s = mdLoose[2].trim();
-    }
-  }
-  if (/^mailto:/i.test(s)) {
-    s = s.replace(/^mailto:/i, "").trim();
-  }
-  s = s.toLowerCase();
-  const parsed = emailShape.safeParse(s);
-  return parsed.success ? parsed.data : null;
-}
 
 /**
  * GET does not capture email. Browsers get HTML; clients requesting JSON still get JSON.
@@ -144,6 +121,8 @@ export async function POST(request: NextRequest) {
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
+    const originalEmailTrimmed = parsed.data.email.trim();
+
     try {
       await upsertLeadInSupabase({ email });
     } catch (error) {
@@ -195,6 +174,34 @@ export async function POST(request: NextRequest) {
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
+
+    try {
+      await upsertMasterJobUnlock({
+        jobId: parsed.data.jobId,
+        fileId: mastered.id,
+        normalizedEmail: email,
+        originalEmail: originalEmailTrimmed || email
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown Supabase error";
+      console.error("[capture-email] Failed to upsert master_job_unlocks", {
+        jobId: parsed.data.jobId,
+        fileId: mastered.id,
+        detail,
+        error
+      });
+      const res = NextResponse.json(
+        {
+          error: "Unable to unlock download right now. Please try again.",
+          code: "SUPABASE_UNLOCK_UPSERT_FAILED",
+          hint: "Apply the migration supabase/migrations/20260327120000_mastered_download_tracking.sql in Supabase."
+        },
+        { status: 500 }
+      );
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+
     markJobDownloadUnlocked(parsed.data.jobId);
     const res = NextResponse.json({
       ok: true,
