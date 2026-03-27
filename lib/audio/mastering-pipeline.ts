@@ -90,7 +90,38 @@ function buildEqFilters(preset: GenrePreset, analysis: TrackAnalysis): string[] 
 
 function buildTargetLufs(preset: GenrePreset, loudnessMode: LoudnessMode): number {
   const mode = LOUDNESS_MODES[loudnessMode];
-  return toFixedDb(clamp(preset.lufsTarget + mode.lufsDelta, -18, -9));
+  return toFixedDb(clamp(preset.lufsTarget + mode.lufsDelta, -18, -7));
+}
+
+function resolveModeDynamics(
+  preset: GenrePreset,
+  loudnessMode: LoudnessMode,
+  alreadyLoudPenalty: number,
+  analysisAlreadyLimited: boolean
+): {
+  compThreshold: number;
+  compRatio: number;
+  compAttack: number;
+  compRelease: number;
+  limiterCeiling: number;
+  limiterAttack: number;
+  limiterRelease: number;
+} {
+  const modeTargets = preset.loudnessModes[loudnessMode];
+  const compSrc = modeTargets.compression ?? preset.compression;
+  const limSrc = modeTargets.limiter;
+  const compThreshold = (compSrc.threshold ?? preset.compression.threshold) + alreadyLoudPenalty;
+  const baseRatio = compSrc.ratio;
+  const compRatio = Math.max(1.3, baseRatio - (analysisAlreadyLimited ? 0.5 : 0));
+  return {
+    compThreshold,
+    compRatio,
+    compAttack: compSrc.attack,
+    compRelease: compSrc.release,
+    limiterCeiling: limSrc?.ceiling ?? preset.limiter.ceiling,
+    limiterAttack: limSrc?.attack ?? preset.limiter.lookahead,
+    limiterRelease: limSrc?.release ?? preset.limiter.release
+  };
 }
 
 function buildMasteringFilterChain(
@@ -103,25 +134,38 @@ function buildMasteringFilterChain(
   const eqFilters = buildEqFilters(preset, analysis);
   const alreadyLoudPenalty = analysis.alreadyLimited ? 0.7 : 0;
 
-  const compThreshold = preset.compression.threshold + alreadyLoudPenalty;
-  const compRatio = Math.max(1.3, preset.compression.ratio - (analysis.alreadyLimited ? 0.5 : 0));
+  const {
+    compThreshold,
+    compRatio,
+    compAttack,
+    compRelease,
+    limiterCeiling,
+    limiterAttack,
+    limiterRelease
+  } = resolveModeDynamics(preset, loudnessMode, alreadyLoudPenalty, analysis.alreadyLimited);
 
   // Coarse loudness push based on analysis delta to target.
   const currentLufs = analysis.integratedLufs ?? targetLufs - 2.5;
   const neededGain = clamp(targetLufs - currentLufs, -1, 6) * 0.9;
 
   const limiterInputDrive = clamp(neededGain * mode.limiterDrive, 0, 5);
-  const limiterCeiling = preset.limiter.ceiling;
 
   const filters: string[] = [
     ...eqFilters,
     // FFmpeg acompressor requires makeup in [1, 64] (dB-ish scale); 0 is invalid and fails the whole chain.
-    `acompressor=threshold=${toFixedDb(compThreshold)}dB:ratio=${toFixedDb(compRatio)}:attack=${preset.compression.attack}:release=${preset.compression.release}:makeup=1`,
+    `acompressor=threshold=${toFixedDb(compThreshold)}dB:ratio=${toFixedDb(compRatio)}:attack=${compAttack}:release=${compRelease}:makeup=1`,
     ...(preset.saturation ? ["asoftclip=type=tanh:threshold=0.96"] : []),
     // Pre-limiter drive only; avoid post-limiter gain so true-peak ceiling remains meaningful.
     `volume=${toFixedDb(neededGain + limiterInputDrive)}dB`,
-    `alimiter=limit=${Math.pow(10, limiterCeiling / 20).toFixed(4)}:attack=${preset.limiter.lookahead}:release=${preset.limiter.release}:level=disabled`
+    `alimiter=limit=${Math.pow(10, limiterCeiling / 20).toFixed(4)}:attack=${limiterAttack}:release=${limiterRelease}:level=disabled`
   ];
+
+  const safetyDb = preset.truePeakSafetyLimiterDbTp;
+  if (safetyDb !== undefined) {
+    filters.push(
+      `alimiter=limit=${Math.pow(10, safetyDb / 20).toFixed(4)}:attack=1:release=1:level=disabled`
+    );
+  }
 
   return filters.join(",");
 }
