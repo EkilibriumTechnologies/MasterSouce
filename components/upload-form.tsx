@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AudioCompare } from "@/components/audio-compare";
 import { EmailCaptureForm } from "@/components/email-capture-form";
-import { TrackAnalysisEnhancements } from "@/components/track-analysis-enhancements";
+import { MasterReadyCallout } from "@/components/master-ready-callout";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
@@ -171,17 +171,16 @@ export function UploadForm() {
 
       {result ? (
         <div style={resultAreaStyle}>
-          <AudioCompare originalPreviewUrl={result.previews.original} masteredPreviewUrl={result.previews.mastered} />
-          <TrackAnalysisEnhancements
-            analysis={result.analysis}
+          <MasterReadyCallout
             quotaLine={
               result.quota ? (
-                <p style={{ margin: "12px 0 0", color: "#93f7d0" }}>
+                <p style={{ margin: "14px 0 0", color: "#7dccb0", fontSize: "0.82rem" }}>
                   Free plan usage: {result.quota.usedThisMonth} used this month, {result.quota.remainingFreeMasters} remaining.
                 </p>
               ) : null
             }
           />
+          <AudioCompare originalPreviewUrl={result.previews.original} masteredPreviewUrl={result.previews.mastered} />
           {!downloadUrl ? (
             <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={setDownloadUrl} />
           ) : (

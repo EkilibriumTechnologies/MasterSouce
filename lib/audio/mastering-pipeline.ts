@@ -6,6 +6,8 @@ import { getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
 import {
   GENRE_PRESETS,
   GenrePreset,
+  getLoudnessModeLufsTarget,
+  getLoudnessModeTruePeak,
   LOUDNESS_MODES,
   LoudnessMode
 } from "@/lib/genre-presets";
@@ -89,8 +91,7 @@ function buildEqFilters(preset: GenrePreset, analysis: TrackAnalysis): string[] 
 }
 
 function buildTargetLufs(preset: GenrePreset, loudnessMode: LoudnessMode): number {
-  const mode = LOUDNESS_MODES[loudnessMode];
-  return toFixedDb(clamp(preset.lufsTarget + mode.lufsDelta, -18, -7));
+  return toFixedDb(clamp(getLoudnessModeLufsTarget(preset, loudnessMode), -18, -7));
 }
 
 function resolveModeDynamics(
@@ -113,12 +114,13 @@ function resolveModeDynamics(
   const compThreshold = (compSrc.threshold ?? preset.compression.threshold) + alreadyLoudPenalty;
   const baseRatio = compSrc.ratio;
   const compRatio = Math.max(1.3, baseRatio - (analysisAlreadyLimited ? 0.5 : 0));
+  const truePeakDbTp = getLoudnessModeTruePeak(preset, loudnessMode);
   return {
     compThreshold,
     compRatio,
     compAttack: compSrc.attack,
     compRelease: compSrc.release,
-    limiterCeiling: limSrc?.ceiling ?? preset.limiter.ceiling,
+    limiterCeiling: limSrc?.ceiling ?? truePeakDbTp,
     limiterAttack: limSrc?.attack ?? preset.limiter.lookahead,
     limiterRelease: limSrc?.release ?? preset.limiter.release
   };

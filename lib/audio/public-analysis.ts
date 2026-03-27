@@ -1,6 +1,6 @@
 import type { TrackAnalysis } from "@/lib/audio/analyze-track";
 
-/** Subset exposed to clients for before/after display */
+/** Subset of track analysis exposed on the master job API response */
 export type PublicTrackMetrics = {
   durationSec: number | null;
   integratedLufs: number | null;

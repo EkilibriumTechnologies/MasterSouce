@@ -12,7 +12,7 @@ export type EqBand = {
 
 export type LoudnessModeTargets = {
 
-  lufsTarget: number;
+  targetLufs: number;
 
   truePeak: number;
 
@@ -46,7 +46,11 @@ export type GenrePreset = {
 
   label: string;
 
-  lufsTarget: number;
+  /** Balanced-mode integrated LUFS (mirrors `loudnessModes.balanced.targetLufs`). */
+
+  targetLufs: number;
+
+  /** Balanced-mode true peak dBTP (mirrors `loudnessModes.balanced.truePeak`). */
 
   truePeak: number;
 
@@ -104,17 +108,17 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     label: "Pop",
 
-    lufsTarget: -10,
+    targetLufs: -10,
 
     truePeak: -1.0,
 
     loudnessModes: {
 
-      clean: { lufsTarget: -14, truePeak: -1.5 },
+      clean: { targetLufs: -14, truePeak: -1.5 },
 
-      balanced: { lufsTarget: -10, truePeak: -1.0 },
+      balanced: { targetLufs: -10, truePeak: -1.0 },
 
-      loud: { lufsTarget: -8, truePeak: -0.3 }
+      loud: { targetLufs: -8, truePeak: -0.5 }
 
     },
 
@@ -142,17 +146,17 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     label: "Hip-Hop / Trap",
 
-    lufsTarget: -9,
+    targetLufs: -9,
 
-    truePeak: -1.0,
+    truePeak: -0.5,
 
     loudnessModes: {
 
-      clean: { lufsTarget: -13, truePeak: -1.5 },
+      clean: { targetLufs: -13, truePeak: -1.0 },
 
-      balanced: { lufsTarget: -9, truePeak: -1.0 },
+      balanced: { targetLufs: -9, truePeak: -0.5 },
 
-      loud: { lufsTarget: -7, truePeak: -0.3 }
+      loud: { targetLufs: -7, truePeak: -0.3 }
 
     },
 
@@ -180,47 +184,17 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     label: "EDM / Electronic",
 
-    lufsTarget: -9,
+    targetLufs: -9,
 
-    truePeak: -1.0,
+    truePeak: -0.3,
 
     loudnessModes: {
 
-      clean: {
+      clean: { targetLufs: -13, truePeak: -1.0 },
 
-        lufsTarget: -13,
+      balanced: { targetLufs: -9, truePeak: -0.3 },
 
-        truePeak: -1.5,
-
-        compression: { ratio: 2, attack: 10, release: 100 },
-
-        limiter: { ceiling: -1.5, attack: 10, release: 100 }
-
-      },
-
-      balanced: {
-
-        lufsTarget: -9,
-
-        truePeak: -1.0,
-
-        compression: { ratio: 3, attack: 5, release: 80 },
-
-        limiter: { ceiling: -1.0, attack: 5, release: 80 }
-
-      },
-
-      loud: {
-
-        lufsTarget: -7,
-
-        truePeak: -0.3,
-
-        compression: { ratio: 4, attack: 3, release: 60 },
-
-        limiter: { ceiling: -0.3, attack: 3, release: 60 }
-
-      }
+      loud: { targetLufs: -7, truePeak: -0.2 }
 
     },
 
@@ -238,11 +212,9 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     ],
 
-    limiter: { ceiling: -1.0, lookahead: 5, release: 80, targetLUFS: -9, maxGR: 4 },
+    limiter: { ceiling: -0.3, lookahead: 5, release: 80, targetLUFS: -9, maxGR: 4 },
 
-    saturation: true,
-
-    truePeakSafetyLimiterDbTp: -0.3
+    saturation: true
 
   },
 
@@ -250,17 +222,17 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     label: "Rock",
 
-    lufsTarget: -11,
+    targetLufs: -11,
 
     truePeak: -1.0,
 
     loudnessModes: {
 
-      clean: { lufsTarget: -14, truePeak: -1.5 },
+      clean: { targetLufs: -14, truePeak: -1.5 },
 
-      balanced: { lufsTarget: -11, truePeak: -1.0 },
+      balanced: { targetLufs: -11, truePeak: -1.0 },
 
-      loud: { lufsTarget: -9, truePeak: -0.3 }
+      loud: { targetLufs: -9, truePeak: -0.5 }
 
     },
 
@@ -288,17 +260,17 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     label: "Reggaeton / Latin",
 
-    lufsTarget: -9,
+    targetLufs: -9,
 
-    truePeak: -1.0,
+    truePeak: -0.5,
 
     loudnessModes: {
 
-      clean: { lufsTarget: -13, truePeak: -1.5 },
+      clean: { targetLufs: -13, truePeak: -1.0 },
 
-      balanced: { lufsTarget: -9, truePeak: -1.0 },
+      balanced: { targetLufs: -9, truePeak: -0.5 },
 
-      loud: { lufsTarget: -7, truePeak: -0.3 }
+      loud: { targetLufs: -7, truePeak: -0.3 }
 
     },
 
@@ -316,7 +288,7 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     ],
 
-    limiter: { ceiling: -1.0, lookahead: 4, release: 40, targetLUFS: -9, maxGR: 4 },
+    limiter: { ceiling: -0.5, lookahead: 4, release: 40, targetLUFS: -9, maxGR: 4 },
 
     saturation: true
 
@@ -326,17 +298,17 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     label: "R&B / Soul",
 
-    lufsTarget: -12,
+    targetLufs: -12,
 
     truePeak: -1.0,
 
     loudnessModes: {
 
-      clean: { lufsTarget: -16, truePeak: -1.5 },
+      clean: { targetLufs: -14, truePeak: -1.5 },
 
-      balanced: { lufsTarget: -12, truePeak: -1.0 },
+      balanced: { targetLufs: -12, truePeak: -1.0 },
 
-      loud: { lufsTarget: -10, truePeak: -0.5 }
+      loud: { targetLufs: -9, truePeak: -0.5 }
 
     },
 
@@ -364,17 +336,17 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     label: "Lo-Fi / Ambient",
 
-    lufsTarget: -15,
+    targetLufs: -15,
 
-    truePeak: -1.0,
+    truePeak: -1.5,
 
     loudnessModes: {
 
-      clean: { lufsTarget: -18, truePeak: -1.5 },
+      clean: { targetLufs: -18, truePeak: -2.0 },
 
-      balanced: { lufsTarget: -15, truePeak: -1.0 },
+      balanced: { targetLufs: -15, truePeak: -1.5 },
 
-      loud: { lufsTarget: -14, truePeak: -0.3 }
+      loud: { targetLufs: -12, truePeak: -1.0 }
 
     },
 
@@ -390,7 +362,7 @@ export const GENRE_PRESETS: Record<string, GenrePreset> = {
 
     ],
 
-    limiter: { ceiling: -1.0, lookahead: 8, release: 80, targetLUFS: -15, maxGR: 1.5 },
+    limiter: { ceiling: -1.5, lookahead: 8, release: 80, targetLUFS: -15, maxGR: 1.5 },
 
     saturation: false
 
@@ -462,7 +434,7 @@ export function getLoudnessModeLufsTarget(
 
 ): number {
 
-  return preset.loudnessModes[mode].lufsTarget;
+  return preset.loudnessModes[mode].targetLufs;
 
 }
 
@@ -475,4 +447,3 @@ export function getLoudnessModeTruePeak(preset: GenrePreset, mode: LoudnessMode)
   return preset.loudnessModes[mode].truePeak;
 
 }
-
