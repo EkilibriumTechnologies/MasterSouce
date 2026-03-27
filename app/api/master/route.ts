@@ -14,7 +14,8 @@ import {
   insertCompletedMasteringUsage
 } from "@/lib/usage/supabase-mastering-usage";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
-import { FfmpegBinaryMissingError } from "@/lib/audio/ffmpeg-bin";
+import { FfmpegBinaryMissingError, getFfmpegResolutionDiagnostics } from "@/lib/audio/ffmpeg-bin";
+import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
@@ -25,6 +26,11 @@ const InputSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  let ffmpegRuntimePreflight: {
+    resolution: ReturnType<typeof getFfmpegResolutionDiagnostics>;
+    asyncProbe: Awaited<ReturnType<typeof probeFfmpegSpawnVersion>>;
+  } | null = null;
+
   try {
     await cleanupExpiredTempFiles();
     const sessionPrep = prepareSessionForRequest(request);
@@ -87,6 +93,28 @@ export async function POST(request: NextRequest) {
       mime: normalizedExt === "wav" ? "audio/wav" : "audio/mpeg",
       jobId
     });
+
+    const resolution = getFfmpegResolutionDiagnostics();
+    const asyncProbe = await probeFfmpegSpawnVersion(resolution.resolvedPath);
+    ffmpegRuntimePreflight = { resolution, asyncProbe };
+    const spawnOk =
+      asyncProbe.spawnError === null && asyncProbe.exitCode === 0 && !asyncProbe.timedOut;
+    console.info(
+      "[api/master] ffmpeg preflight",
+      JSON.stringify({
+        jobId,
+        resolvedPath: resolution.resolvedPath,
+        fileExists: resolution.fileExists,
+        platform: resolution.platform,
+        nodeEnv: resolution.nodeEnv,
+        asyncSpawnOk: spawnOk,
+        asyncProbeExitCode: asyncProbe.exitCode,
+        asyncProbeSpawnError: asyncProbe.spawnError,
+        asyncProbeTimedOut: asyncProbe.timedOut,
+        stderrSummary: asyncProbe.stderrSummary,
+        stdoutSummary: asyncProbe.stdoutSummary
+      })
+    );
 
     const result = await runMasteringPipeline({
       inputPath: uploadRecord.filePath,
@@ -164,12 +192,27 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     const errSession = prepareSessionForRequest(request);
+    const errStack = error instanceof Error ? error.stack ?? error.message : String(error);
+    console.error(
+      "[api/master] caught error",
+      errStack,
+      ffmpegRuntimePreflight ? JSON.stringify(ffmpegRuntimePreflight) : "no ffmpeg preflight (failed earlier)"
+    );
+
     if (error instanceof FfmpegBinaryMissingError) {
       const res = NextResponse.json(
         {
           error: error.message,
           code: error.code,
-          candidatesTried: error.candidatesTried
+          candidatesTried: error.candidatesTried,
+          ...(process.env.NODE_ENV !== "production"
+            ? {
+                diagnostics: {
+                  errorStack: errStack,
+                  ffmpegRuntimePreflight
+                }
+              }
+            : {})
         },
         { status: 503 }
       );
@@ -177,12 +220,23 @@ export async function POST(request: NextRequest) {
       return res;
     }
     const detail = error instanceof Error ? error.message : "Unknown mastering error.";
-    const message = detail.includes("Supabase") ? detail : `Mastering failed. Ensure ffmpeg is installed and available. Detail: ${detail}`;
+    const message = detail.includes("Supabase")
+      ? detail
+      : `Mastering failed. Ensure ffmpeg is installed and available. Detail: ${detail}`;
     const res = NextResponse.json(
       {
         error: message,
         code: detail.includes("Supabase") ? "SUPABASE_ERROR" : "MASTERING_FAILED",
-        detail
+        detail,
+        ...(process.env.NODE_ENV !== "production"
+          ? {
+              diagnostics: {
+                errorStack: errStack,
+                ffmpegRuntimePreflight,
+                stderrHintFromMessage: detail.includes("ffmpeg failed") ? detail.slice(-1200) : undefined
+              }
+            }
+          : {})
       },
       { status: 500 }
     );

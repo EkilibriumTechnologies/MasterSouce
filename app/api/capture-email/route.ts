@@ -6,10 +6,58 @@ import { findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-fi
 import { getSupabaseAdminConfig, isSupabaseConfigured } from "@/lib/supabase/admin";
 
 const BodySchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
+  email: z.string(),
   jobId: z.string().min(4),
   fileId: z.string().min(4)
 });
+
+const emailShape = z.string().email();
+
+/**
+ * Normalizes plain emails plus accidental markdown / mailto payloads
+ * (e.g. `[user@x.com](mailto:user@x.com)` from pasted rich text).
+ */
+function normalizeCaptureEmail(raw: string): string | null {
+  let s = raw.trim();
+  const md = /^\[([^\]]*)\]\(mailto:([^)]+)\)$/i.exec(s);
+  if (md) {
+    s = md[2].trim();
+  } else {
+    const mdLoose = /\[([^\]]*)\]\(mailto:([^)]+)\)/i.exec(s);
+    if (mdLoose) {
+      s = mdLoose[2].trim();
+    }
+  }
+  if (/^mailto:/i.test(s)) {
+    s = s.replace(/^mailto:/i, "").trim();
+  }
+  s = s.toLowerCase();
+  const parsed = emailShape.safeParse(s);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * GET does not capture email. Browsers get HTML; clients requesting JSON still get JSON.
+ */
+export async function GET(request: NextRequest) {
+  const accept = request.headers.get("accept") ?? "";
+  if (accept.includes("text/html")) {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Email capture API</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:42rem;margin:2rem auto;padding:0 1rem;line-height:1.5;color:#1a1a2e">
+<p>This URL is an API endpoint. Email is saved when your app sends a <strong>POST</strong> request with JSON:</p>
+<pre style="background:#f4f4f8;padding:1rem;border-radius:8px;overflow:auto">{ "email": "…", "jobId": "…", "fileId": "…" }</pre>
+<p>Open your site and use the download form there—do not expect this page to do anything by itself.</p>
+</body></html>`;
+    return new NextResponse(html, {
+      headers: { "Content-Type": "text/html; charset=utf-8" }
+    });
+  }
+  return NextResponse.json({
+    message: "Use POST with JSON: { email, jobId, fileId }. GET is not used for email capture."
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,14 +65,24 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
-      const res = NextResponse.json({ error: "Valid email and jobId required." }, { status: 400 });
+      console.error("[capture-email] Request body validation failed", {
+        issues: parsed.error.flatten()
+      });
+      const res = NextResponse.json(
+        { error: "Valid email, jobId, and fileId are required." },
+        { status: 400 }
+      );
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
 
-    const hintedRecord = await resolveTempRecord(parsed.data.fileId);
-    if (!hintedRecord || hintedRecord.jobId !== parsed.data.jobId || hintedRecord.kind !== "mastered") {
-      const res = NextResponse.json({ error: "Invalid download token for this job." }, { status: 400 });
+    const email = normalizeCaptureEmail(parsed.data.email);
+    if (!email) {
+      console.error("[capture-email] Email rejected after normalization", {
+        rawLength: parsed.data.email.length,
+        rawPreview: parsed.data.email.slice(0, 160)
+      });
+      const res = NextResponse.json({ error: "Valid email required." }, { status: 400 });
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -40,24 +98,39 @@ export async function POST(request: NextRequest) {
       return res;
     }
     try {
-      await upsertLeadInSupabase({
-        email: parsed.data.email,
-        sessionId: sessionPrep.sessionId
-      });
+      await upsertLeadInSupabase({ email });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown Supabase error";
       console.error("[capture-email] Failed to upsert lead into public.leads", {
-        email: parsed.data.email,
-        sessionId: sessionPrep.sessionId,
-        detail
+        email,
+        detail,
+        error
       });
       const res = NextResponse.json({ error: "Unable to save email right now. Please try again." }, { status: 500 });
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
 
+    const hintedRecord = await resolveTempRecord(parsed.data.fileId);
+    if (!hintedRecord || hintedRecord.jobId !== parsed.data.jobId || hintedRecord.kind !== "mastered") {
+      console.error("[capture-email] Temp file token validation failed", {
+        jobId: parsed.data.jobId,
+        fileId: parsed.data.fileId,
+        resolvedJobId: hintedRecord?.jobId,
+        resolvedKind: hintedRecord?.kind,
+        hasHintedRecord: Boolean(hintedRecord)
+      });
+      const res = NextResponse.json({ error: "Invalid download token for this job." }, { status: 400 });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+
     const mastered = await findLatestRecordForJob(parsed.data.jobId, "mastered");
     if (!mastered) {
+      console.error("[capture-email] Mastered file not found for job after token check", {
+        jobId: parsed.data.jobId,
+        fileId: parsed.data.fileId
+      });
       const res = NextResponse.json({ error: "Mastered file not found for this job." }, { status: 404 });
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;

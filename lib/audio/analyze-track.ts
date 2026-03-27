@@ -22,7 +22,11 @@ function runFfmpeg(args: string[]): Promise<string> {
     child.stderr.on("data", (chunk) => {
       stderr += String(chunk);
     });
-    child.on("error", reject);
+    child.on("error", (err) => {
+      const base = err instanceof Error ? err.message : String(err);
+      const tail = stderr ? ` | stderr: ${stderr.slice(-600)}` : "";
+      reject(new Error(`ffmpeg spawn error: ${base}${tail}`));
+    });
     child.on("close", (code) => {
       if (code !== 0) {
         reject(new Error(`ffmpeg failed (${code}): ${stderr.slice(-1200)}`));

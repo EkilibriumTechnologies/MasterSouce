@@ -19,12 +19,23 @@ export class FfmpegBinaryMissingError extends Error {
   }
 }
 
-function isWindowsStylePath(value: string): boolean {
+export function isWindowsStylePath(value: string): boolean {
   return /^[a-zA-Z]:\\/.test(value) || value.includes("\\");
 }
 
 function isAbsoluteLikePath(value: string): boolean {
   return value.startsWith("/") || /^[a-zA-Z]:\\/.test(value);
+}
+
+/**
+ * Windows-style FFMPEG_BIN is for local Windows development only.
+ * Never use it on Linux/macOS hosts (Railway, Netlify, etc.) or when NODE_ENV is production
+ * (so a committed/local Windows path cannot affect production builds).
+ */
+function shouldSkipWindowsStyleFfmpegBinFromEnv(): boolean {
+  if (process.platform !== "win32") return true;
+  if (process.env.NODE_ENV === "production") return true;
+  return false;
 }
 
 let cachedExecutable: string | null = null;
@@ -42,10 +53,19 @@ function tryFfmpegVersion(bin: string): boolean {
   }
 }
 
+export type FfmpegResolutionDiagnostics = {
+  resolvedPath: string;
+  fileExists: boolean | null;
+  platform: NodeJS.Platform;
+  nodeEnv: string | undefined;
+  resolutionUsesSyncVersionCheck: true;
+};
+
 /**
  * Returns a verified ffmpeg executable (existence for absolute paths + successful `-version`).
  * Order: FFMPEG_BIN → ffmpeg-static → /usr/bin/ffmpeg → `ffmpeg` on PATH.
- * Windows dev: set `FFMPEG_BIN` to your `ffmpeg.exe`; Netlify still ignores Windows-style FFMPEG_BIN.
+ * Windows dev: set `FFMPEG_BIN` to your `ffmpeg.exe` (non-production NODE_ENV on Windows).
+ * Production / Linux: Windows-style `FFMPEG_BIN` is skipped so deploys never use drive paths.
  */
 export function getFfmpegExecutablePath(): string {
   if (cachedExecutable) {
@@ -53,14 +73,16 @@ export function getFfmpegExecutablePath(): string {
   }
 
   const tried: FfmpegCandidateAttempt[] = [];
-  const isNetlify = process.env.NETLIFY === "true";
 
   const envBin = process.env.FFMPEG_BIN?.trim();
   if (envBin) {
-    if (isNetlify && isWindowsStylePath(envBin)) {
+    if (isWindowsStylePath(envBin) && shouldSkipWindowsStyleFfmpegBinFromEnv()) {
       tried.push({
         path: envBin,
-        note: "skipped: Windows-style FFMPEG_BIN is ignored on Netlify (see README)"
+        note:
+          process.platform !== "win32"
+            ? "skipped: Windows-style FFMPEG_BIN on non-Windows host (use ffmpeg-static, system ffmpeg, or a Unix path)"
+            : "skipped: Windows-style FFMPEG_BIN when NODE_ENV=production (use PATH, a command name, or non-production for local dev)"
       });
     } else if (isAbsoluteLikePath(envBin)) {
       if (!existsSync(envBin)) {
@@ -141,6 +163,22 @@ export function getFfmpegExecutablePath(): string {
   }
 
   throw new FfmpegBinaryMissingError(tried);
+}
+
+/**
+ * Same as {@link getFfmpegExecutablePath} plus structured fields for API logging.
+ * Call after you intend to run ffmpeg (cache is populated by getFfmpegExecutablePath).
+ */
+export function getFfmpegResolutionDiagnostics(): FfmpegResolutionDiagnostics {
+  const resolvedPath = getFfmpegExecutablePath();
+  const fileExists = isAbsoluteLikePath(resolvedPath) ? existsSync(resolvedPath) : null;
+  return {
+    resolvedPath,
+    fileExists,
+    platform: process.platform,
+    nodeEnv: process.env.NODE_ENV,
+    resolutionUsesSyncVersionCheck: true
+  };
 }
 
 /** @deprecated Prefer {@link getFfmpegExecutablePath} (verifies before use). */
