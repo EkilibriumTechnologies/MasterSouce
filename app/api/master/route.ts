@@ -7,6 +7,7 @@ import { getCurrentUserProfile } from "@/lib/users/user-profile";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { incrementUsage } from "@/lib/usage/quota";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
+import { FfmpegBinaryMissingError } from "@/lib/audio/ffmpeg-bin";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
@@ -129,9 +130,23 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
+    if (error instanceof FfmpegBinaryMissingError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+          candidatesTried: error.candidatesTried
+        },
+        { status: 503 }
+      );
+    }
     const detail = error instanceof Error ? error.message : "Unknown mastering error.";
     return NextResponse.json(
-      { error: `Mastering failed. Ensure ffmpeg is installed and available. Detail: ${detail}` },
+      {
+        error: `Mastering failed. Ensure ffmpeg is installed and available. Detail: ${detail}`,
+        code: "MASTERING_FAILED",
+        detail
+      },
       { status: 500 }
     );
   }

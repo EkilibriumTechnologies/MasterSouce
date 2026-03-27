@@ -1,9 +1,9 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { resolveFfmpegBin } from "@/lib/audio/ffmpeg-bin";
+import { FfmpegBinaryMissingError, getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
 
-type FfmpegRuntimeCheck = {
+export type FfmpegRuntimeCheck = {
   resolvedPath: string;
   pathLooksAbsolute: boolean;
   binaryExists: boolean | null;
@@ -12,6 +12,7 @@ type FfmpegRuntimeCheck = {
   timedOut: boolean;
   versionOutput: string | null;
   error: string | null;
+  candidatesTried?: readonly { path: string; note: string }[];
 };
 
 function isAbsoluteLikePath(value: string): boolean {
@@ -23,7 +24,26 @@ function clip(text: string, limit: number): string {
 }
 
 export async function runFfmpegRuntimeCheck(timeoutMs = 5000): Promise<FfmpegRuntimeCheck> {
-  const resolvedPath = resolveFfmpegBin();
+  let resolvedPath: string;
+  try {
+    resolvedPath = getFfmpegExecutablePath();
+  } catch (err) {
+    if (err instanceof FfmpegBinaryMissingError) {
+      return {
+        resolvedPath: "",
+        pathLooksAbsolute: false,
+        binaryExists: null,
+        versionCommandOk: false,
+        exitCode: null,
+        timedOut: false,
+        versionOutput: null,
+        error: err.message,
+        candidatesTried: err.candidatesTried
+      };
+    }
+    throw err;
+  }
+
   const pathLooksAbsolute = isAbsoluteLikePath(resolvedPath);
 
   let binaryExists: boolean | null = null;

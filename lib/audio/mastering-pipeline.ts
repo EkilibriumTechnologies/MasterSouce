@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { analyzeTrack, TrackAnalysis } from "@/lib/audio/analyze-track";
-import { resolveFfmpegBin } from "@/lib/audio/ffmpeg-bin";
+import { getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
 import {
   GENRE_PRESETS,
   GenrePreset,
@@ -29,7 +29,7 @@ export type MasteringResult = {
 
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const ffmpegBin = resolveFfmpegBin();
+    const ffmpegBin = getFfmpegExecutablePath();
     const child = spawn(ffmpegBin, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (chunk) => {
