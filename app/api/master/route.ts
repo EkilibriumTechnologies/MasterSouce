@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runMasteringPipeline } from "@/lib/audio/mastering-pipeline";
 import { GENRE_PRESETS, LOUDNESS_MODES } from "@/lib/genre-presets";
+import { buildApiUser } from "@/lib/identity/api-user";
+import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
-import { getCurrentUserProfile } from "@/lib/users/user-profile";
+import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { incrementUsage } from "@/lib/usage/quota";
+import {
+  countCompletedMasterizationsForMonth,
+  getCurrentMonthKeyUtc,
+  insertCompletedMasteringUsage
+} from "@/lib/usage/supabase-mastering-usage";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 import { FfmpegBinaryMissingError } from "@/lib/audio/ffmpeg-bin";
 
@@ -20,10 +27,11 @@ const InputSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     await cleanupExpiredTempFiles();
-    const user = getCurrentUserProfile(request);
+    const sessionPrep = prepareSessionForRequest(request);
+    const user = buildApiUser(request, sessionPrep.sessionId);
     const entitlements = await getEntitlementsForUser(user);
     if (!entitlements.canProcess) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           error: "Free monthly mastering limit reached.",
           quota: {
@@ -33,6 +41,8 @@ export async function POST(request: NextRequest) {
         },
         { status: 402 }
       );
+      attachSessionCookieIfNeeded(response, sessionPrep);
+      return response;
     }
 
     const formData = await request.formData();
@@ -42,13 +52,19 @@ export async function POST(request: NextRequest) {
 
     const parsed = InputSchema.safeParse({ genre, loudnessMode });
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid genre or loudness mode." }, { status: 400 });
+      const res = NextResponse.json({ error: "Invalid genre or loudness mode." }, { status: 400 });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
     }
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Audio file is required." }, { status: 400 });
+      const res = NextResponse.json({ error: "Audio file is required." }, { status: 400 });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
     }
     if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-      return NextResponse.json({ error: `File exceeds the maximum upload size of ${MAX_UPLOAD_FILE_SIZE_LABEL}.` }, { status: 400 });
+      const res = NextResponse.json({ error: `File exceeds the maximum upload size of ${MAX_UPLOAD_FILE_SIZE_LABEL}.` }, { status: 400 });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
     }
 
     const filename = file.name || "track";
@@ -56,7 +72,9 @@ export async function POST(request: NextRequest) {
     const mimeAccepted = ACCEPTED_MIME.has(file.type);
     const extAccepted = ACCEPTED_EXT.has(ext);
     if (!mimeAccepted && !extAccepted) {
-      return NextResponse.json({ error: "Only WAV or MP3 are supported for MVP." }, { status: 400 });
+      const res = NextResponse.json({ error: "Only WAV or MP3 are supported for MVP." }, { status: 400 });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
     }
 
     const normalizedExt = ext === "wav" || file.type.includes("wav") ? "wav" : "mp3";
@@ -96,10 +114,23 @@ export async function POST(request: NextRequest) {
       mime: "audio/mpeg",
       jobId
     });
-    const usedThisMonth = incrementUsage(user.id);
+
+    const monthKey = getCurrentMonthKeyUtc();
+    let usedThisMonth: number;
+    if (isSupabaseConfigured()) {
+      await insertCompletedMasteringUsage({
+        email: user.email,
+        sessionId: user.sessionId,
+        monthKey,
+        jobId
+      });
+      usedThisMonth = await countCompletedMasterizationsForMonth(user.email, user.sessionId, monthKey);
+    } else {
+      usedThisMonth = incrementUsage(user.id);
+    }
     const nextEntitlements = await getEntitlementsForUser(user);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       jobId,
       preset: GENRE_PRESETS[parsed.data.genre].label,
       mode: LOUDNESS_MODES[parsed.data.loudnessMode].label,
@@ -129,9 +160,12 @@ export async function POST(request: NextRequest) {
         authReady: true
       }
     });
+    attachSessionCookieIfNeeded(response, sessionPrep);
+    return response;
   } catch (error) {
+    const errSession = prepareSessionForRequest(request);
     if (error instanceof FfmpegBinaryMissingError) {
-      return NextResponse.json(
+      const res = NextResponse.json(
         {
           error: error.message,
           code: error.code,
@@ -139,15 +173,20 @@ export async function POST(request: NextRequest) {
         },
         { status: 503 }
       );
+      attachSessionCookieIfNeeded(res, errSession);
+      return res;
     }
     const detail = error instanceof Error ? error.message : "Unknown mastering error.";
-    return NextResponse.json(
+    const message = detail.includes("Supabase") ? detail : `Mastering failed. Ensure ffmpeg is installed and available. Detail: ${detail}`;
+    const res = NextResponse.json(
       {
-        error: `Mastering failed. Ensure ffmpeg is installed and available. Detail: ${detail}`,
-        code: "MASTERING_FAILED",
+        error: message,
+        code: detail.includes("Supabase") ? "SUPABASE_ERROR" : "MASTERING_FAILED",
         detail
       },
       { status: 500 }
     );
+    attachSessionCookieIfNeeded(res, errSession);
+    return res;
   }
 }

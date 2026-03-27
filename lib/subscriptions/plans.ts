@@ -5,7 +5,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     id: "free",
     label: "Free",
     monthlyPriceUsd: 0,
-    includedMastersPerMonth: 3,
+    includedMastersPerMonth: 4,
     canUseCustomerPortal: false
   },
   creator_monthly: {

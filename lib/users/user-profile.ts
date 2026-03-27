@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 
 export type UserProfile = {
   id: string;
+  /** Browser session for anonymous flows; equals id when using cookie-based identity. */
+  sessionId: string;
   email: string | null;
   displayName: string | null;
   authProvider: "anonymous" | "firebase";
@@ -15,8 +17,10 @@ function ipToAnonymousId(ip: string | null): string {
 // Later replace with Firebase Auth session resolution.
 export function getCurrentUserProfile(request: NextRequest): UserProfile {
   const ip = request.headers.get("x-forwarded-for") ?? request.ip ?? null;
+  const id = ipToAnonymousId(ip);
   return {
-    id: ipToAnonymousId(ip),
+    id,
+    sessionId: id,
     email: null,
     displayName: null,
     authProvider: "anonymous"
