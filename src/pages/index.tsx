@@ -1,12 +1,28 @@
-import React from 'react'
+import { SEO } from "@/components/SEO";
+import { Hero } from "@/components/Hero";
+import { MasteringInterface } from "@/components/MasteringInterface";
+import { ComparisonSection } from "@/components/ComparisonSection";
+import { DownloadGate } from "@/components/DownloadGate";
+import { HowItWorks } from "@/components/HowItWorks";
+import { Footer } from "@/components/Footer";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-background flex items-center justify-center">
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold text-foreground">Hello World</h1>
-        <p className="text-lg text-muted-foreground">This is going to be your softgen app, start by describing your project.</p>
+    <>
+      <SEO
+        title="MasterSouce - Smart Audio Mastering for Creators"
+        description="Professional automatic mastering for independent musicians and AI music creators. Upload, preview, and download your mastered tracks in minutes."
+        image="/og-image.png"
+      />
+      
+      <div className="min-h-screen bg-background">
+        <Hero />
+        <MasteringInterface />
+        <ComparisonSection />
+        <DownloadGate />
+        <HowItWorks />
+        <Footer />
       </div>
-    </main>
-  )
+    </>
+  );
 }
