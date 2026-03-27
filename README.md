@@ -97,12 +97,68 @@ What it is not yet:
 
 1. Install dependencies:
    - `npm install`
-2. Ensure FFmpeg is installed and available in PATH:
+2. Configure ffmpeg binary path in `.env.local`:
+   - Windows local dev can use an absolute path, for example:
+     - `FFMPEG_BIN=C:\Users\...\ffmpeg.exe`
+3. Verify ffmpeg:
    - `ffmpeg -version`
-3. Start:
+4. Start:
    - `npm run dev`
-4. Open:
+5. Open:
    - [http://localhost:3000](http://localhost:3000)
+
+## Netlify FFmpeg Configuration
+
+- The app resolves ffmpeg in this order:
+  1. `FFMPEG_BIN` (except Windows-style paths on Netlify)
+  2. bundled `@ffmpeg-installer/ffmpeg` binary
+  3. `/usr/bin/ffmpeg` on Linux environments
+  4. `ffmpeg` from PATH
+- On Netlify, do **not** set a Windows path for `FFMPEG_BIN`.
+- Recommended Netlify setup:
+  - leave `FFMPEG_BIN` unset to use packaged ffmpeg
+  - or set `FFMPEG_BIN=/usr/bin/ffmpeg` only if your build/runtime image guarantees it
+
+## Internal FFmpeg Runtime Diagnostics
+
+- Internal endpoint: `GET /api/internal/ffmpeg-runtime`
+- Protection:
+  - set `INTERNAL_DIAGNOSTICS_TOKEN` in environment
+  - send `x-internal-token: <token>` header (or `?token=<token>` query param)
+  - if token is missing/invalid, endpoint returns `404`
+- Response includes:
+  - resolved ffmpeg path
+  - whether absolute path exists (if absolute path is used)
+  - whether `ffmpeg -version` succeeded
+  - truncated `ffmpeg -version` output for diagnostics
+  - runtime platform info (`platform`, `netlify`, `node`)
+
+### Local test
+
+1. Set `.env.local`:
+   - `FFMPEG_BIN=<your windows ffmpeg.exe path>`
+   - `INTERNAL_DIAGNOSTICS_TOKEN=<any strong random token>`
+2. Run:
+   - `npm run dev`
+3. Call:
+   - `curl -H "x-internal-token: <token>" http://localhost:3000/api/internal/ffmpeg-runtime`
+4. Confirm:
+   - `ok: true`
+   - `ffmpeg.versionCommandOk: true`
+   - `ffmpeg.resolvedPath` matches expected local path
+
+### Netlify test
+
+1. In Netlify env vars:
+   - set `INTERNAL_DIAGNOSTICS_TOKEN=<strong random token>`
+   - leave `FFMPEG_BIN` unset (recommended), or set Linux-safe value
+2. After deploy, call:
+   - `curl -H "x-internal-token: <token>" https://<your-site>/api/internal/ffmpeg-runtime`
+3. Confirm runtime availability:
+   - `runtime.netlify: true`
+   - `ok: true`
+   - `ffmpeg.versionCommandOk: true`
+   - `ffmpeg.resolvedPath` is Linux-compatible (not Windows path)
 
 ## Notes
 

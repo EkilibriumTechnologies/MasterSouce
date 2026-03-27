@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { resolveFfmpegBin } from "@/lib/audio/ffmpeg-bin";
 
 export type TrackAnalysis = {
   durationSec: number | null;
@@ -16,7 +17,7 @@ export type TrackAnalysis = {
 
 function runFfmpeg(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+    const child = spawn(resolveFfmpegBin(), args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (chunk) => {
       stderr += String(chunk);
