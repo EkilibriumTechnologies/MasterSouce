@@ -7,15 +7,27 @@ function normalizeEnvValue(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
   }
-  const trimmed = value.trim();
+  let trimmed = value.trim();
   if (!trimmed) {
     return undefined;
   }
-  // Supports accidental "key=value" prefixes in copied .env entries.
-  const eqIndex = trimmed.lastIndexOf("=");
-  if (eqIndex > 0) {
-    const tail = trimmed.slice(eqIndex + 1).trim();
-    if (tail) {
+  // Strip wrapping quotes (common when pasting from docs or Railway UI).
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    trimmed = trimmed.slice(1, -1).trim();
+    if (!trimmed) {
+      return undefined;
+    }
+  }
+  // If the whole value is a pasted .env line (e.g. NEXT_PUBLIC_SUPABASE_URL=https://…),
+  // take only the part after the first "=". Use UPPER_SNAKE for the key so URLs with ?a=b are safe.
+  const eq = trimmed.indexOf("=");
+  if (eq > 0) {
+    const key = trimmed.slice(0, eq);
+    const tail = trimmed.slice(eq + 1).trim();
+    if (/^[A-Z][A-Z0-9_]*$/.test(key) && tail) {
       return tail;
     }
   }
