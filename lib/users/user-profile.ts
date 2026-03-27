@@ -6,7 +6,6 @@ export type UserProfile = {
   sessionId: string;
   email: string | null;
   displayName: string | null;
-  authProvider: "anonymous" | "firebase";
 };
 
 function ipToAnonymousId(ip: string | null): string {
@@ -14,7 +13,7 @@ function ipToAnonymousId(ip: string | null): string {
 }
 
 // MVP placeholder: anonymous profile from request metadata.
-// Later replace with Firebase Auth session resolution.
+// Can be extended later with Supabase Auth (or other) session resolution.
 export function getCurrentUserProfile(request: NextRequest): UserProfile {
   const ip = request.headers.get("x-forwarded-for") ?? request.ip ?? null;
   const id = ipToAnonymousId(ip);
@@ -22,7 +21,6 @@ export function getCurrentUserProfile(request: NextRequest): UserProfile {
     id,
     sessionId: id,
     email: null,
-    displayName: null,
-    authProvider: "anonymous"
+    displayName: null
   };
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import { findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
-import { isSupabaseConfigured } from "@/lib/supabase/admin";
+import { getSupabaseAdminConfig, isSupabaseConfigured } from "@/lib/supabase/admin";
 
 const BodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -30,7 +30,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isSupabaseConfigured()) {
-      console.error("[capture-email] Supabase is not configured. Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
+      const config = getSupabaseAdminConfig();
+      console.error("[capture-email] Supabase is not configured. Missing URL or SUPABASE_SERVICE_ROLE_KEY.", {
+        hasUrl: Boolean(config.url),
+        hasServiceRoleKey: Boolean(config.serviceRoleKey)
+      });
       const res = NextResponse.json({ error: "Email capture is temporarily unavailable." }, { status: 500 });
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;

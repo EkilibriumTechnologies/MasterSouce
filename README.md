@@ -46,7 +46,7 @@ README.md
 - **Hybrid engine design:** genre preset foundation + adaptive analysis modifiers.
 - **Temp storage abstraction:** local temp files now, clean migration path to S3/GCS later.
 - **Email gate abstraction:** lead capture now via in-memory service, easy swap to DB/CRM later.
-- **Subscription-ready layout:** API boundaries are modular for future Firebase Auth + Stripe integration.
+- **Subscription-ready layout:** API boundaries are modular for future Supabase Auth + Stripe integration.
 
 ## C) MVP Mastering Pipeline
 

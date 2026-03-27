@@ -13,7 +13,7 @@ import { UserProfile } from "@/lib/users/user-profile";
 // - no auth persistence
 // - no Stripe sync
 // - free plan only for now
-// Keep this service boundary so Stripe + Firebase can be wired in later.
+// Keep this service boundary so Stripe + Supabase-backed billing can be wired in later.
 export async function getEntitlementsForUser(user: UserProfile): Promise<EntitlementSnapshot> {
   const activePlanId: PlanId = "free";
   const plan = PLAN_DEFINITIONS[activePlanId];
