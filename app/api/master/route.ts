@@ -20,6 +20,13 @@ import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
 
+/** Local/dev only: skip Supabase `mastering_usage` when `LOCAL_SKIP_MASTERING_USAGE_DB` is set. Never active in production (`NODE_ENV === "production"`). */
+function skipSupabaseMasteringUsagePersistence(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  const v = process.env.LOCAL_SKIP_MASTERING_USAGE_DB;
+  return v === "1" || v === "true";
+}
+
 const InputSchema = z.object({
   genre: z.enum(["pop", "hiphop", "edm", "rock", "reggaeton", "rnb", "lofi"]),
   loudnessMode: z.enum(["clean", "balanced", "loud"])
@@ -145,7 +152,7 @@ export async function POST(request: NextRequest) {
 
     const monthKey = getCurrentMonthKeyUtc();
     let usedThisMonth: number;
-    if (isSupabaseConfigured()) {
+    if (isSupabaseConfigured() && !skipSupabaseMasteringUsagePersistence()) {
       await insertCompletedMasteringUsage({
         email: user.email,
         sessionId: user.sessionId,
