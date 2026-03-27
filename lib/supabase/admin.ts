@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Buffer } from "node:buffer";
 
 let admin: SupabaseClient | undefined;
 
@@ -26,6 +27,26 @@ export function getSupabaseAdminConfig(): { url?: string; serviceRoleKey?: strin
     url: normalizeEnvValue(process.env.SUPABASE_URL) ?? normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL),
     serviceRoleKey: normalizeEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY)
   };
+}
+
+/**
+ * Supabase API keys are JWTs. `role` must be `service_role` for server writes that bypass RLS.
+ * If `anon` is used by mistake, inserts into `public.leads` typically fail with permission errors (500).
+ */
+export function getSupabaseKeyJwtRole(secret: string | undefined): string | null {
+  if (!secret) {
+    return null;
+  }
+  const parts = secret.trim().split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as { role?: string };
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isSupabaseConfigured(): boolean {

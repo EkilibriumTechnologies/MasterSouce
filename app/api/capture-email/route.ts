@@ -3,7 +3,11 @@ import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import { findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
-import { getSupabaseAdminConfig, isSupabaseConfigured } from "@/lib/supabase/admin";
+import {
+  getSupabaseAdminConfig,
+  getSupabaseKeyJwtRole,
+  isSupabaseConfigured
+} from "@/lib/supabase/admin";
 
 const BodySchema = z.object({
   email: z.string(),
@@ -62,14 +66,24 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const sessionPrep = prepareSessionForRequest(request);
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      const res = NextResponse.json(
+        { error: "Expected JSON body.", code: "INVALID_JSON" },
+        { status: 400 }
+      );
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
       console.error("[capture-email] Request body validation failed", {
         issues: parsed.error.flatten()
       });
       const res = NextResponse.json(
-        { error: "Valid email, jobId, and fileId are required." },
+        { error: "Valid email, jobId, and fileId are required.", code: "VALIDATION_BODY" },
         { status: 400 }
       );
       attachSessionCookieIfNeeded(res, sessionPrep);
@@ -82,7 +96,10 @@ export async function POST(request: NextRequest) {
         rawLength: parsed.data.email.length,
         rawPreview: parsed.data.email.slice(0, 160)
       });
-      const res = NextResponse.json({ error: "Valid email required." }, { status: 400 });
+      const res = NextResponse.json(
+        { error: "Valid email required.", code: "VALIDATION_EMAIL" },
+        { status: 400 }
+      );
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -93,7 +110,33 @@ export async function POST(request: NextRequest) {
         hasUrl: Boolean(config.url),
         hasServiceRoleKey: Boolean(config.serviceRoleKey)
       });
-      const res = NextResponse.json({ error: "Email capture is temporarily unavailable." }, { status: 500 });
+      const res = NextResponse.json(
+        {
+          error: "Email capture is temporarily unavailable.",
+          code: "SUPABASE_NOT_CONFIGURED",
+          hint: "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the host (Railway variables)."
+        },
+        { status: 500 }
+      );
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+
+    const cfg = getSupabaseAdminConfig();
+    const jwtRole = getSupabaseKeyJwtRole(cfg.serviceRoleKey);
+    if (jwtRole !== null && jwtRole !== "service_role") {
+      console.error("[capture-email] SUPABASE_SERVICE_ROLE_KEY is not the service_role secret.", {
+        jwtRole,
+        hint: "Supabase → Project Settings → API → service_role (secret), not anon."
+      });
+      const res = NextResponse.json(
+        {
+          error: "Email capture is misconfigured on the server.",
+          code: "SUPABASE_WRONG_JWT_ROLE",
+          hint: "Use the service_role key in SUPABASE_SERVICE_ROLE_KEY."
+        },
+        { status: 500 }
+      );
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -106,7 +149,14 @@ export async function POST(request: NextRequest) {
         detail,
         error
       });
-      const res = NextResponse.json({ error: "Unable to save email right now. Please try again." }, { status: 500 });
+      const res = NextResponse.json(
+        {
+          error: "Unable to save email right now. Please try again.",
+          code: "SUPABASE_UPSERT_FAILED",
+          hint: "Check Railway logs for PostgREST details; confirm RLS allows service_role or disable RLS for leads."
+        },
+        { status: 500 }
+      );
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -120,7 +170,10 @@ export async function POST(request: NextRequest) {
         resolvedKind: hintedRecord?.kind,
         hasHintedRecord: Boolean(hintedRecord)
       });
-      const res = NextResponse.json({ error: "Invalid download token for this job." }, { status: 400 });
+      const res = NextResponse.json(
+        { error: "Invalid download token for this job.", code: "INVALID_DOWNLOAD_TOKEN" },
+        { status: 400 }
+      );
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -131,12 +184,16 @@ export async function POST(request: NextRequest) {
         jobId: parsed.data.jobId,
         fileId: parsed.data.fileId
       });
-      const res = NextResponse.json({ error: "Mastered file not found for this job." }, { status: 404 });
+      const res = NextResponse.json(
+        { error: "Mastered file not found for this job.", code: "MASTERED_NOT_FOUND" },
+        { status: 404 }
+      );
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
     const res = NextResponse.json({
       ok: true,
+      code: "OK",
       downloadUrl: `/api/download?fileId=${mastered.id}&as=mastered.wav&dl=1`
     });
     attachSessionCookieIfNeeded(res, sessionPrep);
@@ -144,7 +201,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const errSession = prepareSessionForRequest(request);
     const detail = error instanceof Error ? error.message : "Unknown error";
-    const res = NextResponse.json({ error: `Unable to capture email. ${detail}` }, { status: 500 });
+    const res = NextResponse.json(
+      { error: `Unable to capture email. ${detail}`, code: "UNHANDLED" },
+      { status: 500 }
+    );
     attachSessionCookieIfNeeded(res, errSession);
     return res;
   }
