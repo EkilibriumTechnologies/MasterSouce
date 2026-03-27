@@ -49,8 +49,8 @@ export function getSupabaseAdminConfig(): { url?: string; serviceRoleKey?: strin
   const nextPublicSupabaseUrl = ["NEXT", "PUBLIC", "SUPABASE", "URL"].join("_");
   return {
     url:
-      normalizeEnvValue(readEnvRaw("SUPABASE_URL")) ??
-      normalizeEnvValue(readEnvRaw(nextPublicSupabaseUrl)),
+      normalizeEnvValue(readEnvRaw(nextPublicSupabaseUrl)) ??
+      normalizeEnvValue(readEnvRaw("SUPABASE_URL")),
     serviceRoleKey: normalizeEnvValue(readEnvRaw("SUPABASE_SERVICE_ROLE_KEY"))
   };
 }

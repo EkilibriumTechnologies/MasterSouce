@@ -64,6 +64,26 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const nextPublicSupabaseUrl = ["NEXT", "PUBLIC", "SUPABASE", "URL"].join("_");
+  const nextPublicPublishableKey = ["NEXT", "PUBLIC", "SUPABASE", "PUBLISHABLE", "KEY"].join("_");
+  console.log("[capture-email] env presence", {
+    NEXT_PUBLIC_SUPABASE_URL:
+      process.env[nextPublicSupabaseUrl] !== undefined && process.env[nextPublicSupabaseUrl] !== ""
+        ? "present"
+        : "missing",
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+      process.env[nextPublicPublishableKey] !== undefined &&
+      process.env[nextPublicPublishableKey] !== ""
+        ? "present"
+        : "missing",
+    SUPABASE_SERVICE_ROLE_KEY:
+      process.env.SUPABASE_SERVICE_ROLE_KEY !== undefined &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY !== ""
+        ? "present"
+        : "missing",
+    SUPABASE_URL:
+      process.env.SUPABASE_URL !== undefined && process.env.SUPABASE_URL !== "" ? "present" : "missing"
+  });
   try {
     const sessionPrep = prepareSessionForRequest(request);
     let body: unknown;
