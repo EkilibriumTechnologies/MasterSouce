@@ -7,6 +7,7 @@ import { MasterReadyCallout } from "@/components/master-ready-callout";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
+import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
 type MasterResponse = {
@@ -85,6 +86,12 @@ export function UploadForm() {
 
       if (!response.ok) {
         const apiError = typeof payload?.error === "string" ? payload.error : null;
+        if (response.status === 402) {
+          const freeCap = PLAN_DEFINITIONS.free.includedMastersPerMonth;
+          throw new Error(
+            `${apiError ?? "Free monthly mastering limit reached."} The free plan allows up to ${freeCap} completed masters per UTC month per session. Try again next month or upgrade when billing is enabled.`
+          );
+        }
         throw new Error(apiError ?? "Mastering failed.");
       }
       if (!payload || !("jobId" in payload) || !("previews" in payload) || !("download" in payload) || !("analysis" in payload)) {
@@ -93,7 +100,17 @@ export function UploadForm() {
       setResult(payload as MasterResponse);
       setStatus("Preview ready. Enter email to unlock final download.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected error.");
+      const raw = err instanceof Error ? err.message : "Unexpected error.";
+      const isNetworkFailure =
+        (err instanceof TypeError && raw === "Failed to fetch") ||
+        raw === "Failed to fetch" ||
+        raw === "Load failed" ||
+        raw === "NetworkError when attempting to fetch resource.";
+      setError(
+        isNetworkFailure
+          ? "Could not reach the server. If you are on localhost, keep npm run dev running and try again. If the dev server restarts while mastering, wait until it is Ready and submit again."
+          : raw
+      );
       setStatus("Something failed. Please try again.");
     } finally {
       setLoading(false);
@@ -174,8 +191,21 @@ export function UploadForm() {
           <MasterReadyCallout
             quotaLine={
               result.quota ? (
-                <p style={{ margin: "14px 0 0", color: "#7dccb0", fontSize: "0.82rem" }}>
-                  Free plan usage: {result.quota.usedThisMonth} used this month, {result.quota.remainingFreeMasters} remaining.
+                <p
+                  style={{
+                    margin: "14px 0 0",
+                    color: result.quota.remainingFreeMasters > 0 ? "#7dccb0" : "#a8c4bb",
+                    fontSize: "0.82rem",
+                    lineHeight: 1.55
+                  }}
+                >
+                  {result.quota.remainingFreeMasters > 0 ? (
+                    <>
+                      Free plan usage: {result.quota.usedThisMonth} used, {result.quota.remainingFreeMasters} remaining
+                    </>
+                  ) : (
+                    <>Your free masters are complete. Upgrade to continue mastering tracks.</>
+                  )}
                 </p>
               ) : null
             }
