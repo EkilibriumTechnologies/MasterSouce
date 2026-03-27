@@ -178,7 +178,7 @@ export function AudioCompare({ originalPreviewUrl, masteredPreviewUrl }: AudioCo
         </div>
         <div style={activeSource === "mastered" ? masteredCardStyle : cardStyle}>
           <p style={masteredLabelStyle}>Mastered</p>
-          <p style={labelSubStyle}>Enhanced by MasterSouce</p>
+          <p style={labelSubStyle}>Enhanced by MasterSauce</p>
           <audio
             key={masteredPreviewUrl}
             ref={masteredRef}

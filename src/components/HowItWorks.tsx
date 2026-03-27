@@ -69,7 +69,7 @@ export function HowItWorks() {
               You retain 100% ownership of your music. We process your tracks securely and never store or distribute your files without permission.
             </p>
             <p className="text-muted-foreground">
-              MasterSouce is a tool, not a rights holder. Your creative work stays yours.
+              MasterSauce is a tool, not a rights holder. Your creative work stays yours.
             </p>
           </div>
           
@@ -78,7 +78,7 @@ export function HowItWorks() {
               Free for Now
             </h4>
             <p className="text-muted-foreground mb-4">
-              MasterSouce is currently free while in beta. We're building the best mastering experience for creators like you.
+              MasterSauce is currently free while in beta. We're building the best mastering experience for creators like you.
             </p>
             <p className="text-muted-foreground">
               Paid plans with advanced features coming soon. Early users get priority access.

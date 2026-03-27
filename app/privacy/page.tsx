@@ -28,7 +28,7 @@ export default function PrivacyPage() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>4. Ownership and responsibility</h2>
         <p style={textStyle}>
-          You are responsible for having rights to uploaded content. MasterSouce acts as a processing tool and is not the rights owner of user material.
+          You are responsible for having rights to uploaded content. MasterSauce acts as a processing tool and is not the rights owner of user material.
         </p>
       </section>
 

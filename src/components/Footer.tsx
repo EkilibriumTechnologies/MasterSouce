@@ -11,7 +11,7 @@ export function Footer() {
             </div>
             <div>
               <h5 className="font-heading font-bold text-foreground text-lg">
-                MasterSouce
+                MasterSauce
               </h5>
               <p className="text-xs text-muted-foreground">
                 Smart mastering for creators
@@ -36,7 +36,7 @@ export function Footer() {
         </div>
         
         <div className="mt-8 pt-8 border-t border-border/30 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} MasterSouce. Built for independent creators.
+          © {new Date().getFullYear()} MasterSauce. Built for independent creators.
         </div>
       </div>
     </footer>

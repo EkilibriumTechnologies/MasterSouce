@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "MasterSouce",
+  title: "MasterSauce",
   description:
-    "MasterSouce is an affordable, simple, smart automatic mastering web app for independent musicians and AI music creators."
+    "MasterSauce is an affordable, simple, smart automatic mastering web app for independent musicians and AI music creators."
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

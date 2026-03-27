@@ -16,7 +16,7 @@ export function Hero() {
         {/* Brand */}
         <div className="mb-8 animate-fade-in">
           <h1 className="text-6xl md:text-7xl lg:text-8xl font-heading font-bold mb-4 gradient-text">
-            MasterSouce
+            MasterSauce
           </h1>
         </div>
         

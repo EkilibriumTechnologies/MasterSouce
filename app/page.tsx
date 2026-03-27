@@ -5,7 +5,7 @@ export default function HomePage() {
   return (
     <main style={mainStyle}>
       <section style={heroStyle}>
-        <h1 style={logoStyle}>MasterSouce</h1>
+        <h1 style={logoStyle}>MasterSauce</h1>
         <h2 style={h1Style}>Professional Mastering in Minutes, Not Hours</h2>
         <p style={subStyle}>
           Smart automatic mastering built for independent musicians, bedroom producers, and AI music creators. Upload your
@@ -59,12 +59,12 @@ export default function HomePage() {
             You retain 100% ownership of your music. We process your tracks securely and never store or distribute your
             files without permission.
           </p>
-          <p style={mutedSecondaryStyle}>MasterSouce is a tool, not a rights holder. Your creative work stays yours.</p>
+          <p style={mutedSecondaryStyle}>MasterSauce is a tool, not a rights holder. Your creative work stays yours.</p>
         </div>
         <div style={infoCardStyle}>
           <h2 style={infoTitleStyle}>Free for Now</h2>
           <p style={mutedStyle}>
-            MasterSouce is currently free while in beta. We're building the best mastering experience for creators like you.
+            MasterSauce is currently free while in beta. We're building the best mastering experience for creators like you.
           </p>
           <p style={mutedSecondaryStyle}>Paid plans with advanced features coming soon. Early users get priority access.</p>
         </div>
@@ -74,7 +74,7 @@ export default function HomePage() {
         <div style={footerBrandStyle}>
           <div style={footerLogoStyle}>♫</div>
           <div>
-            <p style={footerNameStyle}>MasterSouce</p>
+            <p style={footerNameStyle}>MasterSauce</p>
             <p style={footerTaglineStyle}>Smart mastering for creators</p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export default function HomePage() {
           <span style={linkStyle}>Contact</span>
         </div>
       </footer>
-      <p style={copyrightStyle}>© {new Date().getFullYear()} MasterSouce. Built for independent creators.</p>
+      <p style={copyrightStyle}>© {new Date().getFullYear()} MasterSauce. Built for independent creators.</p>
     </main>
   );
 }

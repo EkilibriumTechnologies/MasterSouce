@@ -80,7 +80,7 @@ export function ComparisonSection() {
                     Mastered
                   </h4>
                   <p className="text-sm text-violet">
-                    Enhanced by MasterSouce
+                    Enhanced by MasterSauce
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-gradient-accent flex items-center justify-center glow-violet">

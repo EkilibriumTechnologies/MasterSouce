@@ -7,7 +7,7 @@ export default function TermsPage() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>1. Service scope</h2>
         <p style={textStyle}>
-          MasterSouce provides automated audio processing and mastering assistance. It is a creator-focused processing tool, not a professional studio mastering suite.
+          MasterSauce provides automated audio processing and mastering assistance. It is a creator-focused processing tool, not a professional studio mastering suite.
         </p>
       </section>
 
@@ -24,7 +24,7 @@ export default function TermsPage() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>3. Ownership</h2>
         <p style={textStyle}>
-          You retain ownership of your uploaded audio and resulting exports. MasterSouce does not claim ownership of user content.
+          You retain ownership of your uploaded audio and resulting exports. MasterSauce does not claim ownership of user content.
         </p>
       </section>
 
