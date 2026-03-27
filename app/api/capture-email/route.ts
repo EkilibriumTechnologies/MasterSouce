@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
+import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import { findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
 import {
@@ -64,26 +65,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const nextPublicSupabaseUrl = ["NEXT", "PUBLIC", "SUPABASE", "URL"].join("_");
-  const nextPublicPublishableKey = ["NEXT", "PUBLIC", "SUPABASE", "PUBLISHABLE", "KEY"].join("_");
-  console.log("[capture-email] env presence", {
-    NEXT_PUBLIC_SUPABASE_URL:
-      process.env[nextPublicSupabaseUrl] !== undefined && process.env[nextPublicSupabaseUrl] !== ""
-        ? "present"
-        : "missing",
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
-      process.env[nextPublicPublishableKey] !== undefined &&
-      process.env[nextPublicPublishableKey] !== ""
-        ? "present"
-        : "missing",
-    SUPABASE_SERVICE_ROLE_KEY:
-      process.env.SUPABASE_SERVICE_ROLE_KEY !== undefined &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY !== ""
-        ? "present"
-        : "missing",
-    SUPABASE_URL:
-      process.env.SUPABASE_URL !== undefined && process.env.SUPABASE_URL !== "" ? "present" : "missing"
-  });
+  console.log("[railway-env] SUPABASE_URL=" + (process.env.SUPABASE_URL ?? "MISSING") + " NEXT_PUBLIC=" + (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "MISSING") + " SERVICE_KEY=" + (process.env.SUPABASE_SERVICE_ROLE_KEY ? "PRESENT" : "MISSING") + " TEST_VAR=" + (process.env.TEST_VAR ?? "MISSING"));
   try {
     const sessionPrep = prepareSessionForRequest(request);
     let body: unknown;
@@ -213,6 +195,7 @@ export async function POST(request: NextRequest) {
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
+    markJobDownloadUnlocked(parsed.data.jobId);
     const res = NextResponse.json({
       ok: true,
       code: "OK",

@@ -33,7 +33,7 @@ lib/
     temp-files.ts
   genre-presets.ts
 .env.example
-next.config.js
+next.config.mjs
 tsconfig.json
 package.json
 README.md
