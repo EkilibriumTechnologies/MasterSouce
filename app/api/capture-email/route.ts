@@ -114,7 +114,9 @@ export async function POST(request: NextRequest) {
         {
           error: "Email capture is temporarily unavailable.",
           code: "SUPABASE_NOT_CONFIGURED",
-          hint: "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the host (Railway variables)."
+          hint:
+            "Set SUPABASE_SERVICE_ROLE_KEY and SUPABASE_URL (preferred) on the host. " +
+            "NEXT_PUBLIC_SUPABASE_URL is also accepted as the project URL for server bootstrap."
         },
         { status: 500 }
       );

@@ -22,10 +22,24 @@ function normalizeEnvValue(value: string | undefined): string | undefined {
   return trimmed;
 }
 
+/**
+ * Reads env at runtime. Next.js inlines `process.env.NEXT_PUBLIC_*` at build time; a dynamic key
+ * keeps the public URL readable from Railway/container env at runtime when only NEXT_PUBLIC_* is set.
+ */
+function readEnvRaw(name: string): string | undefined {
+  if (typeof process === "undefined") {
+    return undefined;
+  }
+  return process.env[name];
+}
+
 export function getSupabaseAdminConfig(): { url?: string; serviceRoleKey?: string } {
+  const nextPublicSupabaseUrl = ["NEXT", "PUBLIC", "SUPABASE", "URL"].join("_");
   return {
-    url: normalizeEnvValue(process.env.SUPABASE_URL) ?? normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    serviceRoleKey: normalizeEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY)
+    url:
+      normalizeEnvValue(readEnvRaw("SUPABASE_URL")) ??
+      normalizeEnvValue(readEnvRaw(nextPublicSupabaseUrl)),
+    serviceRoleKey: normalizeEnvValue(readEnvRaw("SUPABASE_SERVICE_ROLE_KEY"))
   };
 }
 
@@ -60,7 +74,9 @@ export function isSupabaseConfigured(): boolean {
 export function getSupabaseAdmin(): SupabaseClient {
   const { url, serviceRoleKey } = getSupabaseAdminConfig();
   if (!url || !serviceRoleKey) {
-    throw new Error("Supabase admin client requested but SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set.");
+    throw new Error(
+      "Supabase admin client requested but SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY are not set."
+    );
   }
   if (!admin) {
     admin = createClient(url, serviceRoleKey, {
