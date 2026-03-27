@@ -37,15 +37,13 @@ export async function insertCompletedMasteringUsage(row: {
   email: string | null;
   sessionId: string;
   monthKey: string;
-  jobId: string;
 }): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("mastering_usage").insert({
     email: row.email,
     session_id: row.sessionId,
     month_key: row.monthKey,
-    status: "completed",
-    job_id: row.jobId
+    status: "completed"
   });
   if (error) {
     throw new Error(`Supabase mastering_usage insert failed: ${error.message}`);
