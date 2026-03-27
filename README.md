@@ -111,7 +111,7 @@ What it is not yet:
 
 - The app resolves ffmpeg in this order:
   1. `FFMPEG_BIN` (except Windows-style paths on Netlify)
-  2. bundled `@ffmpeg-installer/ffmpeg` binary
+  2. bundled `ffmpeg-static` binary
   3. `/usr/bin/ffmpeg` on Linux environments
   4. `ffmpeg` from PATH
 - On Netlify, do **not** set a Windows path for `FFMPEG_BIN`.

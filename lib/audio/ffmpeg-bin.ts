@@ -1,4 +1,4 @@
-import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import ffmpegStatic from "ffmpeg-static";
 
 function isWindowsStylePath(value: string): boolean {
   return /^[a-zA-Z]:\\/.test(value) || value.includes("\\");
@@ -15,7 +15,7 @@ export function resolveFfmpegBin(): string {
     }
   }
 
-  const packagedBin = ffmpegInstaller?.path?.trim();
+  const packagedBin = typeof ffmpegStatic === "string" ? ffmpegStatic.trim() : "";
   if (packagedBin) {
     return packagedBin;
   }
