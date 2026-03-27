@@ -4,10 +4,9 @@ import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/ide
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import { findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
-import { saveEmailLead } from "@/lib/email/capture-email";
 
 const BodySchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   jobId: z.string().min(4),
   fileId: z.string().min(4)
 });
@@ -30,13 +29,28 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    if (isSupabaseConfigured()) {
+    if (!isSupabaseConfigured()) {
+      console.error("[capture-email] Supabase is not configured. Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
+      const res = NextResponse.json({ error: "Email capture is temporarily unavailable." }, { status: 500 });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+    try {
       await upsertLeadInSupabase({
         email: parsed.data.email,
         sessionId: sessionPrep.sessionId
       });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown Supabase error";
+      console.error("[capture-email] Failed to upsert lead into public.leads", {
+        email: parsed.data.email,
+        sessionId: sessionPrep.sessionId,
+        detail
+      });
+      const res = NextResponse.json({ error: "Unable to save email right now. Please try again." }, { status: 500 });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
     }
-    saveEmailLead(parsed.data.email, parsed.data.jobId);
 
     const mastered = await findLatestRecordForJob(parsed.data.jobId, "mastered");
     if (!mastered) {

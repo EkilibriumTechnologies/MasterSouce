@@ -62,11 +62,11 @@ export default function HomePage() {
           <p style={mutedSecondaryStyle}>MasterSauce is a tool, not a rights holder. Your creative work stays yours.</p>
         </div>
         <div style={infoCardStyle}>
-          <h2 style={infoTitleStyle}>Free for Now</h2>
-          <p style={mutedStyle}>
-            MasterSauce is currently free while in beta. We're building the best mastering experience for creators like you.
+          <h2 style={infoTitleStyle}>Simple pricing for creators</h2>
+          <p style={mutedStyle}>Start with up to 4 free masters each month.</p>
+          <p style={mutedSecondaryStyle}>
+            When you&apos;re ready for more, paid creator plans will unlock additional usage and future premium features.
           </p>
-          <p style={mutedSecondaryStyle}>Paid plans with advanced features coming soon. Early users get priority access.</p>
         </div>
       </section>
 

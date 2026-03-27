@@ -75,13 +75,13 @@ export function HowItWorks() {
           
           <div className="glass-card rounded-2xl p-8 border border-border/50 bg-violet/5">
             <h4 className="text-2xl font-heading font-semibold text-foreground mb-4">
-              Free for Now
+              Simple pricing for creators
             </h4>
             <p className="text-muted-foreground mb-4">
-              MasterSauce is currently free while in beta. We're building the best mastering experience for creators like you.
+              Start with up to 4 free masters each month.
             </p>
             <p className="text-muted-foreground">
-              Paid plans with advanced features coming soon. Early users get priority access.
+              When you&apos;re ready for more, paid creator plans will unlock additional usage and future premium features.
             </p>
           </div>
         </div>

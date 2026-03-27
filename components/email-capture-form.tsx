@@ -16,13 +16,18 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Please enter a valid email.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const response = await fetch("/api/capture-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, jobId, fileId })
+        body: JSON.stringify({ email: normalizedEmail, jobId, fileId })
       });
 
       const payload = await readResponsePayload(response);
