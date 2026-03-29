@@ -95,16 +95,17 @@ export function UploadForm() {
       formData.append("loudnessMode", loudness);
 
       const response = await fetch("/api/master", { method: "POST", body: formData });
-      setStatus("Mastering and generating previews...");
-      const payload = await readResponsePayload(response);
 
-      // Quota / payment-required: explicit branch — never throw, never fall through to generic catch UX.
+      // Quota / payment-required: handle before reading body so empty 402 bodies never hit parsing or !ok throws.
       if (response.status === 402) {
         setStatus(FREE_PLAN_COMPLETE_STATUS);
         setError(FREE_PLAN_COMPLETE_ERROR);
         setUpgradeModalOpen(true);
         return;
       }
+
+      setStatus("Mastering and generating previews...");
+      const payload = await readResponsePayload(response);
 
       if (!response.ok) {
         const apiError = typeof payload?.error === "string" ? payload.error : null;
