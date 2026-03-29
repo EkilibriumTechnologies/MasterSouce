@@ -12,6 +12,16 @@ import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
+/** Same resolution as `handleSubmit` — single source of truth for `x-master-admin-bypass`. */
+function resolveBypassTokenForMasterSubmit(ownerTestingPanel: boolean, ownerBypassDraft: string): string {
+  if (typeof window === "undefined") return "";
+  const bypass =
+    ownerTestingPanel && ownerBypassDraft.trim()
+      ? ownerBypassDraft.trim()
+      : sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() ?? "";
+  return bypass;
+}
+
 type MasterResponse = {
   jobId: string;
   previews: {
@@ -58,22 +68,6 @@ export function UploadForm() {
     if (ownerBypassDraft.trim().length > 0) return true;
     if (typeof window === "undefined") return false;
     return Boolean(sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim());
-  }, [ownerTestingPanel, ownerBypassDraft]);
-
-  /** Mirrors `handleSubmit` header resolution so the owner panel shows what the next POST will use. */
-  const submitBypassPreview = useMemo(() => {
-    if (typeof window === "undefined") {
-      return { headerSource: "none" as const, willSendBypassHeader: false };
-    }
-    const draftTrim = ownerBypassDraft.trim();
-    const sessionTrim = sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() ?? "";
-    if (ownerTestingPanel && draftTrim) {
-      return { headerSource: "draft" as const, willSendBypassHeader: true };
-    }
-    if (sessionTrim) {
-      return { headerSource: "session" as const, willSendBypassHeader: true };
-    }
-    return { headerSource: "none" as const, willSendBypassHeader: false };
   }, [ownerTestingPanel, ownerBypassDraft]);
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
@@ -132,13 +126,8 @@ export function UploadForm() {
       formData.append("loudnessMode", loudness);
 
       const headers: Record<string, string> = {};
-      if (typeof window !== "undefined") {
-        const bypass =
-          ownerTestingPanel && ownerBypassDraft.trim()
-            ? ownerBypassDraft.trim()
-            : sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() ?? "";
-        if (bypass) headers["x-master-admin-bypass"] = bypass;
-      }
+      const bypass = resolveBypassTokenForMasterSubmit(ownerTestingPanel, ownerBypassDraft);
+      if (bypass) headers["x-master-admin-bypass"] = bypass;
 
       const response = await fetch("/api/master", { method: "POST", body: formData, headers });
 
@@ -236,9 +225,10 @@ export function UploadForm() {
               ? "Override armed — bypass header will be sent"
               : "Override not armed"}
           </div>
-          <p style={ownerTestingDebugLineStyle}>Header source: {submitBypassPreview.headerSource}</p>
+          <p style={ownerTestingDebugLineStyle}>Submit path active: yes</p>
           <p style={ownerTestingDebugLineStyle}>
-            Will send bypass header: {submitBypassPreview.willSendBypassHeader ? "yes" : "no"}
+            Bypass header attached on next submit:{" "}
+            {resolveBypassTokenForMasterSubmit(ownerTestingPanel, ownerBypassDraft) ? "yes" : "no"}
           </p>
         </div>
       ) : null}
