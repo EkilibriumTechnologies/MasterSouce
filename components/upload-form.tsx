@@ -60,6 +60,22 @@ export function UploadForm() {
     return Boolean(sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim());
   }, [ownerTestingPanel, ownerBypassDraft]);
 
+  /** Mirrors `handleSubmit` header resolution so the owner panel shows what the next POST will use. */
+  const submitBypassPreview = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { headerSource: "none" as const, willSendBypassHeader: false };
+    }
+    const draftTrim = ownerBypassDraft.trim();
+    const sessionTrim = sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() ?? "";
+    if (ownerTestingPanel && draftTrim) {
+      return { headerSource: "draft" as const, willSendBypassHeader: true };
+    }
+    if (sessionTrim) {
+      return { headerSource: "session" as const, willSendBypassHeader: true };
+    }
+    return { headerSource: "none" as const, willSendBypassHeader: false };
+  }, [ownerTestingPanel, ownerBypassDraft]);
+
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
 
   const FREE_PLAN_COMPLETE_STATUS = "Free plan complete";
@@ -220,6 +236,10 @@ export function UploadForm() {
               ? "Override armed — bypass header will be sent"
               : "Override not armed"}
           </div>
+          <p style={ownerTestingDebugLineStyle}>Header source: {submitBypassPreview.headerSource}</p>
+          <p style={ownerTestingDebugLineStyle}>
+            Will send bypass header: {submitBypassPreview.willSendBypassHeader ? "yes" : "no"}
+          </p>
         </div>
       ) : null}
       <div style={headingRowStyle}>
@@ -434,6 +454,17 @@ const ownerTestingTokenHelperStyle: React.CSSProperties = {
   color: "#8a7b62",
   fontSize: "0.68rem",
   lineHeight: 1.45
+};
+const ownerTestingDebugLineStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  padding: "8px 10px",
+  borderRadius: "8px",
+  border: "1px solid rgba(160, 140, 100, 0.35)",
+  background: "rgba(12, 14, 20, 0.75)",
+  color: "#c4b896",
+  fontSize: "0.72rem",
+  fontFamily: "ui-monospace, monospace",
+  lineHeight: 1.55
 };
 const ownerOverrideStatusArmedStyle: React.CSSProperties = {
   margin: "10px 0 0",
