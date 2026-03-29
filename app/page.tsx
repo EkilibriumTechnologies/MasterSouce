@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { UploadForm } from "@/components/upload-form";
 
@@ -5,8 +6,18 @@ export default function HomePage() {
   return (
     <main style={mainStyle}>
       <section style={heroStyle}>
-        <h1 style={logoStyle}>MasterSauce</h1>
-        <h2 style={h1Style}>Professional Mastering in Minutes, Not Hours</h2>
+        <div style={heroLogoWrap}>
+          <Image
+            src="/mastersauce-logo.png"
+            alt="MasterSauce logo"
+            width={466}
+            height={381}
+            priority
+            sizes="(max-width: 640px) min(180px, 90vw), (max-width: 1024px) 260px, 320px"
+            style={heroLogoImgStyle}
+          />
+        </div>
+        <h1 style={h1Style}>Professional Mastering in Minutes, Not Hours</h1>
         <p style={subStyle}>
           Smart automatic mastering built for independent musicians, bedroom producers, and AI music creators. Upload your
           track, preview instantly, download the final master.
@@ -110,22 +121,32 @@ const heroStyle: React.CSSProperties = {
     "radial-gradient(1000px 380px at 50% -34%, rgba(155, 111, 255, 0.36), rgba(155, 111, 255, 0) 63%), radial-gradient(900px 520px at 0% 0%, rgba(46, 177, 255, 0.12), rgba(46, 177, 255, 0) 62%), linear-gradient(145deg, #121a32 0%, #0d1428 52%, #090f1f 100%)"
 };
 
-const logoStyle: React.CSSProperties = {
-  margin: "0 0 10px",
-  color: "#7062f4",
-  fontSize: "clamp(2.3rem, 5.2vw, 4.2rem)",
-  lineHeight: 1.02,
-  letterSpacing: "-0.02em",
-  fontFamily: "Outfit, Work Sans, system-ui, sans-serif"
+const heroLogoWrap: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  width: "100%",
+  /* Tighter on small screens, ~24–40px breathing room on desktop */
+  marginBottom: "clamp(12px, 2.5vw + 8px, 40px)"
+};
+
+const heroLogoImgStyle: React.CSSProperties = {
+  /* ~180 mobile, ~260 tablet, ~320 desktop (artwork fills box after PNG trim) */
+  width: "min(100%, clamp(180px, 30vw + 28px, 320px))",
+  height: "auto",
+  flexShrink: 0,
+  objectFit: "contain",
+  imageRendering: "auto"
 };
 
 const h1Style: React.CSSProperties = {
-  margin: "0 auto 14px",
+  margin: "0 auto clamp(16px, 2.2vw, 22px)",
   maxWidth: "760px",
   lineHeight: 1.08,
   fontSize: "clamp(2rem, 4.6vw, 3.9rem)",
   letterSpacing: "-0.018em",
-  fontFamily: "Outfit, Work Sans, system-ui, sans-serif"
+  fontFamily: "Outfit, Work Sans, system-ui, sans-serif",
+  color: "#f1f4ff"
 };
 
 const subStyle: React.CSSProperties = {
@@ -137,7 +158,7 @@ const subStyle: React.CSSProperties = {
 };
 
 const heroCtaRow: React.CSSProperties = {
-  marginTop: "24px",
+  marginTop: "28px",
   display: "flex",
   gap: "10px",
   flexWrap: "wrap",
@@ -158,7 +179,7 @@ const ctaPrimaryStyle: React.CSSProperties = {
 };
 
 const pillRowStyle: React.CSSProperties = {
-  marginTop: "18px",
+  marginTop: "22px",
   display: "flex",
   gap: "10px",
   flexWrap: "wrap",
