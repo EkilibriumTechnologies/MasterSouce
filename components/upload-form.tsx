@@ -7,7 +7,6 @@ import { MasterReadyCallout } from "@/components/master-ready-callout";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
-import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
 type MasterResponse = {
@@ -38,8 +37,22 @@ export function UploadForm() {
   const [result, setResult] = useState<MasterResponse | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [status, setStatus] = useState("Ready");
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
+
+  const FREE_PLAN_COMPLETE_STATUS = "Free plan complete";
+  const FREE_PLAN_COMPLETE_ERROR = "Your free masters are complete. Upgrade to continue mastering tracks.";
+
+  function isLikelyNetworkError(err: unknown): boolean {
+    if (err instanceof DOMException && err.name === "AbortError") return true;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "Failed to fetch" || msg === "Load failed" || msg === "NetworkError when attempting to fetch resource.") {
+      return true;
+    }
+    if (err instanceof TypeError && /failed to fetch|network|load failed/i.test(msg)) return true;
+    return false;
+  }
 
   function handleFileSelection(selected: File | null, input?: HTMLInputElement) {
     if (!selected) {
@@ -69,6 +82,7 @@ export function UploadForm() {
       return;
     }
     setError(null);
+    setUpgradeModalOpen(false);
     setLoading(true);
     setResult(null);
     setDownloadUrl(null);
@@ -84,14 +98,16 @@ export function UploadForm() {
       setStatus("Mastering and generating previews...");
       const payload = await readResponsePayload(response);
 
+      // Quota / payment-required: explicit branch — never throw, never fall through to generic catch UX.
+      if (response.status === 402) {
+        setStatus(FREE_PLAN_COMPLETE_STATUS);
+        setError(FREE_PLAN_COMPLETE_ERROR);
+        setUpgradeModalOpen(true);
+        return;
+      }
+
       if (!response.ok) {
         const apiError = typeof payload?.error === "string" ? payload.error : null;
-        if (response.status === 402) {
-          const freeCap = PLAN_DEFINITIONS.free.includedMastersPerMonth;
-          throw new Error(
-            `${apiError ?? "Free monthly mastering limit reached."} The free plan allows up to ${freeCap} completed masters per UTC month per session. Try again next month or upgrade when billing is enabled.`
-          );
-        }
         throw new Error(apiError ?? "Mastering failed.");
       }
       if (!payload || !("jobId" in payload) || !("previews" in payload) || !("download" in payload) || !("analysis" in payload)) {
@@ -100,17 +116,19 @@ export function UploadForm() {
       setResult(payload as MasterResponse);
       setStatus("Preview ready. Enter email to unlock final download.");
     } catch (err) {
-      const raw = err instanceof Error ? err.message : "Unexpected error.";
-      const isNetworkFailure =
-        (err instanceof TypeError && raw === "Failed to fetch") ||
-        raw === "Failed to fetch" ||
-        raw === "Load failed" ||
-        raw === "NetworkError when attempting to fetch resource.";
-      setError(
-        isNetworkFailure
-          ? "Could not reach the server. If you are on localhost, keep npm run dev running and try again. If the dev server restarts while mastering, wait until it is Ready and submit again."
-          : raw
-      );
+      const isLocalhost =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      if (isLikelyNetworkError(err)) {
+        setError(
+          isLocalhost
+            ? "Could not reach the server. If you are on localhost, keep npm run dev running and try again. If the dev server restarts while mastering, wait until it is Ready and submit again."
+            : "Could not reach the server. Please try again in a moment. If it keeps failing, refresh and retry."
+        );
+      } else {
+        const raw = err instanceof Error ? err.message : "Unexpected error.";
+        setError(raw);
+      }
       setStatus("Something failed. Please try again.");
     } finally {
       setLoading(false);
@@ -184,7 +202,33 @@ export function UploadForm() {
         </button>
       </form>
 
-      {error ? <p style={errorStyle}>{error}</p> : null}
+      {error ? (
+        <p style={error === FREE_PLAN_COMPLETE_ERROR ? quotaExhaustedMessageStyle : errorStyle}>{error}</p>
+      ) : null}
+
+      {upgradeModalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upgrade-dialog-title"
+          style={upgradeModalBackdropStyle}
+        >
+          <div style={upgradeModalPanelStyle}>
+            <p id="upgrade-dialog-title" style={upgradeModalTitleStyle}>
+              Free plan complete
+            </p>
+            <p style={upgradeModalBodyStyle}>{FREE_PLAN_COMPLETE_ERROR}</p>
+            <div style={upgradeModalActionsStyle}>
+              <a href="#pricing" style={upgradeModalPrimaryStyle} onClick={() => setUpgradeModalOpen(false)}>
+                View pricing
+              </a>
+              <button type="button" style={upgradeModalSecondaryStyle} onClick={() => setUpgradeModalOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {result ? (
         <div style={resultAreaStyle}>
@@ -204,7 +248,7 @@ export function UploadForm() {
                       Free plan usage: {result.quota.usedThisMonth} used, {result.quota.remainingFreeMasters} remaining
                     </>
                   ) : (
-                    <>Your free masters are complete. Upgrade to continue mastering tracks.</>
+                    <>{FREE_PLAN_COMPLETE_ERROR}</>
                   )}
                 </p>
               ) : null
@@ -373,6 +417,80 @@ const buttonStyle: React.CSSProperties = {
 const errorStyle: React.CSSProperties = {
   color: "#ff8ba8",
   marginTop: "12px"
+};
+
+/** Shown for HTTP 402 quota exhaustion — calm, not “error red”. */
+const quotaExhaustedMessageStyle: React.CSSProperties = {
+  color: "#a8c4bb",
+  marginTop: "12px",
+  lineHeight: 1.55,
+  fontSize: "0.95rem"
+};
+
+const upgradeModalBackdropStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 50,
+  display: "grid",
+  placeItems: "center",
+  padding: "20px",
+  background: "rgba(4, 8, 18, 0.72)",
+  backdropFilter: "blur(6px)"
+};
+
+const upgradeModalPanelStyle: React.CSSProperties = {
+  width: "min(420px, 100%)",
+  borderRadius: "18px",
+  border: "1px solid rgba(120, 200, 170, 0.28)",
+  background: "linear-gradient(160deg, rgba(16, 28, 40, 0.96), rgba(10, 14, 26, 0.98))",
+  boxShadow: "0 24px 60px rgba(0, 0, 0, 0.45)",
+  padding: "22px 22px 18px"
+};
+
+const upgradeModalTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#e8fff4",
+  fontWeight: 700,
+  fontSize: "1.05rem",
+  letterSpacing: "-0.02em"
+};
+
+const upgradeModalBodyStyle: React.CSSProperties = {
+  margin: "12px 0 0",
+  color: "#9fb8ae",
+  fontSize: "0.9rem",
+  lineHeight: 1.55
+};
+
+const upgradeModalActionsStyle: React.CSSProperties = {
+  marginTop: "18px",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  alignItems: "center"
+};
+
+const upgradeModalPrimaryStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "12px",
+  padding: "10px 16px",
+  fontWeight: 700,
+  fontSize: "0.88rem",
+  textDecoration: "none",
+  color: "#061a14",
+  background: "linear-gradient(120deg, #2de39d, #5cdbb8)"
+};
+
+const upgradeModalSecondaryStyle: React.CSSProperties = {
+  borderRadius: "10px",
+  border: "1px solid rgba(120, 140, 180, 0.45)",
+  background: "transparent",
+  color: "#c6d4e8",
+  padding: "9px 14px",
+  fontSize: "0.85rem",
+  cursor: "pointer"
 };
 
 const resultAreaStyle: React.CSSProperties = { marginTop: "20px", display: "grid", gap: "16px" };

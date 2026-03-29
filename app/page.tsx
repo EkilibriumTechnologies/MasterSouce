@@ -61,7 +61,7 @@ export default function HomePage() {
           </p>
           <p style={mutedSecondaryStyle}>MasterSauce is a tool, not a rights holder. Your creative work stays yours.</p>
         </div>
-        <div style={infoCardStyle}>
+        <div id="pricing" style={infoCardStyle}>
           <h2 style={infoTitleStyle}>Simple pricing for creators</h2>
           <p style={mutedStyle}>Start with up to 4 free masters each month.</p>
           <p style={mutedSecondaryStyle}>
