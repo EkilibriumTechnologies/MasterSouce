@@ -1,6 +1,9 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+
+/** Session-only; used only when set via owner testing panel (`?owner=1`). Never logged. */
+const MASTER_ADMIN_BYPASS_STORAGE_KEY = "master_admin_bypass_token";
 import { AudioCompare } from "@/components/audio-compare";
 import { EmailCaptureForm } from "@/components/email-capture-form";
 import { MasterReadyCallout } from "@/components/master-ready-callout";
@@ -38,6 +41,19 @@ export function UploadForm() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [status, setStatus] = useState("Ready");
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [ownerTestingPanel, setOwnerTestingPanel] = useState(false);
+  const [ownerBypassDraft, setOwnerBypassDraft] = useState("");
+  const [ownerBypassStored, setOwnerBypassStored] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("owner") !== "1") return;
+    setOwnerTestingPanel(true);
+    const existing = sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY);
+    setOwnerBypassDraft(existing ?? "");
+    setOwnerBypassStored(Boolean(existing?.trim()));
+  }, []);
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
 
@@ -94,7 +110,15 @@ export function UploadForm() {
       formData.append("genre", genre);
       formData.append("loudnessMode", loudness);
 
-      const response = await fetch("/api/master", { method: "POST", body: formData });
+      const headers: Record<string, string> = {};
+      if (typeof window !== "undefined") {
+        const draftBypass = ownerTestingPanel ? ownerBypassDraft.trim() : "";
+        const bypass =
+          draftBypass || sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() || "";
+        if (bypass) headers["x-master-admin-bypass"] = bypass;
+      }
+
+      const response = await fetch("/api/master", { method: "POST", body: formData, headers });
 
       // Quota / payment-required: handle before reading body so empty 402 bodies never hit parsing or !ok throws.
       if (response.status === 402) {
@@ -136,8 +160,57 @@ export function UploadForm() {
     }
   }
 
+  function applyOwnerBypassFromDraft() {
+    const trimmed = ownerBypassDraft.trim();
+    if (trimmed) {
+      sessionStorage.setItem(MASTER_ADMIN_BYPASS_STORAGE_KEY, trimmed);
+    } else {
+      sessionStorage.removeItem(MASTER_ADMIN_BYPASS_STORAGE_KEY);
+    }
+    setOwnerBypassStored(Boolean(trimmed));
+  }
+
+  function clearOwnerBypass() {
+    sessionStorage.removeItem(MASTER_ADMIN_BYPASS_STORAGE_KEY);
+    setOwnerBypassDraft("");
+    setOwnerBypassStored(false);
+  }
+
   return (
     <section id="master" style={panelStyle}>
+      {ownerTestingPanel ? (
+        <div style={ownerTestingPanelStyle}>
+          <p style={ownerTestingTitleStyle}>Local owner testing only</p>
+          <p style={ownerTestingHintStyle}>
+            Stored only in this browser session. Not sent to analytics. Paste a bypass token to add the{" "}
+            <code style={ownerTestingCodeStyle}>x-master-admin-bypass</code> header on POST{" "}
+            <code style={ownerTestingCodeStyle}>/api/master</code>.
+          </p>
+          <label htmlFor="owner-bypass-token" style={ownerTestingLabelStyle}>
+            Token (hidden field)
+          </label>
+          <input
+            id="owner-bypass-token"
+            type="password"
+            autoComplete="off"
+            value={ownerBypassDraft}
+            onChange={(e) => setOwnerBypassDraft(e.target.value)}
+            placeholder="Paste token"
+            style={ownerTestingInputStyle}
+          />
+          <div style={ownerTestingActionsStyle}>
+            <button type="button" style={ownerTestingPrimaryStyle} onClick={applyOwnerBypassFromDraft}>
+              Save to session
+            </button>
+            <button type="button" style={ownerTestingSecondaryStyle} onClick={clearOwnerBypass}>
+              Remove
+            </button>
+          </div>
+          <p style={ownerTestingStatusStyle}>
+            {ownerBypassStored ? "Bypass header will be sent on the next mastering request." : "No bypass token in session."}
+          </p>
+        </div>
+      ) : null}
       <div style={headingRowStyle}>
         <p style={eyebrowStyle}>Mastering Workspace</p>
         <p style={statusStyle}>{status}</p>
@@ -276,6 +349,80 @@ const panelStyle: React.CSSProperties = {
   borderRadius: "30px",
   boxShadow: "0 22px 55px rgba(2, 5, 15, 0.52), inset 0 1px 0 rgba(255,255,255,0.06)",
   padding: "clamp(20px, 3.2vw, 36px)"
+};
+
+const ownerTestingPanelStyle: React.CSSProperties = {
+  marginBottom: "16px",
+  padding: "12px 14px",
+  borderRadius: "14px",
+  border: "1px dashed rgba(200, 160, 90, 0.45)",
+  background: "rgba(28, 22, 12, 0.55)"
+};
+const ownerTestingTitleStyle: React.CSSProperties = {
+  margin: "0 0 6px",
+  color: "#f0d9a8",
+  fontSize: "0.78rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.12em"
+};
+const ownerTestingHintStyle: React.CSSProperties = {
+  margin: "0 0 10px",
+  color: "#b8a88c",
+  fontSize: "0.78rem",
+  lineHeight: 1.5
+};
+const ownerTestingCodeStyle: React.CSSProperties = {
+  fontSize: "0.76rem",
+  color: "#d4c4a4"
+};
+const ownerTestingLabelStyle: React.CSSProperties = {
+  display: "block",
+  margin: "0 0 4px",
+  color: "#9a8c70",
+  fontSize: "0.72rem"
+};
+const ownerTestingInputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  borderRadius: "8px",
+  border: "1px solid rgba(140, 120, 80, 0.5)",
+  background: "rgba(10, 12, 18, 0.85)",
+  color: "#e8e0d0",
+  padding: "8px 10px",
+  fontSize: "0.82rem"
+};
+const ownerTestingActionsStyle: React.CSSProperties = {
+  marginTop: "8px",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  alignItems: "center"
+};
+const ownerTestingPrimaryStyle: React.CSSProperties = {
+  borderRadius: "8px",
+  border: "1px solid rgba(200, 160, 90, 0.5)",
+  background: "rgba(60, 48, 24, 0.9)",
+  color: "#f5e6c8",
+  padding: "6px 12px",
+  fontSize: "0.78rem",
+  fontWeight: 600,
+  cursor: "pointer"
+};
+const ownerTestingSecondaryStyle: React.CSSProperties = {
+  borderRadius: "8px",
+  border: "1px solid rgba(120, 100, 70, 0.45)",
+  background: "transparent",
+  color: "#a89878",
+  padding: "6px 12px",
+  fontSize: "0.78rem",
+  cursor: "pointer"
+};
+const ownerTestingStatusStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#8a7b62",
+  fontSize: "0.72rem",
+  lineHeight: 1.45
 };
 
 const headingRowStyle: React.CSSProperties = { display: "grid", justifyItems: "center", gap: "8px" };
