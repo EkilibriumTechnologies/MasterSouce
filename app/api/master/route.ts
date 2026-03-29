@@ -14,6 +14,7 @@ import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/ide
 import { cleanupExpiredTempFiles, getTempRoot, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { incrementUsage } from "@/lib/usage/quota";
 import {
   countCompletedMasterizationsForMonth,
@@ -68,13 +69,15 @@ export async function POST(request: NextRequest) {
     console.log("[MASTER_DEBUG] user:context", { hasEmail: Boolean(user.email) });
 
     const entitlements = await getEntitlementsForUser(user);
+    const adminQuotaBypass = isMasterAdminBypassGranted(request);
     console.log("[MASTER_DEBUG] branch:entitlements_check", {
       planId: entitlements.planId,
       canProcess: entitlements.canProcess,
-      remainingFreeMasters: entitlements.remainingFreeMasters
+      remainingFreeMasters: entitlements.remainingFreeMasters,
+      adminQuotaBypass
     });
 
-    if (!entitlements.canProcess) {
+    if (!entitlements.canProcess && !adminQuotaBypass) {
       console.log("[MASTER_DEBUG] return:402", { reason: "quota_exceeded" });
       console.log("[MASTER_DEBUG] return:quota_exceeded");
       console.log(
@@ -92,6 +95,10 @@ export async function POST(request: NextRequest) {
       );
       attachSessionCookieIfNeeded(response, sessionPrep);
       return response;
+    }
+
+    if (adminQuotaBypass && !entitlements.canProcess) {
+      console.log("[MASTER_DEBUG] override:granted", { reason: "admin_header" });
     }
 
     let formData: FormData;
