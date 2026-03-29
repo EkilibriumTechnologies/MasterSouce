@@ -43,7 +43,6 @@ export function UploadForm() {
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [ownerTestingPanel, setOwnerTestingPanel] = useState(false);
   const [ownerBypassDraft, setOwnerBypassDraft] = useState("");
-  const [ownerBypassStored, setOwnerBypassStored] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -52,8 +51,14 @@ export function UploadForm() {
     setOwnerTestingPanel(true);
     const existing = sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY);
     setOwnerBypassDraft(existing ?? "");
-    setOwnerBypassStored(Boolean(existing?.trim()));
   }, []);
+
+  const ownerOverrideArmed = useMemo(() => {
+    if (!ownerTestingPanel) return false;
+    if (ownerBypassDraft.trim().length > 0) return true;
+    if (typeof window === "undefined") return false;
+    return Boolean(sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim());
+  }, [ownerTestingPanel, ownerBypassDraft]);
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
 
@@ -112,9 +117,10 @@ export function UploadForm() {
 
       const headers: Record<string, string> = {};
       if (typeof window !== "undefined") {
-        const draftBypass = ownerTestingPanel ? ownerBypassDraft.trim() : "";
         const bypass =
-          draftBypass || sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() || "";
+          ownerTestingPanel && ownerBypassDraft.trim()
+            ? ownerBypassDraft.trim()
+            : sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() ?? "";
         if (bypass) headers["x-master-admin-bypass"] = bypass;
       }
 
@@ -167,13 +173,11 @@ export function UploadForm() {
     } else {
       sessionStorage.removeItem(MASTER_ADMIN_BYPASS_STORAGE_KEY);
     }
-    setOwnerBypassStored(Boolean(trimmed));
   }
 
   function clearOwnerBypass() {
     sessionStorage.removeItem(MASTER_ADMIN_BYPASS_STORAGE_KEY);
     setOwnerBypassDraft("");
-    setOwnerBypassStored(false);
   }
 
   return (
@@ -198,6 +202,7 @@ export function UploadForm() {
             placeholder="Paste token"
             style={ownerTestingInputStyle}
           />
+          <p style={ownerTestingTokenHelperStyle}>The typed token will be used immediately on submit.</p>
           <div style={ownerTestingActionsStyle}>
             <button type="button" style={ownerTestingPrimaryStyle} onClick={applyOwnerBypassFromDraft}>
               Save to session
@@ -206,9 +211,15 @@ export function UploadForm() {
               Remove
             </button>
           </div>
-          <p style={ownerTestingStatusStyle}>
-            {ownerBypassStored ? "Bypass header will be sent on the next mastering request." : "No bypass token in session."}
-          </p>
+          <div
+            style={ownerOverrideArmed ? ownerOverrideStatusArmedStyle : ownerOverrideStatusUnarmedStyle}
+            role="status"
+            aria-live="polite"
+          >
+            {ownerOverrideArmed
+              ? "Override armed — bypass header will be sent"
+              : "Override not armed"}
+          </div>
         </div>
       ) : null}
       <div style={headingRowStyle}>
@@ -418,10 +429,32 @@ const ownerTestingSecondaryStyle: React.CSSProperties = {
   fontSize: "0.78rem",
   cursor: "pointer"
 };
-const ownerTestingStatusStyle: React.CSSProperties = {
-  margin: "8px 0 0",
+const ownerTestingTokenHelperStyle: React.CSSProperties = {
+  margin: "6px 0 0",
   color: "#8a7b62",
-  fontSize: "0.72rem",
+  fontSize: "0.68rem",
+  lineHeight: 1.45
+};
+const ownerOverrideStatusArmedStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  padding: "8px 10px",
+  borderRadius: "8px",
+  border: "1px solid rgba(90, 180, 120, 0.45)",
+  background: "rgba(18, 42, 28, 0.65)",
+  color: "#7dccb0",
+  fontSize: "0.76rem",
+  fontWeight: 700,
+  lineHeight: 1.45
+};
+const ownerOverrideStatusUnarmedStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  padding: "8px 10px",
+  borderRadius: "8px",
+  border: "1px solid rgba(140, 80, 80, 0.35)",
+  background: "rgba(28, 18, 18, 0.45)",
+  color: "#9a7a7a",
+  fontSize: "0.76rem",
+  fontWeight: 600,
   lineHeight: 1.45
 };
 
