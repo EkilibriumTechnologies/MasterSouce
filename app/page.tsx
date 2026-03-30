@@ -3,9 +3,32 @@ import Link from "next/link";
 import { PricingSection } from "@/components/pricing-section";
 import { UploadForm } from "@/components/upload-form";
 
-export default function HomePage() {
+type HomePageProps = {
+  searchParams?: {
+    checkout?: string | string[];
+    kind?: string | string[];
+  };
+};
+
+function getFirst(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default function HomePage({ searchParams }: HomePageProps) {
+  const checkout = getFirst(searchParams?.checkout);
+  const kind = getFirst(searchParams?.kind);
+  const showCheckoutSuccess = checkout === "success";
+  const checkoutSuccessMessage =
+    kind === "credit_pack" ? "Your credit pack was added successfully." : "Your plan is now active.";
+
   return (
     <main style={mainStyle}>
+      {showCheckoutSuccess ? (
+        <section style={successBannerStyle} aria-live="polite">
+          <p style={successEyebrowStyle}>Purchase complete</p>
+          <p style={successBodyStyle}>{checkoutSuccessMessage}</p>
+        </section>
+      ) : null}
       <section style={heroStyle}>
         <div style={heroLogoWrap}>
           <Image
@@ -94,6 +117,7 @@ export default function HomePage() {
           <a href="#" style={linkStyle}>About</a>
           <Link href="/terms" style={linkStyle}>Terms</Link>
           <Link href="/privacy" style={linkStyle}>Privacy</Link>
+          <Link href="/pricing" style={linkStyle}>Manage subscription</Link>
           <span style={linkStyle}>Contact</span>
         </div>
       </footer>
@@ -315,4 +339,27 @@ const copyrightStyle: React.CSSProperties = {
 const linkStyle: React.CSSProperties = {
   color: "#b2c0f0",
   textDecoration: "none"
+};
+
+const successBannerStyle: React.CSSProperties = {
+  border: "1px solid rgba(93, 221, 175, 0.45)",
+  borderRadius: "16px",
+  background: "linear-gradient(150deg, rgba(13, 41, 41, 0.86), rgba(12, 26, 36, 0.86))",
+  boxShadow: "0 14px 30px rgba(2, 9, 14, 0.35)",
+  padding: "14px 16px"
+};
+
+const successEyebrowStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: "0.76rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.14em",
+  color: "#9ff3d2"
+};
+
+const successBodyStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  fontWeight: 600,
+  color: "#e2fff5"
 };
