@@ -9,7 +9,7 @@ import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
-import { FREE_DOWNLOADS_PER_MONTH, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
+import { FREE_MASTERS_PER_MONTH, consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { tryConsumeLocalBillableDownload } from "@/lib/usage/local-download-usage";
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const sessionPrep = prepareSessionForRequest(request);
     const user = buildApiUser(request, sessionPrep.sessionId);
     const adminBypass = isMasterAdminBypassGranted(request);
-    const freePlanCap = Math.min(PLAN_DEFINITIONS.free.includedDownloadsPerMonth, FREE_DOWNLOADS_PER_MONTH);
+    const freePlanCap = Math.min(PLAN_DEFINITIONS.free.monthlyMastersLimit, FREE_MASTERS_PER_MONTH);
 
     // Only explicit attachment downloads of the final master consume plan usage (not inline playback / previews).
     if (isMasteredAsset && forceDownload) {
@@ -83,11 +83,10 @@ export async function GET(request: NextRequest) {
             if (!entitlements.canDownload) {
               const res = NextResponse.json(
                 {
-                  error: "downloads_exceeded",
-                  message: "Your free downloads for this month are used. Upgrade to download more masters.",
-                  statusText: "Download limit reached"
+                  error: "no_masters_remaining",
+                  upgrade_url: "/pricing"
                 },
-                { status: 402 }
+                { status: 403 }
               );
               attachSessionCookieIfNeeded(res, sessionPrep);
               return res;
@@ -109,11 +108,10 @@ export async function GET(request: NextRequest) {
         if (!allowed) {
           const res = NextResponse.json(
             {
-              error: "downloads_exceeded",
-              message: "Your free downloads for this month are used. Upgrade to download more masters.",
-              statusText: "Download limit reached"
+              error: "no_masters_remaining",
+              upgrade_url: "/pricing"
             },
-            { status: 402 }
+            { status: 403 }
           );
           attachSessionCookieIfNeeded(res, sessionPrep);
           return res;
@@ -132,7 +130,7 @@ export async function GET(request: NextRequest) {
 
     if (isMasteredAsset && forceDownload && isSupabaseConfigured() && masteredUnlock) {
       try {
-        await recordMasteredDownloadAttempt({
+        const recorded = await recordMasteredDownloadAttempt({
           normalizedEmail: masteredUnlock.normalizedEmail,
           originalEmail: masteredUnlock.originalEmail ?? masteredUnlock.normalizedEmail,
           jobId: record.jobId,
@@ -143,6 +141,17 @@ export async function GET(request: NextRequest) {
             dl: forceDownload ? 1 : 0
           }
         });
+        if (!adminBypass && recorded.countedUnique) {
+          const currentEntitlements = await getEntitlementsForUser(user, {
+            normalizedEmail: masteredUnlock.normalizedEmail
+          });
+          if ((currentEntitlements.remainingMonthlyMasters ?? 0) <= 0) {
+            await consumeCreditPackMaster(masteredUnlock.normalizedEmail, {
+              jobId: record.jobId,
+              fileId: record.id
+            });
+          }
+        }
       } catch (error) {
         const detail = error instanceof Error ? error.message : "Unknown error";
         console.error("[api/download] record_mastered_download_attempt failed", {

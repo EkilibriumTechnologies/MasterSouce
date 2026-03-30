@@ -6,7 +6,7 @@ export function MasterReadyCallout({ quotaLine }: { quotaLine?: ReactNode }) {
       <div style={accentBarStyle} aria-hidden />
       <div style={innerStyle}>
         <p style={headlineStyle}>Your track is ready for streaming.</p>
-        <p style={subtextStyle}>Preview the result with A/B playback, then download your mastered file.</p>
+        <p style={subtextStyle}>Preview with A/B playback as much as you want. Only final mastered exports count.</p>
         {quotaLine}
       </div>
     </div>

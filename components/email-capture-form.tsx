@@ -33,7 +33,7 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
       const payload = await readResponsePayload(response);
       if (!response.ok) {
         const apiError = typeof payload?.error === "string" ? payload.error : null;
-        throw new Error(apiError ?? "Unable to unlock download.");
+        throw new Error(apiError ?? "Unable to unlock final master.");
       }
       const downloadUrl = typeof payload?.downloadUrl === "string" ? payload.downloadUrl : null;
       if (!downloadUrl) {
@@ -50,8 +50,8 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
   return (
     <section style={panelStyle}>
       <div style={iconStyle}>⬇</div>
-      <h3 style={headingStyle}>Ready to Download?</h3>
-      <p style={mutedText}>Enter your email to unlock your mastered track. We&apos;ll send your download link instantly.</p>
+      <h3 style={headingStyle}>Ready to Export?</h3>
+      <p style={mutedText}>Enter your email to unlock your mastered track. We&apos;ll enable final master export instantly.</p>
       <form onSubmit={handleSubmit} style={formStyle}>
         <input
           type="email"
@@ -62,10 +62,10 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
           style={inputStyle}
         />
         <button type="submit" disabled={loading} style={buttonStyle}>
-          {loading ? "Unlocking..." : "Unlock Download"}
+          {loading ? "Unlocking..." : "Unlock Final Master"}
         </button>
       </form>
-      <p style={privacyNoteStyle}>Your email is only used to send the download link. We respect your privacy.</p>
+      <p style={privacyNoteStyle}>Your email is only used to unlock and deliver your final master. We respect your privacy.</p>
       {error ? <p style={errorStyle}>{error}</p> : null}
     </section>
   );

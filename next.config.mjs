@@ -24,6 +24,28 @@ const nextConfig = {
     ],
   },
   allowedDevOrigins: ["*.daytona.work", "*.softgen.dev"],
+  async redirects() {
+    return [
+      {
+        source: "/old-path",
+        destination: "/new-path",
+        permanent: true,
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

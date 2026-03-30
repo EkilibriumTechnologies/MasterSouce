@@ -3,23 +3,40 @@
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { PlanId } from "@/lib/subscriptions/types";
 
-const PLAN_ORDER: PlanId[] = ["free", "creator_monthly", "creator_yearly"];
+const PLAN_ORDER: PlanId[] = ["free", "creator_monthly", "pro_studio_monthly"];
 
 export function PricingSection() {
+  async function startCheckout(kind: "subscription" | "credit_pack", planId?: PlanId) {
+    const email = typeof window !== "undefined" ? window.prompt("Enter your billing email")?.trim() : "";
+    const body =
+      kind === "credit_pack" ? { kind, ...(email ? { email } : {}) } : { kind, planId, ...(email ? { email } : {}) };
+    const response = await fetch("/api/billing/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const payload = (await response.json()) as { url?: string; error?: string };
+    if (!response.ok || !payload.url) {
+      window.alert(payload.error ?? "Unable to start checkout right now.");
+      return;
+    }
+    window.location.assign(payload.url);
+  }
+
   return (
     <section id="pricing" style={sectionStyle} aria-labelledby="pricing-title">
       <p style={eyebrowStyle}>Pricing</p>
       <h2 id="pricing-title" style={titleStyle}>
-        Choose the right plan for your release cadence
+        Master like a studio. Pay like an indie.
       </h2>
-      <p style={subtitleStyle}>Master and preview freely. Only final downloads count toward your monthly plan.</p>
+      <p style={subtitleStyle}>Preview unlimited times. Only pay when you download.</p>
       <div style={gridStyle}>
         {PLAN_ORDER.map((planId) => {
           const plan = PLAN_DEFINITIONS[planId];
           const isFree = plan.id === "free";
           return (
             <article key={plan.id} style={plan.highlighted ? cardHighlightedStyle : cardStyle}>
-              {plan.highlighted ? <p style={badgeStyle}>Most popular</p> : <p style={badgePlaceholderStyle}>&nbsp;</p>}
+              {plan.highlighted ? <p style={badgeStyle}>{plan.badgeLabel ?? "Most popular"}</p> : <p style={badgePlaceholderStyle}>&nbsp;</p>}
               <h3 style={planNameStyle}>{plan.name}</h3>
               <p style={priceStyle}>
                 ${plan.monthlyPriceUsd}
@@ -41,10 +58,7 @@ export function PricingSection() {
                 <button
                   type="button"
                   style={ctaUpgradeStyle}
-                  onClick={() => {
-                    // TODO(stripe): Replace this placeholder with Stripe Checkout / billing portal handoff.
-                    window.location.hash = "master";
-                  }}
+                  onClick={() => void startCheckout("subscription", plan.id)}
                 >
                   {plan.ctaLabel}
                 </button>
@@ -52,6 +66,13 @@ export function PricingSection() {
             </article>
           );
         })}
+      </div>
+      <div style={creditPackStyle}>
+        <p style={creditPackTitleStyle}>Credit Pack - $4 one-time</p>
+        <p style={creditPackBodyStyle}>Adds 5 extra masters. Your monthly plan is always consumed first.</p>
+        <button type="button" style={creditPackButtonStyle} onClick={() => void startCheckout("credit_pack")}>
+          Get 5 masters for $4
+        </button>
       </div>
     </section>
   );
@@ -170,4 +191,24 @@ const ctaNeutralStyle: React.CSSProperties = {
   fontSize: "0.94rem",
   padding: "12px 14px",
   cursor: "not-allowed"
+};
+
+const creditPackStyle: React.CSSProperties = {
+  marginTop: "14px",
+  border: "1px solid rgba(80, 182, 157, 0.4)",
+  borderRadius: "16px",
+  padding: "16px",
+  background: "linear-gradient(160deg, rgba(12, 32, 34, 0.72), rgba(11, 24, 38, 0.74))"
+};
+const creditPackTitleStyle: React.CSSProperties = { margin: 0, color: "#defef1", fontWeight: 700 };
+const creditPackBodyStyle: React.CSSProperties = { margin: "8px 0 0", color: "#9bc5ba", fontSize: "0.9rem" };
+const creditPackButtonStyle: React.CSSProperties = {
+  marginTop: "12px",
+  border: 0,
+  borderRadius: "11px",
+  background: "linear-gradient(120deg, #2de39d, #5fe6ff)",
+  color: "#072016",
+  fontWeight: 700,
+  padding: "10px 14px",
+  cursor: "pointer"
 };

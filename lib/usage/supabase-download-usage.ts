@@ -26,11 +26,25 @@ export async function hasRecentBillableDownloadForJobFile(
 }
 
 /** Billable downloads this calendar month (UTC): rows where the first fetch of a job+file counted toward quota. */
-export async function countBillableDownloadsForMonth(normalizedEmail: string, monthKey: string): Promise<number> {
+export async function countBillableDownloadsForMonth(
+  normalizedEmail: string,
+  monthKey: string,
+  periodStart?: Date,
+  periodEnd?: Date
+): Promise<number> {
   const supabase = getSupabaseAdmin();
-  const [y, m] = monthKey.split("-").map(Number);
-  const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)).toISOString();
-  const end = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0)).toISOString();
+  const start = periodStart
+    ? periodStart.toISOString()
+    : (() => {
+        const [y, m] = monthKey.split("-").map(Number);
+        return new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)).toISOString();
+      })();
+  const end = periodEnd
+    ? periodEnd.toISOString()
+    : (() => {
+        const [y, m] = monthKey.split("-").map(Number);
+        return new Date(Date.UTC(y, m, 1, 0, 0, 0, 0)).toISOString();
+      })();
 
   const { count, error } = await supabase
     .from("mastered_download_events")

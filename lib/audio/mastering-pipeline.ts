@@ -12,12 +12,14 @@ import {
   LoudnessMode
 } from "@/lib/genre-presets";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
+import { PlanQuality } from "@/lib/subscriptions/types";
 
 export type MasteringRequest = {
   inputPath: string;
   genre: keyof typeof GENRE_PRESETS;
   loudnessMode: LoudnessMode;
   outputFormat: "wav";
+  outputQuality: PlanQuality;
   jobId: string;
 };
 
@@ -30,7 +32,14 @@ export type MasteringResult = {
   previewPath: string;
   inputPreviewPath: string;
   outputMime: string;
+  outputCodec: "pcm_s16le" | "pcm_s24le" | "pcm_f32le";
 };
+
+function resolveCodecForQuality(quality: PlanQuality): "pcm_s16le" | "pcm_s24le" | "pcm_f32le" {
+  if (quality === "24bit") return "pcm_s24le";
+  if (quality === "32bit_float") return "pcm_f32le";
+  return "pcm_s16le";
+}
 
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -186,6 +195,7 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
   const inputPreviewPath = path.join(getTempRoot(), `${makeId(`inputpreview_${request.jobId}`)}.mp3`);
 
   const masteringFilter = buildMasteringFilterChain(preset, originalAnalysis, request.loudnessMode);
+  const outputCodec = resolveCodecForQuality(request.outputQuality);
 
   await runFfmpeg([
     "-y",
@@ -195,7 +205,7 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
     "-af",
     masteringFilter,
     "-c:a",
-    "pcm_s16le",
+    outputCodec,
     "-ar",
     "44100",
     "-ac",
@@ -251,6 +261,7 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
     masteredPath,
     previewPath,
     inputPreviewPath,
-    outputMime: "audio/wav"
+    outputMime: "audio/wav",
+    outputCodec
   };
 }

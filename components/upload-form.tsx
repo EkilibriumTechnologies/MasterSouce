@@ -34,9 +34,9 @@ function readFilenameFromContentDisposition(header: string | null): string {
 
 async function downloadFinalMasterWithOptionalBypass(downloadUrl: string, bypass: string): Promise<void> {
   const res = await fetch(downloadUrl, { credentials: "include", headers: { "x-master-admin-bypass": bypass } });
-  if (res.status === 402) {
+  if (res.status === 403) {
     let errorCode: string | null = null;
-    let message = "Download limit reached.";
+    let message = "No masters remaining. Upgrade or get 5 more for $4.";
     try {
       const j = (await res.json()) as { error?: string; message?: string };
       if (typeof j.error === "string") errorCode = j.error;
@@ -44,7 +44,8 @@ async function downloadFinalMasterWithOptionalBypass(downloadUrl: string, bypass
     } catch {
       /* ignore parse errors */
     }
-    if (errorCode === "downloads_exceeded") {
+    if (errorCode === "no_masters_remaining") {
+      message = "No masters remaining. Upgrade or get 5 more for $4.";
       const limitError = new Error(message);
       limitError.name = "DownloadLimitExceededError";
       throw limitError;
@@ -79,8 +80,11 @@ type MasterResponse = {
   };
   analysis: MasterJobAnalysis;
   quota?: {
-    downloadsUsedThisMonth: number;
-    remainingFreeDownloads: number;
+    mastersUsedThisPeriod: number;
+    monthlyMastersLimit: number;
+    remainingMonthlyMasters: number;
+    creditPackBalance: number;
+    remainingMasters: number;
     planId: string;
   };
 };
@@ -118,7 +122,7 @@ export function UploadForm() {
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
 
   const DOWNLOAD_LIMIT_MESSAGE =
-    "Your free downloads for this month are used. Upgrade to download more masters.";
+    "No masters remaining. Upgrade or get 5 more for $4.";
 
   function isLikelyNetworkError(err: unknown): boolean {
     if (err instanceof DOMException && err.name === "AbortError") return true;
@@ -182,7 +186,7 @@ export function UploadForm() {
         throw new Error("Mastering response was empty or invalid.");
       }
       setResult(payload as MasterResponse);
-      setStatus("Preview ready. Enter email to unlock final download.");
+      setStatus("Preview ready. Enter email to unlock final master.");
     } catch (err) {
       const isLocalhost =
         typeof window !== "undefined" &&
@@ -219,11 +223,6 @@ export function UploadForm() {
 
   function handleLimitModalViewPlans() {
     setDownloadLimitModalOpen(false);
-    const pricing = document.getElementById("pricing");
-    if (pricing) {
-      pricing.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
     window.location.assign("/pricing");
   }
 
@@ -235,7 +234,7 @@ export function UploadForm() {
           <p style={ownerTestingHintStyle}>
             Stored only in this browser session. Not sent to analytics. Paste a bypass token to add the{" "}
             <code style={ownerTestingCodeStyle}>x-master-admin-bypass</code> header on GET{" "}
-            <code style={ownerTestingCodeStyle}>/api/download</code> (monthly download quota).
+            <code style={ownerTestingCodeStyle}>/api/download</code> (monthly masters quota).
           </p>
           <label htmlFor="owner-bypass-token" style={ownerTestingLabelStyle}>
             Token (hidden field)
@@ -249,7 +248,7 @@ export function UploadForm() {
             placeholder="Paste token"
             style={ownerTestingInputStyle}
           />
-          <p style={ownerTestingTokenHelperStyle}>The token is sent on final download (fetch) to bypass download quota.</p>
+          <p style={ownerTestingTokenHelperStyle}>The token is sent on final export (fetch) to bypass masters quota.</p>
           <div style={ownerTestingActionsStyle}>
             <button type="button" style={ownerTestingPrimaryStyle} onClick={applyOwnerBypassFromDraft}>
               Save to session
@@ -263,10 +262,10 @@ export function UploadForm() {
             role="status"
             aria-live="polite"
           >
-            {ownerOverrideArmed ? "Bypass token saved — will be sent on download fetch" : "Override not armed"}
+            {ownerOverrideArmed ? "Bypass token saved - will be sent on final export fetch" : "Override not armed"}
           </div>
           <p style={ownerTestingDebugLineStyle}>
-            Bypass available for download: {resolveAdminBypassToken(ownerTestingPanel, ownerBypassDraft) ? "yes" : "no"}
+            Bypass available for final export: {resolveAdminBypassToken(ownerTestingPanel, ownerBypassDraft) ? "yes" : "no"}
           </p>
         </div>
       ) : null}
@@ -347,21 +346,30 @@ export function UploadForm() {
                 <p
                   style={{
                     margin: "14px 0 0",
-                    color: result.quota.remainingFreeDownloads > 0 ? "#7dccb0" : "#a8c4bb",
+                    color: result.quota.remainingMasters > 0 ? "#7dccb0" : "#a8c4bb",
                     fontSize: "0.82rem",
                     lineHeight: 1.55
                   }}
                 >
-                  {result.quota.remainingFreeDownloads > 0 ? (
+                  {result.quota.remainingMasters > 0 ? (
                     <>
-                      Free plan: {result.quota.downloadsUsedThisMonth} final download
-                      {result.quota.downloadsUsedThisMonth === 1 ? "" : "s"} used this month,{" "}
-                      {result.quota.remainingFreeDownloads} remaining
+                      {result.quota.mastersUsedThisPeriod} / {result.quota.monthlyMastersLimit} masters used.{" "}
+                      {result.quota.remainingMonthlyMasters} monthly left
+                      {result.quota.creditPackBalance > 0 ? ` + ${result.quota.creditPackBalance} credit pack` : ""}.
+                      {result.quota.remainingMasters <= 2 ? " Running low — upgrade or get 5 more for $4" : ""}
+                      {result.quota.planId === "free" ? (
+                        <>
+                          {" "}
+                          <a href="/pricing" style={{ color: "#7dccb0", textDecoration: "underline" }}>
+                            Get 5 more for $4
+                          </a>
+                        </>
+                      ) : null}
                     </>
                   ) : (
                     <>
                       {DOWNLOAD_LIMIT_MESSAGE}{" "}
-                      <a href="#pricing" style={{ color: "#7dccb0", textDecoration: "underline" }}>
+                      <a href="/pricing" style={{ color: "#7dccb0", textDecoration: "underline" }}>
                         View pricing
                       </a>
                     </>
@@ -369,8 +377,8 @@ export function UploadForm() {
                 </p>
               ) : (
                 <p style={quotaUnknownLineStyle}>
-                  Free plan includes a limited number of final downloads per month. After you verify your email below,
-                  usage is tied to that address and enforced when you download the master.
+                  Plans include monthly masters and optional credit packs. Usage is tied to your verified email and enforced
+                  only on final mastered exports.
                 </p>
               )
             }
@@ -397,7 +405,7 @@ export function UploadForm() {
                 });
               }}
             >
-              Download Final Master
+              Export Final Master
             </button>
           )}
         </div>

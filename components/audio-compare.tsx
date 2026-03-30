@@ -97,7 +97,7 @@ export function AudioCompare({ originalPreviewUrl, masteredPreviewUrl }: AudioCo
   return (
     <section style={panelStyle}>
       <h3 style={headingStyle}>Compare Before & After</h3>
-      <p style={mutedText}>Preview your mastered track instantly - no download required</p>
+      <p style={mutedText}>Preview your mastered track instantly - no master consumed</p>
       <div style={gridStyle}>
         <div style={activeSource === "original" ? masteredCardStyle : cardStyle}>
           <p style={labelStyle}>Original</p>
@@ -249,7 +249,7 @@ export function AudioCompare({ originalPreviewUrl, masteredPreviewUrl }: AudioCo
           </div>
         </div>
       </div>
-      <p style={footNoteStyle}>Preview is completely free - enter email only to download the final file</p>
+      <p style={footNoteStyle}>Preview is completely free - enter email only to export the final master</p>
     </section>
   );
 }

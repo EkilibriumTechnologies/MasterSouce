@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
     console.log("[MASTER_DEBUG] branch:entitlements_snapshot", {
       planId: entitlements.planId,
       canMaster: entitlements.canMaster,
-      downloadQuotaKnown: entitlements.downloadsUsedThisMonth !== null,
-      downloadsUsedThisMonth: entitlements.downloadsUsedThisMonth,
-      remainingFreeDownloads: entitlements.remainingFreeDownloads
+      mastersQuotaKnown: entitlements.mastersUsedThisPeriod !== null,
+      mastersUsedThisPeriod: entitlements.mastersUsedThisPeriod,
+      remainingMonthlyMasters: entitlements.remainingMonthlyMasters
     });
 
     let formData: FormData;
@@ -209,6 +209,7 @@ export async function POST(request: NextRequest) {
         genre: parsed.data.genre,
         loudnessMode: parsed.data.loudnessMode,
         outputFormat: "wav",
+        outputQuality: entitlements.quality,
         jobId
       });
     } catch (pipeErr) {
@@ -273,10 +274,16 @@ export async function POST(request: NextRequest) {
     }
 
     const quotaSnapshot =
-      nextEntitlements.downloadsUsedThisMonth !== null && nextEntitlements.remainingFreeDownloads !== null
+      nextEntitlements.mastersUsedThisPeriod !== null &&
+      nextEntitlements.monthlyMastersLimit !== null &&
+      nextEntitlements.remainingMonthlyMasters !== null &&
+      nextEntitlements.remainingMasters !== null
         ? {
-            downloadsUsedThisMonth: nextEntitlements.downloadsUsedThisMonth,
-            remainingFreeDownloads: nextEntitlements.remainingFreeDownloads,
+            mastersUsedThisPeriod: nextEntitlements.mastersUsedThisPeriod,
+            monthlyMastersLimit: nextEntitlements.monthlyMastersLimit,
+            remainingMonthlyMasters: nextEntitlements.remainingMonthlyMasters,
+            creditPackBalance: nextEntitlements.creditPackBalance ?? 0,
+            remainingMasters: nextEntitlements.remainingMasters,
             planId: nextEntitlements.planId
           }
         : null;

@@ -21,7 +21,7 @@ export default function HomePage() {
         <h1 style={h1Style}>Professional Mastering in Minutes, Not Hours</h1>
         <p style={subStyle}>
           Smart automatic mastering built for independent musicians, bedroom producers, and AI music creators. Upload your
-          track, preview instantly, download the final master.
+          track, preview instantly, export the final master.
         </p>
         <div style={heroCtaRow}>
           <a href="#master" style={ctaPrimaryStyle}>
@@ -31,7 +31,7 @@ export default function HomePage() {
         <div style={pillRowStyle}>
           <span style={pillStyle}>⚡ Fast Turnaround</span>
           <span style={pillStyle}>🎧 Before/After Preview</span>
-          <span style={pillStyle}>✉️ Email Only for Download</span>
+          <span style={pillStyle}>✉️ Email Only for Final Master</span>
         </div>
       </section>
 
@@ -54,11 +54,11 @@ export default function HomePage() {
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>🎧</div>
             <h3 style={stepTitleStyle}>Preview Instantly</h3>
-            <p style={stepTextStyle}>Compare before downloading. No surprises.</p>
+            <p style={stepTextStyle}>Compare before exporting. No surprises.</p>
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⬇</div>
-            <h3 style={stepTitleStyle}>Download & Go</h3>
+            <h3 style={stepTitleStyle}>Export & Go</h3>
             <p style={stepTextStyle}>Enter your email and get your mastered track immediately.</p>
           </div>
         </div>
@@ -76,7 +76,7 @@ export default function HomePage() {
         <div style={infoCardStyle}>
           <h2 style={infoTitleStyle}>Fair by design</h2>
           <p style={mutedStyle}>Master and preview as much as you want.</p>
-          <p style={mutedSecondaryStyle}>Only final mastered downloads count toward your monthly plan.</p>
+          <p style={mutedSecondaryStyle}>Only final mastered exports count toward your monthly masters.</p>
         </div>
       </section>
 

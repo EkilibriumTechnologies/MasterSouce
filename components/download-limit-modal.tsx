@@ -40,10 +40,10 @@ export function DownloadLimitModal({ open, onClose, onViewPlans }: DownloadLimit
           ×
         </button>
         <p id="download-limit-title" style={titleStyle}>
-          Download limit reached
+          Master limit reached
         </p>
         <p id="download-limit-description" style={bodyStyle}>
-          You&apos;ve used your free downloads for this month. Upgrade your plan to download more mastered tracks.
+          You&apos;ve used your available masters for this period. Upgrade or add a credit pack to keep exporting finals.
         </p>
         <div style={actionsStyle}>
           <button ref={viewPlansRef} type="button" style={primaryStyle} onClick={onViewPlans}>
