@@ -4,7 +4,17 @@ import { ReactNode } from "react";
 export const metadata: Metadata = {
   title: "MasterSauce",
   description:
-    "MasterSauce is an affordable, simple, smart automatic mastering web app for independent musicians and AI music creators."
+    "MasterSauce is an affordable, simple, smart automatic mastering web app for independent musicians and AI music creators.",
+  // Bump ?v= when regenerating favicons so browsers pick up new files (favicons cache aggressively).
+  icons: {
+    icon: [
+      { url: "/favicon.ico?v=ms2", type: "image/x-icon" },
+      { url: "/favicon-16x16.png?v=ms2", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png?v=ms2", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48x48.png?v=ms2", sizes: "48x48", type: "image/png" }
+    ],
+    apple: [{ url: "/apple-touch-icon.png?v=ms2", sizes: "180x180", type: "image/png" }]
+  }
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

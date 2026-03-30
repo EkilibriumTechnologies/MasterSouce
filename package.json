@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build && node scripts/copy-standalone-assets.js",
     "start": "node scripts/start-standalone.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "favicon": "node scripts/generate-favicon.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",
@@ -20,6 +21,8 @@
     "@types/node": "^20.14.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "sharp": "^0.34.5",
+    "to-ico": "^1.1.5",
     "typescript": "^5.5.4"
   }
 }
