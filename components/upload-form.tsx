@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 /** Session-only; used only when set via owner testing panel (`?owner=1`). Never logged. */
 const MASTER_ADMIN_BYPASS_STORAGE_KEY = "master_admin_bypass_token";
 import { AudioCompare } from "@/components/audio-compare";
+import { DownloadLimitModal } from "@/components/download-limit-modal";
 import { EmailCaptureForm } from "@/components/email-capture-form";
 import { MasterReadyCallout } from "@/components/master-ready-callout";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
@@ -12,14 +13,58 @@ import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
-/** Same resolution as `handleSubmit` — single source of truth for `x-master-admin-bypass`. */
-function resolveBypassTokenForMasterSubmit(ownerTestingPanel: boolean, ownerBypassDraft: string): string {
+/** Owner panel: token for `x-master-admin-bypass` on download quota checks (GET /api/download). */
+function resolveAdminBypassToken(ownerTestingPanel: boolean, ownerBypassDraft: string): string {
   if (typeof window === "undefined") return "";
   const bypass =
     ownerTestingPanel && ownerBypassDraft.trim()
       ? ownerBypassDraft.trim()
       : sessionStorage.getItem(MASTER_ADMIN_BYPASS_STORAGE_KEY)?.trim() ?? "";
   return bypass;
+}
+
+function readFilenameFromContentDisposition(header: string | null): string {
+  if (!header) return "mastered.wav";
+  const utf8Match = header.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1]).replace(/[\\/:*?"<>|]/g, "_");
+  const quotedMatch = header.match(/filename\s*=\s*"([^"]+)"/i);
+  if (quotedMatch?.[1]) return quotedMatch[1].replace(/[\\/:*?"<>|]/g, "_");
+  return "mastered.wav";
+}
+
+async function downloadFinalMasterWithOptionalBypass(downloadUrl: string, bypass: string): Promise<void> {
+  const res = await fetch(downloadUrl, { credentials: "include", headers: { "x-master-admin-bypass": bypass } });
+  if (res.status === 402) {
+    let errorCode: string | null = null;
+    let message = "Download limit reached.";
+    try {
+      const j = (await res.json()) as { error?: string; message?: string };
+      if (typeof j.error === "string") errorCode = j.error;
+      if (typeof j.message === "string") message = j.message;
+    } catch {
+      /* ignore parse errors */
+    }
+    if (errorCode === "downloads_exceeded") {
+      const limitError = new Error(message);
+      limitError.name = "DownloadLimitExceededError";
+      throw limitError;
+    }
+    throw new Error(message);
+  }
+  if (!res.ok) {
+    throw new Error("Download failed. Please try again.");
+  }
+  const filename = readFilenameFromContentDisposition(res.headers.get("content-disposition"));
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 type MasterResponse = {
@@ -34,8 +79,8 @@ type MasterResponse = {
   };
   analysis: MasterJobAnalysis;
   quota?: {
-    usedThisMonth: number;
-    remainingFreeMasters: number;
+    downloadsUsedThisMonth: number;
+    remainingFreeDownloads: number;
     planId: string;
   };
 };
@@ -50,9 +95,9 @@ export function UploadForm() {
   const [result, setResult] = useState<MasterResponse | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [status, setStatus] = useState("Ready");
-  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [ownerTestingPanel, setOwnerTestingPanel] = useState(false);
   const [ownerBypassDraft, setOwnerBypassDraft] = useState("");
+  const [downloadLimitModalOpen, setDownloadLimitModalOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -72,8 +117,8 @@ export function UploadForm() {
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
 
-  const FREE_PLAN_COMPLETE_STATUS = "Free plan complete";
-  const FREE_PLAN_COMPLETE_ERROR = "Your free masters are complete. Upgrade to continue mastering tracks.";
+  const DOWNLOAD_LIMIT_MESSAGE =
+    "Your free downloads for this month are used. Upgrade to download more masters.";
 
   function isLikelyNetworkError(err: unknown): boolean {
     if (err instanceof DOMException && err.name === "AbortError") return true;
@@ -113,7 +158,6 @@ export function UploadForm() {
       return;
     }
     setError(null);
-    setUpgradeModalOpen(false);
     setLoading(true);
     setResult(null);
     setDownloadUrl(null);
@@ -125,19 +169,7 @@ export function UploadForm() {
       formData.append("genre", genre);
       formData.append("loudnessMode", loudness);
 
-      const headers: Record<string, string> = {};
-      const bypass = resolveBypassTokenForMasterSubmit(ownerTestingPanel, ownerBypassDraft);
-      if (bypass) headers["x-master-admin-bypass"] = bypass;
-
-      const response = await fetch("/api/master", { method: "POST", body: formData, headers });
-
-      // Quota / payment-required: handle before reading body so empty 402 bodies never hit parsing or !ok throws.
-      if (response.status === 402) {
-        setStatus(FREE_PLAN_COMPLETE_STATUS);
-        setError(FREE_PLAN_COMPLETE_ERROR);
-        setUpgradeModalOpen(true);
-        return;
-      }
+      const response = await fetch("/api/master", { method: "POST", body: formData });
 
       setStatus("Mastering and generating previews...");
       const payload = await readResponsePayload(response);
@@ -185,6 +217,16 @@ export function UploadForm() {
     setOwnerBypassDraft("");
   }
 
+  function handleLimitModalViewPlans() {
+    setDownloadLimitModalOpen(false);
+    const pricing = document.getElementById("pricing");
+    if (pricing) {
+      pricing.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    window.location.assign("/pricing");
+  }
+
   return (
     <section id="master" style={panelStyle}>
       {ownerTestingPanel ? (
@@ -192,8 +234,8 @@ export function UploadForm() {
           <p style={ownerTestingTitleStyle}>Local owner testing only</p>
           <p style={ownerTestingHintStyle}>
             Stored only in this browser session. Not sent to analytics. Paste a bypass token to add the{" "}
-            <code style={ownerTestingCodeStyle}>x-master-admin-bypass</code> header on POST{" "}
-            <code style={ownerTestingCodeStyle}>/api/master</code>.
+            <code style={ownerTestingCodeStyle}>x-master-admin-bypass</code> header on GET{" "}
+            <code style={ownerTestingCodeStyle}>/api/download</code> (monthly download quota).
           </p>
           <label htmlFor="owner-bypass-token" style={ownerTestingLabelStyle}>
             Token (hidden field)
@@ -207,7 +249,7 @@ export function UploadForm() {
             placeholder="Paste token"
             style={ownerTestingInputStyle}
           />
-          <p style={ownerTestingTokenHelperStyle}>The typed token will be used immediately on submit.</p>
+          <p style={ownerTestingTokenHelperStyle}>The token is sent on final download (fetch) to bypass download quota.</p>
           <div style={ownerTestingActionsStyle}>
             <button type="button" style={ownerTestingPrimaryStyle} onClick={applyOwnerBypassFromDraft}>
               Save to session
@@ -221,14 +263,10 @@ export function UploadForm() {
             role="status"
             aria-live="polite"
           >
-            {ownerOverrideArmed
-              ? "Override armed — bypass header will be sent"
-              : "Override not armed"}
+            {ownerOverrideArmed ? "Bypass token saved — will be sent on download fetch" : "Override not armed"}
           </div>
-          <p style={ownerTestingDebugLineStyle}>Submit path active: yes</p>
           <p style={ownerTestingDebugLineStyle}>
-            Bypass header attached on next submit:{" "}
-            {resolveBypassTokenForMasterSubmit(ownerTestingPanel, ownerBypassDraft) ? "yes" : "no"}
+            Bypass available for download: {resolveAdminBypassToken(ownerTestingPanel, ownerBypassDraft) ? "yes" : "no"}
           </p>
         </div>
       ) : null}
@@ -298,31 +336,7 @@ export function UploadForm() {
       </form>
 
       {error ? (
-        <p style={error === FREE_PLAN_COMPLETE_ERROR ? quotaExhaustedMessageStyle : errorStyle}>{error}</p>
-      ) : null}
-
-      {upgradeModalOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="upgrade-dialog-title"
-          style={upgradeModalBackdropStyle}
-        >
-          <div style={upgradeModalPanelStyle}>
-            <p id="upgrade-dialog-title" style={upgradeModalTitleStyle}>
-              Free plan complete
-            </p>
-            <p style={upgradeModalBodyStyle}>{FREE_PLAN_COMPLETE_ERROR}</p>
-            <div style={upgradeModalActionsStyle}>
-              <a href="#pricing" style={upgradeModalPrimaryStyle} onClick={() => setUpgradeModalOpen(false)}>
-                View pricing
-              </a>
-              <button type="button" style={upgradeModalSecondaryStyle} onClick={() => setUpgradeModalOpen(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <p style={error === DOWNLOAD_LIMIT_MESSAGE ? quotaExhaustedMessageStyle : errorStyle}>{error}</p>
       ) : null}
 
       {result ? (
@@ -333,32 +347,66 @@ export function UploadForm() {
                 <p
                   style={{
                     margin: "14px 0 0",
-                    color: result.quota.remainingFreeMasters > 0 ? "#7dccb0" : "#a8c4bb",
+                    color: result.quota.remainingFreeDownloads > 0 ? "#7dccb0" : "#a8c4bb",
                     fontSize: "0.82rem",
                     lineHeight: 1.55
                   }}
                 >
-                  {result.quota.remainingFreeMasters > 0 ? (
+                  {result.quota.remainingFreeDownloads > 0 ? (
                     <>
-                      Free plan usage: {result.quota.usedThisMonth} used, {result.quota.remainingFreeMasters} remaining
+                      Free plan: {result.quota.downloadsUsedThisMonth} final download
+                      {result.quota.downloadsUsedThisMonth === 1 ? "" : "s"} used this month,{" "}
+                      {result.quota.remainingFreeDownloads} remaining
                     </>
                   ) : (
-                    <>{FREE_PLAN_COMPLETE_ERROR}</>
+                    <>
+                      {DOWNLOAD_LIMIT_MESSAGE}{" "}
+                      <a href="#pricing" style={{ color: "#7dccb0", textDecoration: "underline" }}>
+                        View pricing
+                      </a>
+                    </>
                   )}
                 </p>
-              ) : null
+              ) : (
+                <p style={quotaUnknownLineStyle}>
+                  Free plan includes a limited number of final downloads per month. After you verify your email below,
+                  usage is tied to that address and enforced when you download the master.
+                </p>
+              )
             }
           />
           <AudioCompare originalPreviewUrl={result.previews.original} masteredPreviewUrl={result.previews.mastered} />
           {!downloadUrl ? (
             <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={setDownloadUrl} />
           ) : (
-            <a href={downloadUrl} style={downloadStyle}>
+            <button
+              type="button"
+              style={downloadStyle}
+              onClick={() => {
+                void downloadFinalMasterWithOptionalBypass(
+                  downloadUrl,
+                  resolveAdminBypassToken(ownerTestingPanel, ownerBypassDraft)
+                ).catch((e) => {
+                  const message = e instanceof Error ? e.message : "Download failed.";
+                  if (e instanceof Error && e.name === "DownloadLimitExceededError") {
+                    setError(null);
+                    setDownloadLimitModalOpen(true);
+                    return;
+                  }
+                  setError(message);
+                });
+              }}
+            >
               Download Final Master
-            </a>
+            </button>
           )}
         </div>
       ) : null}
+      <DownloadLimitModal
+        open={downloadLimitModalOpen}
+        onClose={() => setDownloadLimitModalOpen(false)}
+        onViewPlans={handleLimitModalViewPlans}
+      />
     </section>
   );
 }
@@ -621,7 +669,7 @@ const errorStyle: React.CSSProperties = {
   marginTop: "12px"
 };
 
-/** Shown for HTTP 402 quota exhaustion — calm, not “error red”. */
+/** Shown for download-limit messaging — calm, not “error red”. */
 const quotaExhaustedMessageStyle: React.CSSProperties = {
   color: "#a8c4bb",
   marginTop: "12px",
@@ -629,70 +677,11 @@ const quotaExhaustedMessageStyle: React.CSSProperties = {
   fontSize: "0.95rem"
 };
 
-const upgradeModalBackdropStyle: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 50,
-  display: "grid",
-  placeItems: "center",
-  padding: "20px",
-  background: "rgba(4, 8, 18, 0.72)",
-  backdropFilter: "blur(6px)"
-};
-
-const upgradeModalPanelStyle: React.CSSProperties = {
-  width: "min(420px, 100%)",
-  borderRadius: "18px",
-  border: "1px solid rgba(120, 200, 170, 0.28)",
-  background: "linear-gradient(160deg, rgba(16, 28, 40, 0.96), rgba(10, 14, 26, 0.98))",
-  boxShadow: "0 24px 60px rgba(0, 0, 0, 0.45)",
-  padding: "22px 22px 18px"
-};
-
-const upgradeModalTitleStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#e8fff4",
-  fontWeight: 700,
-  fontSize: "1.05rem",
-  letterSpacing: "-0.02em"
-};
-
-const upgradeModalBodyStyle: React.CSSProperties = {
-  margin: "12px 0 0",
-  color: "#9fb8ae",
-  fontSize: "0.9rem",
+const quotaUnknownLineStyle: React.CSSProperties = {
+  margin: "14px 0 0",
+  color: "#8fb3a8",
+  fontSize: "0.82rem",
   lineHeight: 1.55
-};
-
-const upgradeModalActionsStyle: React.CSSProperties = {
-  marginTop: "18px",
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "10px",
-  alignItems: "center"
-};
-
-const upgradeModalPrimaryStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderRadius: "12px",
-  padding: "10px 16px",
-  fontWeight: 700,
-  fontSize: "0.88rem",
-  textDecoration: "none",
-  color: "#061a14",
-  background: "linear-gradient(120deg, #2de39d, #5cdbb8)"
-};
-
-const upgradeModalSecondaryStyle: React.CSSProperties = {
-  borderRadius: "10px",
-  border: "1px solid rgba(120, 140, 180, 0.45)",
-  background: "transparent",
-  color: "#c6d4e8",
-  padding: "9px 14px",
-  fontSize: "0.85rem",
-  cursor: "pointer"
 };
 
 const resultAreaStyle: React.CSSProperties = { marginTop: "20px", display: "grid", gap: "16px" };

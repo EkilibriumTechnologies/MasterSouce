@@ -12,27 +12,12 @@ import { GENRE_PRESETS, LOUDNESS_MODES } from "@/lib/genre-presets";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, getTempRoot, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
-import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
-import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
-import { incrementUsage } from "@/lib/usage/quota";
-import {
-  countCompletedMasterizationsForMonth,
-  getCurrentMonthKeyUtc,
-  insertCompletedMasteringUsage
-} from "@/lib/usage/supabase-mastering-usage";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
-
-/** Local/dev only: skip Supabase `mastering_usage` when `LOCAL_SKIP_MASTERING_USAGE_DB` is set. Never active in production (`NODE_ENV === "production"`). */
-function skipSupabaseMasteringUsagePersistence(): boolean {
-  if (process.env.NODE_ENV === "production") return false;
-  const v = process.env.LOCAL_SKIP_MASTERING_USAGE_DB;
-  return v === "1" || v === "true";
-}
 
 const InputSchema = z.object({
   genre: z.enum(["pop", "hiphop", "edm", "rock", "reggaeton", "rnb", "lofi"]),
@@ -69,37 +54,13 @@ export async function POST(request: NextRequest) {
     console.log("[MASTER_DEBUG] user:context", { hasEmail: Boolean(user.email) });
 
     const entitlements = await getEntitlementsForUser(user);
-    const adminQuotaBypass = isMasterAdminBypassGranted(request);
-    console.log("[MASTER_DEBUG] branch:entitlements_check", {
+    console.log("[MASTER_DEBUG] branch:entitlements_snapshot", {
       planId: entitlements.planId,
-      canProcess: entitlements.canProcess,
-      remainingFreeMasters: entitlements.remainingFreeMasters,
-      adminQuotaBypass
+      canMaster: entitlements.canMaster,
+      downloadQuotaKnown: entitlements.downloadsUsedThisMonth !== null,
+      downloadsUsedThisMonth: entitlements.downloadsUsedThisMonth,
+      remainingFreeDownloads: entitlements.remainingFreeDownloads
     });
-
-    if (!entitlements.canProcess && !adminQuotaBypass) {
-      console.log("[MASTER_DEBUG] return:402", { reason: "quota_exceeded" });
-      console.log("[MASTER_DEBUG] return:quota_exceeded");
-      console.log(
-        "[api/master] denying POST: HTTP 402 credits_exceeded — canProcess=false planId=%s remainingFreeMasters=%s",
-        entitlements.planId,
-        String(entitlements.remainingFreeMasters)
-      );
-      const response = NextResponse.json(
-        {
-          error: "credits_exceeded",
-          message: "Your free masters are complete. Upgrade to continue mastering tracks.",
-          statusText: "Free plan complete"
-        },
-        { status: 402 }
-      );
-      attachSessionCookieIfNeeded(response, sessionPrep);
-      return response;
-    }
-
-    if (adminQuotaBypass && !entitlements.canProcess) {
-      console.log("[MASTER_DEBUG] override:granted", { reason: "admin_header" });
-    }
 
     let formData: FormData;
     try {
@@ -296,22 +257,6 @@ export async function POST(request: NextRequest) {
       masteredPreviewId: masteredPreviewRecord.id
     });
 
-    const monthKey = getCurrentMonthKeyUtc();
-    let usedThisMonth: number;
-    console.log("[MASTER_DEBUG] branch:usage_persist", {
-      supabaseConfigured: isSupabaseConfigured(),
-      skipSupabaseUsage: skipSupabaseMasteringUsagePersistence()
-    });
-    if (isSupabaseConfigured() && !skipSupabaseMasteringUsagePersistence()) {
-      await insertCompletedMasteringUsage({
-        email: user.email,
-        sessionId: user.sessionId,
-        monthKey
-      });
-      usedThisMonth = await countCompletedMasterizationsForMonth(user.email, user.sessionId, monthKey);
-    } else {
-      usedThisMonth = incrementUsage(user.id);
-    }
     const nextEntitlements = await getEntitlementsForUser(user);
 
     const originalMetrics = toPublicMetrics(result.originalAnalysis);
@@ -327,6 +272,15 @@ export async function POST(request: NextRequest) {
       masteredStat = null;
     }
 
+    const quotaSnapshot =
+      nextEntitlements.downloadsUsedThisMonth !== null && nextEntitlements.remainingFreeDownloads !== null
+        ? {
+            downloadsUsedThisMonth: nextEntitlements.downloadsUsedThisMonth,
+            remainingFreeDownloads: nextEntitlements.remainingFreeDownloads,
+            planId: nextEntitlements.planId
+          }
+        : null;
+
     const responsePayloadSummary = {
       jobId,
       preset: GENRE_PRESETS[parsed.data.genre].label,
@@ -334,11 +288,7 @@ export async function POST(request: NextRequest) {
       previewUrls: 2,
       downloadFileId: masteredRecord.id,
       analysisKeys: ["durationSec", "integratedLufs", "peakDb", "crestDb", "notes", "original", "mastered?"],
-      quota: {
-        usedThisMonth,
-        remainingFreeMasters: nextEntitlements.remainingFreeMasters,
-        planId: nextEntitlements.planId
-      }
+      quota: quotaSnapshot
     };
 
     console.log("[MASTER_DEBUG] response:ready", {
@@ -369,11 +319,7 @@ export async function POST(request: NextRequest) {
         original: originalMetrics,
         ...(hasMasteredMetrics && masteredMetrics ? { mastered: masteredMetrics } : {})
       },
-      quota: {
-        usedThisMonth,
-        remainingFreeMasters: nextEntitlements.remainingFreeMasters,
-        planId: nextEntitlements.planId
-      },
+      ...(quotaSnapshot ? { quota: quotaSnapshot } : {}),
       subscription: {
         customerPortalEligible: nextEntitlements.customerPortalEligible,
         stripeReady: true,

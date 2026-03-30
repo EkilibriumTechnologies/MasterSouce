@@ -78,7 +78,7 @@ export function HowItWorks() {
               Simple pricing for creators
             </h4>
             <p className="text-muted-foreground mb-4">
-              Start with up to 4 free masters each month.
+              Start with up to 4 free downloads each month.
             </p>
             <p className="text-muted-foreground">
               When you&apos;re ready for more, paid creator plans will unlock additional usage and future premium features.

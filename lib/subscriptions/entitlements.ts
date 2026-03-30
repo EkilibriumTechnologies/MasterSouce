@@ -1,37 +1,61 @@
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { EntitlementSnapshot, PlanId } from "@/lib/subscriptions/types";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
-import {
-  countCompletedMasterizationsForMonth,
-  FREE_COMPLETED_MASTERS_PER_MONTH,
-  getCurrentMonthKeyUtc
-} from "@/lib/usage/supabase-mastering-usage";
-import { getMonthlyUsage } from "@/lib/usage/quota";
+import { getCurrentMonthKeyUtc } from "@/lib/usage/month-key";
+import { getLocalBillableDownloadCount } from "@/lib/usage/local-download-usage";
+import { countBillableDownloadsForMonth } from "@/lib/usage/supabase-download-usage";
 import { UserProfile } from "@/lib/users/user-profile";
+
+export const FREE_DOWNLOADS_PER_MONTH = 4;
 
 // MVP placeholder:
 // - no auth persistence
 // - no Stripe sync
 // - free plan only for now
 // Keep this service boundary so Stripe + Supabase-backed billing can be wired in later.
-export async function getEntitlementsForUser(user: UserProfile): Promise<EntitlementSnapshot> {
+
+export type EntitlementBillingContext = {
+  /** Lowercased email for Supabase download events; omit when unknown. */
+  normalizedEmail?: string | null;
+};
+
+export async function getEntitlementsForUser(
+  user: UserProfile,
+  billing?: EntitlementBillingContext
+): Promise<EntitlementSnapshot> {
   const activePlanId: PlanId = "free";
   const plan = PLAN_DEFINITIONS[activePlanId];
-  const monthlyCap = Math.min(plan.includedMastersPerMonth, FREE_COMPLETED_MASTERS_PER_MONTH);
-  let usedThisMonth: number;
+  const monthlyCap = Math.min(plan.includedDownloadsPerMonth, FREE_DOWNLOADS_PER_MONTH);
+  const monthKey = getCurrentMonthKeyUtc();
+
+  const emailForBilling = billing?.normalizedEmail ?? user.email?.trim().toLowerCase() ?? null;
+
+  let usedThisMonth: number | null;
+  let remaining: number | null;
+
   if (isSupabaseConfigured()) {
-    const monthKey = getCurrentMonthKeyUtc();
-    usedThisMonth = await countCompletedMasterizationsForMonth(user.email, user.sessionId, monthKey);
+    if (emailForBilling) {
+      const used = await countBillableDownloadsForMonth(emailForBilling, monthKey);
+      usedThisMonth = used;
+      remaining = Math.max(monthlyCap - used, 0);
+    } else {
+      usedThisMonth = null;
+      remaining = null;
+    }
   } else {
-    usedThisMonth = getMonthlyUsage(user.id);
+    const used = getLocalBillableDownloadCount(user.sessionId);
+    usedThisMonth = used;
+    remaining = Math.max(monthlyCap - used, 0);
   }
-  const remaining = Math.max(monthlyCap - usedThisMonth, 0);
+
+  const canDownload = remaining === null ? true : remaining > 0;
 
   return {
     planId: activePlanId,
-    canProcess: remaining > 0,
-    canDownload: true,
-    remainingFreeMasters: remaining,
+    canMaster: true,
+    canDownload,
+    downloadsUsedThisMonth: usedThisMonth,
+    remainingFreeDownloads: remaining,
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     customerPortalEligible: false

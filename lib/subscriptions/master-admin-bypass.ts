@@ -3,8 +3,8 @@ import { NextRequest } from "next/server";
 
 /**
  * Owner testing: when `MASTER_ADMIN_BYPASS_TOKEN` is set and the request sends
- * matching `x-master-admin-bypass`, quota denial for POST /api/master is skipped.
- * Does not log secrets.
+ * matching `x-master-admin-bypass`, monthly download quota denial for GET /api/download
+ * is skipped. Does not log secrets.
  */
 export function isMasterAdminBypassGranted(request: NextRequest): boolean {
   const expected = process.env.MASTER_ADMIN_BYPASS_TOKEN?.trim();

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { PricingSection } from "@/components/pricing-section";
 import { UploadForm } from "@/components/upload-form";
 
 export default function HomePage() {
@@ -72,14 +73,14 @@ export default function HomePage() {
           </p>
           <p style={mutedSecondaryStyle}>MasterSauce is a tool, not a rights holder. Your creative work stays yours.</p>
         </div>
-        <div id="pricing" style={infoCardStyle}>
-          <h2 style={infoTitleStyle}>Simple pricing for creators</h2>
-          <p style={mutedStyle}>Start with up to 4 free masters each month.</p>
-          <p style={mutedSecondaryStyle}>
-            When you&apos;re ready for more, paid creator plans will unlock additional usage and future premium features.
-          </p>
+        <div style={infoCardStyle}>
+          <h2 style={infoTitleStyle}>Fair by design</h2>
+          <p style={mutedStyle}>Master and preview as much as you want.</p>
+          <p style={mutedSecondaryStyle}>Only final mastered downloads count toward your monthly plan.</p>
         </div>
       </section>
+
+      <PricingSection />
 
       <footer style={footerStyle}>
         <div style={footerBrandStyle}>
