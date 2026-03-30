@@ -114,7 +114,7 @@ export default function HomePage({ searchParams }: HomePageProps) {
           </div>
         </div>
         <div style={footerLinksStyle}>
-          <a href="#" style={linkStyle}>About</a>
+          <Link href="/about" style={linkStyle}>About</Link>
           <Link href="/terms" style={linkStyle}>Terms</Link>
           <Link href="/privacy" style={linkStyle}>Privacy</Link>
           <Link href="/pricing" style={linkStyle}>Manage subscription</Link>

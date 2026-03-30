@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Music } from "lucide-react";
 
 export function Footer() {
@@ -20,15 +21,15 @@ export function Footer() {
           </div>
           
           <div className="flex items-center gap-8 text-sm text-muted-foreground">
-            <a href="#" className="hover:text-foreground transition-colors">
+            <Link href="/about" className="hover:text-foreground transition-colors">
               About
-            </a>
-            <a href="#" className="hover:text-foreground transition-colors">
+            </Link>
+            <Link href="/terms" className="hover:text-foreground transition-colors">
               Terms
-            </a>
-            <a href="#" className="hover:text-foreground transition-colors">
+            </Link>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">
               Privacy
-            </a>
+            </Link>
             <a href="#" className="hover:text-foreground transition-colors">
               Contact
             </a>
