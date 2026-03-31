@@ -96,6 +96,8 @@ const bodyStyle: React.CSSProperties = {
   fontFamily: "Work Sans, Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell",
   background:
     "radial-gradient(1200px 420px at 10% -30%, rgba(47, 176, 255, 0.16), rgba(47,176,255,0) 56%), radial-gradient(1000px 540px at 90% -18%, rgba(140, 96, 255, 0.24), rgba(140,96,255,0) 62%), linear-gradient(145deg, #0f1831 0%, #0b1225 54%, #070f20 100%)",
+  backgroundImage: "url('/images/home-wave-bg.png')",
+  backgroundBlendMode: "overlay",
   color: "#eef2ff",
   lineHeight: 1.5
 };
