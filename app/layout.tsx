@@ -1,11 +1,59 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ReactNode } from "react";
 
+import { GoogleAnalytics } from "@/components/analytics/google-analytics";
+import { SOCIAL_PREVIEW_ALT, SOCIAL_PREVIEW_SIZE } from "@/lib/og/social-preview";
+import { absoluteUrl, getSiteUrlString, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
+
+const metadataBaseUrl = getSiteUrlString();
+
+const googleVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+
 export const metadata: Metadata = {
-  title: "MasterSauce",
-  description:
-    "MasterSauce is an affordable, simple, smart automatic mastering web app for independent musicians and AI music creators.",
-  // Bump ?v= when regenerating favicons so browsers pick up new files (favicons cache aggressively).
+  metadataBase: new URL(metadataBaseUrl),
+  title: {
+    default: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    template: `%s | ${SITE_NAME}`
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  authors: [{ name: SITE_NAME, url: metadataBaseUrl }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  category: "music",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1
+    }
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: metadataBaseUrl,
+    siteName: SITE_NAME,
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    images: [
+      {
+        url: absoluteUrl("/og-image.png"),
+        width: SOCIAL_PREVIEW_SIZE.width,
+        height: SOCIAL_PREVIEW_SIZE.height,
+        alt: SOCIAL_PREVIEW_ALT
+      }
+    ]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    images: [absoluteUrl("/og-image.png")]
+  },
   icons: {
     icon: [
       { url: "/favicon.ico?v=ms2", type: "image/x-icon" },
@@ -14,13 +62,30 @@ export const metadata: Metadata = {
       { url: "/favicon-48x48.png?v=ms2", sizes: "48x48", type: "image/png" }
     ],
     apple: [{ url: "/apple-touch-icon.png?v=ms2", sizes: "180x180", type: "image/png" }]
-  }
+  },
+  ...(googleVerification
+    ? {
+        verification: {
+          google: googleVerification
+        }
+      }
+    : {})
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0b1225" },
+    { media: "(prefers-color-scheme: light)", color: "#0f1831" }
+  ]
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body style={bodyStyle}>{children}</body>
+      <body style={bodyStyle}>
+        <GoogleAnalytics />
+        {children}
+      </body>
     </html>
   );
 }

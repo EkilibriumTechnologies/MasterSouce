@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "Terms & Conditions — MasterSauce",
-  description: "Terms and Conditions for using MasterSauce."
-};
+import { buildPageMetadata } from "@/lib/seo/page-metadata";
+import { LEGAL_CONTACT_EMAIL } from "@/lib/site";
 
-const LEGAL_CONTACT_EMAIL = "consulting@ekilibriumtechnologies.com";
+export const metadata: Metadata = buildPageMetadata({
+  title: "Terms & Conditions",
+  description:
+    "Terms of use for MasterSauce: rights to your audio, acceptable use, subscriptions, disclaimers, and how to contact us.",
+  path: "/terms"
+});
 
 export default function TermsPage() {
   return (

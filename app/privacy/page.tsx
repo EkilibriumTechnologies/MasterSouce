@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 
-// TODO: Insert Privacy Contact Email before deploy
-const PRIVACY_CONTACT_EMAIL = "consulting@ekilibriumtechnologies.com";
+import { buildPageMetadata } from "@/lib/seo/page-metadata";
+import { LEGAL_CONTACT_EMAIL } from "@/lib/site";
+
+export const metadata: Metadata = buildPageMetadata({
+  title: "Privacy Policy",
+  description:
+    "How MasterSauce handles your audio, email, cookies, and account data — including retention, security, and your rights.",
+  path: "/privacy"
+});
 
 export default function PrivacyPage() {
   return (
@@ -122,12 +130,11 @@ export default function PrivacyPage() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>9. Your rights</h2>
         <p style={textStyle}>
-          {/* TODO: Insert Privacy Contact Email before deploy (verify PRIVACY_CONTACT_EMAIL constant at top of file) */}
           Depending on your location, you may have the right to access, correct, or request deletion of your personal
           data. Because MasterSauce does not store audio files, there is no audio data to retrieve or delete after your
           session ends. For email or account data requests, contact us at:{" "}
-          <a href={`mailto:${PRIVACY_CONTACT_EMAIL}`} style={linkStyle}>
-            {PRIVACY_CONTACT_EMAIL}
+          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} style={linkStyle}>
+            {LEGAL_CONTACT_EMAIL}
           </a>
         </p>
       </section>
@@ -144,10 +151,9 @@ export default function PrivacyPage() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>11. Contact</h2>
         <p style={textStyle}>
-          {/* TODO: Insert Privacy Contact Email before deploy (verify PRIVACY_CONTACT_EMAIL constant at top of file) */}
           If you have questions about this Privacy Policy, contact us at:{" "}
-          <a href={`mailto:${PRIVACY_CONTACT_EMAIL}`} style={linkStyle}>
-            {PRIVACY_CONTACT_EMAIL}
+          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} style={linkStyle}>
+            {LEGAL_CONTACT_EMAIL}
           </a>
         </p>
       </section>

@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { PricingSection } from "@/components/pricing-section";
+import { JsonLd } from "@/components/seo/json-ld";
 import { UploadForm } from "@/components/upload-form";
+import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
+import { getHomePageJsonLdGraph } from "@/lib/seo/home-json-ld";
+import { absoluteUrl, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
+import { SOCIAL_PREVIEW_ALT, SOCIAL_PREVIEW_SIZE } from "@/lib/og/social-preview";
 
 type HomePageProps = {
   searchParams?: {
@@ -14,6 +20,34 @@ function getFirst(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+export const metadata: Metadata = {
+  title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    url: absoluteUrl("/"),
+    siteName: SITE_NAME,
+    type: "website",
+    locale: "en_US",
+    images: [
+      {
+        url: absoluteUrl("/og-image.png"),
+        width: SOCIAL_PREVIEW_SIZE.width,
+        height: SOCIAL_PREVIEW_SIZE.height,
+        alt: SOCIAL_PREVIEW_ALT
+      }
+    ]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    images: [absoluteUrl("/og-image.png")]
+  }
+};
+
 export default function HomePage({ searchParams }: HomePageProps) {
   const checkout = getFirst(searchParams?.checkout);
   const kind = getFirst(searchParams?.kind);
@@ -22,7 +56,9 @@ export default function HomePage({ searchParams }: HomePageProps) {
     kind === "credit_pack" ? "Your credit pack was added successfully." : "Your plan is now active.";
 
   return (
-    <main style={mainStyle}>
+    <>
+      <JsonLd data={getHomePageJsonLdGraph()} />
+      <main style={mainStyle}>
       {showCheckoutSuccess ? (
         <section style={successBannerStyle} aria-live="polite">
           <p style={successEyebrowStyle}>Purchase complete</p>
@@ -56,6 +92,33 @@ export default function HomePage({ searchParams }: HomePageProps) {
           <span style={pillStyle}>🎧 Before/After Preview</span>
           <span style={pillStyle}>✉️ Email Only for Final Master</span>
         </div>
+      </section>
+
+      <section id="what-is-mastersauce" style={sectionStyle} aria-labelledby="what-heading">
+        <h2 id="what-heading" style={sectionTitle}>
+          What is MasterSauce?
+        </h2>
+        <p style={proseCenterStyle}>
+          MasterSauce is an automatic mastering tool in the browser. You upload a mix, choose the genre and loudness that
+          match your track, and hear a real before/after preview before you commit. When it sounds right, you unlock the
+          full-quality master and keep moving — whether you are polishing a single, a sync pitch, or the next release on
+          your own timeline.
+        </p>
+        <p style={proseCenterStyle}>
+          It is built for modern workflows: fast feedback, clear limits, and no pressure to become a mastering engineer
+          just to finish a song.
+        </p>
+      </section>
+
+      <section id="who-its-for" style={sectionStyle} aria-labelledby="who-heading">
+        <h2 id="who-heading" style={sectionTitle}>
+          Who it is for
+        </h2>
+        <p style={proseCenterStyle}>
+          Bedroom producers finishing tracks at odd hours. Independent artists self-releasing without a big studio budget.
+          AI music creators who want a consistent, release-ready level on their outputs. Anyone making music today who
+          values speed, clarity, and a straightforward path from mix to master.
+        </p>
       </section>
 
       <UploadForm />
@@ -103,6 +166,21 @@ export default function HomePage({ searchParams }: HomePageProps) {
         </div>
       </section>
 
+      <section id="faq" style={sectionStyle} aria-labelledby="faq-heading">
+        <h2 id="faq-heading" style={sectionTitle}>
+          Common questions
+        </h2>
+        <p style={sectionSubTitle}>Straight answers about how MasterSauce fits your workflow.</p>
+        <dl style={faqListStyle}>
+          {HOME_FAQ_ITEMS.map((item) => (
+            <div key={item.question} style={faqItemStyle}>
+              <dt style={faqQStyle}>{item.question}</dt>
+              <dd style={faqAStyle}>{item.answer}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
       <PricingSection />
 
       <footer style={footerStyle}>
@@ -117,12 +195,17 @@ export default function HomePage({ searchParams }: HomePageProps) {
           <Link href="/about" style={linkStyle}>About</Link>
           <Link href="/terms" style={linkStyle}>Terms</Link>
           <Link href="/privacy" style={linkStyle}>Privacy</Link>
-          <Link href="/pricing" style={linkStyle}>Manage subscription</Link>
-          <span style={linkStyle}>Contact</span>
+          <Link href="/pricing" style={linkStyle}>
+            Manage subscription
+          </Link>
+          <Link href="/contact" style={linkStyle}>
+            Contact
+          </Link>
         </div>
       </footer>
       <p style={copyrightStyle}>© {new Date().getFullYear()} MasterSauce. Built for independent creators.</p>
     </main>
+    </>
   );
 }
 
@@ -239,6 +322,39 @@ const sectionSubTitle: React.CSSProperties = {
   margin: "8px 0 0",
   textAlign: "center",
   color: "#90a0cb"
+};
+
+const proseCenterStyle: React.CSSProperties = {
+  margin: "16px auto 0",
+  maxWidth: "720px",
+  color: "#9ca8cc",
+  lineHeight: 1.65,
+  fontSize: "1.02rem",
+  textAlign: "center"
+};
+
+const faqListStyle: React.CSSProperties = {
+  margin: "24px 0 0",
+  display: "grid",
+  gap: "22px"
+};
+
+const faqItemStyle: React.CSSProperties = { margin: 0 };
+
+const faqQStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: "1.05rem",
+  fontWeight: 700,
+  color: "#ebefff",
+  fontFamily: "Outfit, Work Sans, system-ui, sans-serif"
+};
+
+const faqAStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  padding: 0,
+  color: "#9ca8cc",
+  lineHeight: 1.65,
+  fontSize: "0.98rem"
 };
 const stepsGridStyle: React.CSSProperties = {
   display: "grid",

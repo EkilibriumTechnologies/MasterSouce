@@ -2,11 +2,14 @@ import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "About — MasterSauce",
+import { buildPageMetadata } from "@/lib/seo/page-metadata";
+
+export const metadata: Metadata = buildPageMetadata({
+  title: "About",
   description:
-    "MasterSauce is a small startup building smart mastering for independent artists, bedroom producers, and AI music creators."
-};
+    "MasterSauce is a creator-first mastering product: fast previews, simple controls, and a team that ships for independent artists, bedroom producers, and AI music workflows.",
+  path: "/about"
+});
 
 export default function AboutPage() {
   return (
