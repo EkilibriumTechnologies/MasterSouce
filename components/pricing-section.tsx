@@ -28,8 +28,8 @@ export function PricingSection() {
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const modalOpen = modalMode !== null;
-  const adaptiveIntent = searchParams.get("intent") === "adaptive";
-  const returnTo = searchParams.get("returnTo")?.trim() ?? "";
+  const adaptiveIntent = searchParams?.get("intent") === "adaptive";
+  const returnTo = searchParams?.get("returnTo")?.trim() ?? "";
   const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
 
   useEffect(() => {

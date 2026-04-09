@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
+import { Suspense } from "react";
 
 import { PricingSection } from "@/components/pricing-section";
 import { buildPageMetadata } from "@/lib/seo/page-metadata";
@@ -17,7 +18,9 @@ export default function PricingPage() {
   return (
     <main style={mainStyle}>
       <PricingTopHomeLink />
-      <PricingSection />
+      <Suspense fallback={null}>
+        <PricingSection />
+      </Suspense>
       <PricingBottomHomeLink />
     </main>
   );
