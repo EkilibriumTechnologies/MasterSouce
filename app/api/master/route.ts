@@ -15,6 +15,7 @@ import { cleanupExpiredTempFiles, getTempRoot, registerExistingFile, saveTempFil
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
+import { createJobId } from "@/lib/jobs/job-id";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedExt = ext === "wav" || file.type.includes("wav") ? "wav" : "mp3";
-    const jobId = `job_${Date.now().toString(36)}`;
+    const jobId = createJobId("job");
 
     console.log("[MASTER_DEBUG] temp:write:before", {
       tempRoot: getTempRoot(),

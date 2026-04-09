@@ -5,7 +5,7 @@ import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
 import { normalizeCaptureEmail } from "@/lib/email/normalize-capture-email";
 import { upsertMasterJobUnlock } from "@/lib/downloads/master-job-unlocks";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
-import { findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
+import { resolveTempRecord } from "@/lib/storage/temp-files";
 import {
   getSupabaseAdminConfig,
   getSupabaseKeyJwtRole,
@@ -42,7 +42,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  console.log("[railway-env] SUPABASE_URL=" + (process.env.SUPABASE_URL ?? "MISSING") + " NEXT_PUBLIC=" + (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "MISSING") + " SERVICE_KEY=" + (process.env.SUPABASE_SERVICE_ROLE_KEY ? "PRESENT" : "MISSING") + " TEST_VAR=" + (process.env.TEST_VAR ?? "MISSING"));
+  const requestId = Math.random().toString(36).slice(2, 10);
+  const isLocalDev = process.env.NODE_ENV !== "production";
+  console.log("[capture-email] request:start", {
+    requestId,
+    method: request.method,
+    isLocalDev,
+    hasSupabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
+    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  });
   try {
     const sessionPrep = prepareSessionForRequest(request);
     let body: unknown;
@@ -68,6 +76,12 @@ export async function POST(request: NextRequest) {
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
+    console.log("[capture-email] payload:received", {
+      requestId,
+      emailLength: parsed.data.email.length,
+      jobId: parsed.data.jobId,
+      fileId: parsed.data.fileId
+    });
 
     const email = normalizeCaptureEmail(parsed.data.email);
     if (!email) {
@@ -82,6 +96,12 @@ export async function POST(request: NextRequest) {
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
+    console.log("[capture-email] payload:validated", {
+      requestId,
+      jobId: parsed.data.jobId,
+      fileId: parsed.data.fileId,
+      normalizedEmail: email
+    });
 
     if (!isSupabaseConfigured()) {
       const config = getSupabaseAdminConfig();
@@ -123,27 +143,6 @@ export async function POST(request: NextRequest) {
     }
     const originalEmailTrimmed = parsed.data.email.trim();
 
-    try {
-      await upsertLeadInSupabase({ email });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "Unknown Supabase error";
-      console.error("[capture-email] Failed to upsert lead into public.leads", {
-        email,
-        detail,
-        error
-      });
-      const res = NextResponse.json(
-        {
-          error: "Unable to save email right now. Please try again.",
-          code: "SUPABASE_UPSERT_FAILED",
-          hint: "Check Railway logs for PostgREST details; confirm RLS allows service_role or disable RLS for leads."
-        },
-        { status: 500 }
-      );
-      attachSessionCookieIfNeeded(res, sessionPrep);
-      return res;
-    }
-
     const hintedRecord = await resolveTempRecord(parsed.data.fileId);
     if (!hintedRecord || hintedRecord.jobId !== parsed.data.jobId || hintedRecord.kind !== "mastered") {
       console.error("[capture-email] Temp file token validation failed", {
@@ -160,36 +159,50 @@ export async function POST(request: NextRequest) {
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
+    console.log("[capture-email] token:validated", {
+      requestId,
+      jobId: parsed.data.jobId,
+      fileId: parsed.data.fileId,
+      resolvedKind: hintedRecord.kind
+    });
 
-    const mastered = await findLatestRecordForJob(parsed.data.jobId, "mastered");
-    if (!mastered) {
-      console.error("[capture-email] Mastered file not found for job after token check", {
-        jobId: parsed.data.jobId,
-        fileId: parsed.data.fileId
-      });
-      const res = NextResponse.json(
-        { error: "Mastered file not found for this job.", code: "MASTERED_NOT_FOUND" },
-        { status: 404 }
-      );
-      attachSessionCookieIfNeeded(res, sessionPrep);
-      return res;
-    }
+    const masteredFileId = hintedRecord.id;
 
+    let unlockPersisted = false;
     try {
       await upsertMasterJobUnlock({
         jobId: parsed.data.jobId,
-        fileId: mastered.id,
+        fileId: masteredFileId,
         normalizedEmail: email,
         originalEmail: originalEmailTrimmed || email
+      });
+      unlockPersisted = true;
+      console.log("[capture-email] unlock:persisted", {
+        requestId,
+        jobId: parsed.data.jobId,
+        fileId: masteredFileId
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown Supabase error";
       console.error("[capture-email] Failed to upsert master_job_unlocks", {
+        requestId,
         jobId: parsed.data.jobId,
-        fileId: mastered.id,
+        fileId: masteredFileId,
         detail,
-        error
+        error,
+        stack: error instanceof Error ? error.stack : undefined
       });
+      if (isLocalDev) {
+        markJobDownloadUnlocked(parsed.data.jobId);
+        const res = NextResponse.json({
+          ok: true,
+          code: "OK_UNLOCKED_LOCAL_DB_FAILED",
+          warning: "Local dev fallback: unlock persisted in-memory because Supabase unlock upsert failed.",
+          downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
+        });
+        attachSessionCookieIfNeeded(res, sessionPrep);
+        return res;
+      }
       const res = NextResponse.json(
         {
           error: "Unable to unlock download right now. Please try again.",
@@ -202,17 +215,62 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
+    try {
+      await upsertLeadInSupabase({ email });
+      console.log("[capture-email] email:persisted", {
+        requestId,
+        email,
+        jobId: parsed.data.jobId
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown Supabase error";
+      console.error("[capture-email] email:persist-failed", {
+        requestId,
+        email,
+        jobId: parsed.data.jobId,
+        detail,
+        error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      if (!isLocalDev || !unlockPersisted) {
+        const res = NextResponse.json(
+          {
+            error: "Unable to save email right now. Please try again.",
+            code: "SUPABASE_UPSERT_FAILED",
+            hint: "Check Railway logs for PostgREST details; confirm RLS allows service_role or disable RLS for leads."
+          },
+          { status: 500 }
+        );
+        attachSessionCookieIfNeeded(res, sessionPrep);
+        return res;
+      }
+      const res = NextResponse.json({
+        ok: true,
+        code: "OK_UNLOCKED_LOCAL_EMAIL_FAILED",
+        warning: "Unlock succeeded in local dev, but email persistence failed.",
+        downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
+      });
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+
     markJobDownloadUnlocked(parsed.data.jobId);
     const res = NextResponse.json({
       ok: true,
       code: "OK",
-      downloadUrl: `/api/download?fileId=${mastered.id}&as=mastered.wav&dl=1`
+      downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
     });
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   } catch (error) {
     const errSession = prepareSessionForRequest(request);
     const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("[capture-email] unhandled", {
+      requestId,
+      detail,
+      error,
+      stack: error instanceof Error ? error.stack : undefined
+    });
     const res = NextResponse.json(
       { error: `Unable to capture email. ${detail}`, code: "UNHANDLED" },
       { status: 500 }

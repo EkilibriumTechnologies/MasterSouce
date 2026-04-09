@@ -9,6 +9,10 @@ const nextConfig = {
         "./node_modules/ffmpeg-static/ffmpeg",
         "./node_modules/ffmpeg-static/ffmpeg.exe",
       ],
+      "/api/master-ai": [
+        "./node_modules/ffmpeg-static/ffmpeg",
+        "./node_modules/ffmpeg-static/ffmpeg.exe",
+      ],
       "/api/internal/ffmpeg-runtime": [
         "./node_modules/ffmpeg-static/ffmpeg",
         "./node_modules/ffmpeg-static/ffmpeg.exe",

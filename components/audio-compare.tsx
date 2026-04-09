@@ -5,9 +5,20 @@ import { ChangeEvent, useEffect, useRef, useState } from "react";
 type AudioCompareProps = {
   originalPreviewUrl: string;
   masteredPreviewUrl: string;
+  originalLabel?: string;
+  originalSubLabel?: string;
+  masteredLabel?: string;
+  masteredSubLabel?: string;
 };
 
-export function AudioCompare({ originalPreviewUrl, masteredPreviewUrl }: AudioCompareProps) {
+export function AudioCompare({
+  originalPreviewUrl,
+  masteredPreviewUrl,
+  originalLabel = "Original",
+  originalSubLabel = "Your uploaded track",
+  masteredLabel = "Mastered",
+  masteredSubLabel = "Enhanced by MasterSauce"
+}: AudioCompareProps) {
   const originalRef = useRef<HTMLAudioElement>(null);
   const masteredRef = useRef<HTMLAudioElement>(null);
   const [activeSource, setActiveSource] = useState<"original" | "mastered">("original");
@@ -100,8 +111,8 @@ export function AudioCompare({ originalPreviewUrl, masteredPreviewUrl }: AudioCo
       <p style={mutedText}>Preview your mastered track instantly - no master consumed</p>
       <div style={gridStyle}>
         <div style={activeSource === "original" ? masteredCardStyle : cardStyle}>
-          <p style={labelStyle}>Original</p>
-          <p style={labelSubStyle}>Your uploaded track</p>
+          <p style={labelStyle}>{originalLabel}</p>
+          <p style={labelSubStyle}>{originalSubLabel}</p>
           <audio
             key={originalPreviewUrl}
             ref={originalRef}
@@ -177,8 +188,8 @@ export function AudioCompare({ originalPreviewUrl, masteredPreviewUrl }: AudioCo
           </div>
         </div>
         <div style={activeSource === "mastered" ? masteredCardStyle : cardStyle}>
-          <p style={masteredLabelStyle}>Mastered</p>
-          <p style={labelSubStyle}>Enhanced by MasterSauce</p>
+          <p style={masteredLabelStyle}>{masteredLabel}</p>
+          <p style={labelSubStyle}>{masteredSubLabel}</p>
           <audio
             key={masteredPreviewUrl}
             ref={masteredRef}

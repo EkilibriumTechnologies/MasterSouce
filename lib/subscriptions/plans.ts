@@ -35,6 +35,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     features: [
       "15 masters / month",
       "All 7 genre presets",
+      "Adaptive AI Mastering unlock",
       "A/B preview",
       "WAV 24-bit"
     ],
@@ -56,6 +57,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     features: [
       "60 masters / month",
       "All 7 genre presets",
+      "Adaptive AI Mastering unlock",
       "A/B preview",
       "WAV 32-bit float",
       "Priority processing"

@@ -6,11 +6,15 @@ const BodySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("subscription"),
     planId: z.enum(["creator_monthly", "pro_studio_monthly"]),
-    email: z.string()
+    email: z.string(),
+    returnTo: z.string().optional(),
+    intent: z.enum(["adaptive"]).optional()
   }),
   z.object({
     kind: z.literal("credit_pack"),
-    email: z.string()
+    email: z.string(),
+    returnTo: z.string().optional(),
+    intent: z.enum(["adaptive"]).optional()
   })
 ]);
 const BILLING_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -20,6 +24,12 @@ function resolveBaseUrl(request: NextRequest): string {
   if (env) return env.replace(/\/+$/, "");
   const origin = request.nextUrl.origin?.trim();
   return origin ? origin.replace(/\/+$/, "") : "http://localhost:3000";
+}
+
+function resolveSafeReturnPath(rawReturnTo: string | undefined): string {
+  const trimmed = rawReturnTo?.trim() ?? "";
+  if (!trimmed || !trimmed.startsWith("/") || trimmed.startsWith("//")) return "/";
+  return trimmed;
 }
 
 export async function POST(request: NextRequest) {
@@ -46,6 +56,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const returnPath = resolveSafeReturnPath(parsed.data.returnTo);
+    const successUrl = new URL(returnPath, `${baseUrl}/`);
+    successUrl.searchParams.set("checkout", "success");
+    successUrl.searchParams.set("kind", parsed.data.kind === "subscription" ? "subscription" : "credit_pack");
+    if (parsed.data.kind === "subscription" && parsed.data.intent === "adaptive") {
+      successUrl.searchParams.set("upgraded", "1");
+      successUrl.searchParams.set("intent", "adaptive");
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: parsed.data.kind === "subscription" ? "subscription" : "payment",
       customer_email: email,
@@ -58,10 +77,7 @@ export async function POST(request: NextRequest) {
           quantity: 1
         }
       ],
-      success_url:
-        parsed.data.kind === "subscription"
-          ? `${baseUrl}/?checkout=success&kind=subscription`
-          : `${baseUrl}/?checkout=success&kind=credit_pack`,
+      success_url: successUrl.toString(),
       cancel_url: `${baseUrl}/pricing?checkout=cancel`,
       metadata:
         parsed.data.kind === "subscription"

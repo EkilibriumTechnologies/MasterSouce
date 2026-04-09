@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { PlanId } from "@/lib/subscriptions/types";
@@ -16,6 +17,7 @@ type CheckoutSelection = {
 type ModalMode = "checkout" | "manage";
 
 export function PricingSection() {
+  const searchParams = useSearchParams();
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
   const [selection, setSelection] = useState<CheckoutSelection | null>(null);
   const [billingEmail, setBillingEmail] = useState("");
@@ -26,6 +28,9 @@ export function PricingSection() {
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const modalOpen = modalMode !== null;
+  const adaptiveIntent = searchParams.get("intent") === "adaptive";
+  const returnTo = searchParams.get("returnTo")?.trim() ?? "";
+  const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -90,8 +95,14 @@ export function PricingSection() {
     }
     const body =
       nextSelection.kind === "credit_pack"
-        ? { kind: nextSelection.kind, email: trimmed }
-        : { kind: nextSelection.kind, planId: nextSelection.planId, email: trimmed };
+        ? { kind: nextSelection.kind, email: trimmed, returnTo: safeReturnTo, intent: adaptiveIntent ? "adaptive" : undefined }
+        : {
+            kind: nextSelection.kind,
+            planId: nextSelection.planId,
+            email: trimmed,
+            returnTo: safeReturnTo,
+            intent: adaptiveIntent ? "adaptive" : undefined
+          };
     const response = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -188,6 +199,14 @@ export function PricingSection() {
         Master like a studio. Pay like an indie.
       </h2>
       <p style={subtitleStyle}>Preview unlimited times. Only pay when you download.</p>
+      {adaptiveIntent ? (
+        <div style={adaptiveIntentBannerStyle}>
+          <p style={adaptiveIntentTitleStyle}>Unlock Adaptive AI Mastering</p>
+          <p style={adaptiveIntentBodyStyle}>
+            Standard Mastering stays your base flow. Adaptive adds premium track analysis + your own sound direction prompt.
+          </p>
+        </div>
+      ) : null}
       <div style={manageBillingRowStyle}>
         <span style={manageBillingHintStyle}>Already subscribed?</span>
         <button type="button" style={manageBillingLinkStyle} onClick={openManageBillingModal}>
@@ -224,7 +243,7 @@ export function PricingSection() {
                   style={ctaUpgradeStyle}
                   onClick={() => openCheckoutModal({ kind: "subscription", planId: plan.id })}
                 >
-                  {plan.ctaLabel}
+                  {adaptiveIntent ? "Unlock Adaptive AI Mastering" : plan.ctaLabel}
                 </button>
               )}
             </article>
@@ -237,6 +256,13 @@ export function PricingSection() {
         <button type="button" style={creditPackButtonStyle} onClick={() => openCheckoutModal({ kind: "credit_pack" })}>
           Get 5 masters for $4
         </button>
+      </div>
+      <div style={adaptiveCopyCardStyle}>
+        <p style={adaptiveCopyTitleStyle}>Adaptive AI Mastering</p>
+        <p style={adaptiveCopyBodyStyle}>
+          Tailor your master with your own sound direction. Adaptive shapes the master from track analysis plus your prompt.
+        </p>
+        <p style={adaptiveCopySubtleStyle}>Standard Mastering remains included as the fast preset-based baseline.</p>
       </div>
       {modalOpen ? (
         <div style={backdropStyle} onClick={closeModal}>
@@ -498,6 +524,48 @@ const creditPackButtonStyle: React.CSSProperties = {
   fontWeight: 700,
   padding: "10px 14px",
   cursor: "pointer"
+};
+
+const adaptiveIntentBannerStyle: React.CSSProperties = {
+  marginTop: "14px",
+  border: "1px solid rgba(151, 116, 255, 0.5)",
+  borderRadius: "14px",
+  padding: "12px 14px",
+  background: "linear-gradient(145deg, rgba(34, 24, 60, 0.7), rgba(19, 22, 43, 0.7))"
+};
+const adaptiveIntentTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#e7ddff",
+  fontWeight: 700
+};
+const adaptiveIntentBodyStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#b8b7e9",
+  lineHeight: 1.5,
+  fontSize: "0.92rem"
+};
+const adaptiveCopyCardStyle: React.CSSProperties = {
+  marginTop: "14px",
+  border: "1px solid rgba(109, 124, 194, 0.38)",
+  borderRadius: "16px",
+  padding: "16px",
+  background: "linear-gradient(160deg, rgba(15, 22, 40, 0.74), rgba(12, 19, 35, 0.82))"
+};
+const adaptiveCopyTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#dbe5ff",
+  fontWeight: 700
+};
+const adaptiveCopyBodyStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#a8b7e2",
+  lineHeight: 1.55,
+  fontSize: "0.92rem"
+};
+const adaptiveCopySubtleStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#8fa3d6",
+  fontSize: "0.84rem"
 };
 
 const backdropStyle: React.CSSProperties = {
