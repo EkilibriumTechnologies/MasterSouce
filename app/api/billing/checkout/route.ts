@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getAdaptiveEntitlementByEmail } from "@/lib/billing/store";
+import { normalizeBillingEmail } from "@/lib/billing/email";
 import { getStripeClient, getStripeCreditPackPriceId, getStripePriceIdForPlan } from "@/lib/stripe/server";
 
 const BodySchema = z.discriminatedUnion("kind", [
@@ -32,6 +34,13 @@ function resolveSafeReturnPath(rawReturnTo: string | undefined): string {
   return trimmed;
 }
 
+/** Stripe replaces `{CHECKOUT_SESSION_ID}`; must not be URL-encoded. */
+function appendStripeCheckoutSessionPlaceholder(successUrl: URL): string {
+  const base = successUrl.toString();
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}session_id={CHECKOUT_SESSION_ID}`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
@@ -56,6 +65,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (parsed.data.kind === "subscription" && parsed.data.intent === "adaptive") {
+      const normalized = normalizeBillingEmail(email);
+      const row = normalized ? await getAdaptiveEntitlementByEmail(normalized) : null;
+      if (row?.isActive) {
+        console.log("[billing-checkout] adaptive: skip checkout, billing_entitlements active", { email: normalized });
+        return NextResponse.json(
+          {
+            alreadyEntitled: true,
+            message: "You already have access to Adaptive mastering for this billing email."
+          },
+          { status: 200 }
+        );
+      }
+    }
+
     const returnPath = resolveSafeReturnPath(parsed.data.returnTo);
     const successUrl = new URL(returnPath, `${baseUrl}/`);
     successUrl.searchParams.set("checkout", "success");
@@ -77,16 +101,29 @@ export async function POST(request: NextRequest) {
           quantity: 1
         }
       ],
-      success_url: successUrl.toString(),
+      success_url:
+        parsed.data.kind === "subscription" ? appendStripeCheckoutSessionPlaceholder(successUrl) : successUrl.toString(),
       cancel_url: `${baseUrl}/pricing?checkout=cancel`,
       metadata:
         parsed.data.kind === "subscription"
           ? { product_type: "subscription", plan_id: parsed.data.planId }
-          : { product_type: "credit_pack", credits_added: "5" }
+          : { product_type: "credit_pack", credits_added: "5" },
+      subscription_data:
+        parsed.data.kind === "subscription"
+          ? {
+              metadata: {
+                plan_id: parsed.data.planId,
+                product_type: "subscription"
+              }
+            }
+          : undefined
     });
 
     if (!session.url) {
       return NextResponse.json({ error: "Unable to start checkout session." }, { status: 500 });
+    }
+    if (parsed.data.kind === "subscription" && parsed.data.intent === "adaptive") {
+      console.log("[billing-checkout] adaptive: Stripe checkout session created (user explicitly started checkout)");
     }
     return NextResponse.json({ url: session.url });
   } catch (error) {

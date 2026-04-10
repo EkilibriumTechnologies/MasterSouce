@@ -1,32 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveAdaptiveEntitlementForEmail } from "@/lib/billing/adaptive-resolve";
+import { isAdaptiveDevBypassEnabled } from "@/lib/billing/adaptive-dev-bypass";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
-import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
-
-function isAdaptiveDevBypassEnabled(): boolean {
-  const raw = process.env.ADAPTIVE_DEV_BYPASS?.trim().toLowerCase() ?? "";
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
 
 export async function GET(request: NextRequest) {
   try {
     const sessionPrep = prepareSessionForRequest(request);
     const user = buildApiUser(request, sessionPrep.sessionId);
-    const entitlements = await getEntitlementsForUser(user);
+
+    const headerRaw = request.headers.get("x-mastersouce-billing-email")?.trim() ?? "";
+    const queryRaw = request.nextUrl.searchParams.get("email")?.trim() ?? "";
+    const sessionEmail = user.email?.trim().toLowerCase() ?? "";
+    const rawBillingEmail = headerRaw || queryRaw || sessionEmail;
+
+    const resolved = await resolveAdaptiveEntitlementForEmail(rawBillingEmail || undefined);
+
     const isDevBypass = process.env.NODE_ENV !== "production" && isAdaptiveDevBypassEnabled();
-    const entitled = isDevBypass || entitlements.planId !== "free";
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[ADAPTIVE_ACCESS_DEBUG] entitlement check", {
-        isDevBypass,
-        adaptiveDevBypassRaw: process.env.ADAPTIVE_DEV_BYPASS ?? null,
-        planId: entitlements.planId,
-        entitled
-      });
-    }
+    const entitled = isDevBypass || resolved.entitled;
+
+    console.log("[adaptive-access] entitlement check", {
+      isDevBypass,
+      hasBillingEmailHint: Boolean(rawBillingEmail),
+      resolvedReason: resolved.reason,
+      entitled
+    });
+
     const response = NextResponse.json({
       entitled,
-      planId: entitlements.planId,
-      upgradeUrl: entitled ? null : "/pricing"
+      requiresCheckout: !entitled,
+      reason: isDevBypass ? "dev_bypass" : resolved.reason,
+      planId: resolved.planId,
+      subscriptionStatus: resolved.subscriptionStatus,
+      entitlementActive: resolved.entitlementActive,
+      upgradeUrl: entitled ? null : "/pricing",
+      /** Checkout is started client-side (e.g. Adaptive export gate); not a redirect URL from this GET. */
+      checkoutUrl: null as string | null
     });
     attachSessionCookieIfNeeded(response, sessionPrep);
     return response;
