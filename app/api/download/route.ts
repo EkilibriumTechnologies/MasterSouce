@@ -40,6 +40,8 @@ export async function GET(request: NextRequest) {
     }
 
     const isMasteredAsset = record.kind === "mastered";
+    /** Adaptive final WAV uses export-access + billing_entitlements; do not consume standard monthly / credit-pack quota. */
+    const isAdaptiveMasterJob = record.jobId.startsWith("adaptive_");
     let masteredUnlock: MasterJobUnlockRow | null = null;
     if (isMasteredAsset) {
       if (isSupabaseConfigured()) {
@@ -76,20 +78,27 @@ export async function GET(request: NextRequest) {
             record.jobId,
             record.id
           );
+          const skipStandardQuota = isAdaptiveMasterJob;
           if (!hasRecent && !adminBypass) {
-            const entitlements = await getEntitlementsForUser(user, {
-              normalizedEmail: masteredUnlock.normalizedEmail
-            });
-            if (!entitlements.canDownload) {
-              const res = NextResponse.json(
-                {
-                  error: "no_masters_remaining",
-                  upgrade_url: "/pricing"
-                },
-                { status: 403 }
-              );
-              attachSessionCookieIfNeeded(res, sessionPrep);
-              return res;
+            if (skipStandardQuota) {
+              console.log("[api/download] adaptive final export: skip standard monthly/credit quota", {
+                jobId: record.jobId
+              });
+            } else {
+              const entitlements = await getEntitlementsForUser(user, {
+                normalizedEmail: masteredUnlock.normalizedEmail
+              });
+              if (!entitlements.canDownload) {
+                const res = NextResponse.json(
+                  {
+                    error: "no_masters_remaining",
+                    upgrade_url: "/pricing"
+                  },
+                  { status: 403 }
+                );
+                attachSessionCookieIfNeeded(res, sessionPrep);
+                return res;
+              }
             }
           }
         } catch (error) {
@@ -97,7 +106,7 @@ export async function GET(request: NextRequest) {
           console.error("[api/download] download entitlement check failed", { jobId: record.jobId, detail });
           return NextResponse.json({ error: "Unable to verify download allowance." }, { status: 500 });
         }
-      } else if (isJobUnlocked(record.jobId)) {
+      } else if (isJobUnlocked(record.jobId) && !isAdaptiveMasterJob) {
         const { allowed } = tryConsumeLocalBillableDownload(
           user.sessionId,
           record.jobId,
@@ -141,7 +150,7 @@ export async function GET(request: NextRequest) {
             dl: forceDownload ? 1 : 0
           }
         });
-        if (!adminBypass && recorded.countedUnique) {
+        if (!adminBypass && recorded.countedUnique && !isAdaptiveMasterJob) {
           const currentEntitlements = await getEntitlementsForUser(user, {
             normalizedEmail: masteredUnlock.normalizedEmail
           });

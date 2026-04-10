@@ -11,11 +11,6 @@ import { createJobId } from "@/lib/jobs/job-id";
 import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord } from "@/lib/storage/temp-files";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 
-function isAdaptiveDevBypassEnabled(): boolean {
-  const raw = process.env.ADAPTIVE_DEV_BYPASS?.trim().toLowerCase() ?? "";
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
 const BodySchema = z.object({
   standardMasterFileId: z.string().min(8),
   standardMasterJobId: z.string().min(4),
@@ -28,24 +23,6 @@ export async function POST(request: NextRequest) {
   try {
     const sessionPrep = prepareSessionForRequest(request);
     const user = buildApiUser(request, sessionPrep.sessionId);
-    const entitlements = await getEntitlementsForUser(user);
-
-    const isDevBypass = process.env.NODE_ENV !== "production" && isAdaptiveDevBypassEnabled();
-
-    if (!isDevBypass && entitlements.planId === "free") {
-      const res = NextResponse.json(
-        {
-          error: "adaptive_upgrade_required",
-          code: "adaptive_upgrade_required",
-          message: "Adaptive AI Mastering requires a paid plan before processing.",
-          upgradeUrl: "/pricing"
-        },
-        { status: 402 }
-      );
-      attachSessionCookieIfNeeded(res, sessionPrep);
-      return res;
-    }
-    await cleanupExpiredTempFiles();
 
     let body: unknown;
     try {
@@ -63,6 +40,10 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
+    const entitlements = await getEntitlementsForUser(user);
+
+    await cleanupExpiredTempFiles();
+
     const standardRecord = await resolveTempRecord(parsed.data.standardMasterFileId);
     if (
       !standardRecord ||
@@ -75,6 +56,10 @@ export async function POST(request: NextRequest) {
     }
 
     const jobId = createJobId("adaptive");
+    console.log("[master-ai] adaptive_preview:start", {
+      standardJobId: parsed.data.standardMasterJobId,
+      adaptiveJobId: jobId
+    });
     const adaptive = await runAdaptiveMasteringPipeline({
       inputPath: standardRecord.filePath,
       jobId,
@@ -154,6 +139,14 @@ export async function POST(request: NextRequest) {
       adaptiveSettings: adaptive.instructionSummary,
       validation: adaptive.validation
     };
+
+    console.log("[master-ai] adaptive_preview:completed", {
+      jobId,
+      planId: entitlements.planId,
+      settingsSource: adaptive.instructionSummary.source,
+      correctivePasses: adaptive.validation.correctivePasses,
+      outputSize: outputStats?.size ?? null
+    });
 
     if (process.env.NODE_ENV !== "production") {
       console.log("[MASTER_AI_DEBUG] response", {

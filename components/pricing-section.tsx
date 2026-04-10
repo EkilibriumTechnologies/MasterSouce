@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { PlanId } from "@/lib/subscriptions/types";
 
@@ -103,12 +104,31 @@ export function PricingSection() {
             returnTo: safeReturnTo,
             intent: adaptiveIntent ? "adaptive" : undefined
           };
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, trimmed.toLowerCase());
+    }
     const response = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body)
     });
-    const payload = (await response.json()) as { url?: string; error?: string; message?: string };
+    const payload = (await response.json()) as {
+      url?: string;
+      error?: string;
+      message?: string;
+      alreadyEntitled?: boolean;
+    };
+    if (response.ok && payload.alreadyEntitled) {
+      console.log("[pricing] checkout skipped: already entitled");
+      const next = new URL(safeReturnTo, window.location.href);
+      next.searchParams.set("checkout", "success");
+      if (adaptiveIntent) {
+        next.searchParams.set("intent", "adaptive");
+        next.searchParams.set("upgraded", "1");
+      }
+      window.location.assign(next.toString());
+      return;
+    }
     if (!response.ok || !payload.url) {
       if (payload.error === "invalid_billing_email") {
         throw new Error("invalid_billing_email");

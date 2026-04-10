@@ -6,11 +6,18 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 const MASTER_ADMIN_BYPASS_STORAGE_KEY = "master_admin_bypass_token";
 import { AudioCompare } from "@/components/audio-compare";
 import { DownloadLimitModal } from "@/components/download-limit-modal";
+import { AdaptiveExportGate } from "@/components/adaptive-export-gate";
 import { EmailCaptureForm } from "@/components/email-capture-form";
 import { MasterReadyCallout } from "@/components/master-ready-callout";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
+import { buildAdaptivePricingLink } from "@/lib/billing/adaptive-pricing-link";
+import {
+  MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY,
+  MASTERSOUCE_BILLING_EMAIL_KEY
+} from "@/lib/billing/client-key";
+import { clearPendingAdaptiveExport, loadPendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
@@ -81,18 +88,9 @@ function debugAdaptive(message: string, meta?: Record<string, unknown>) {
   console.log(`[ADAPTIVE_DEBUG] ${message}`);
 }
 
-function buildAdaptiveUpgradeUrl(): string {
-  if (typeof window === "undefined") {
-    return "/pricing?intent=adaptive&returnTo=%2F%3Fintent%3Dadaptive%23master";
-  }
-  const returnTarget = new URL(window.location.href);
-  returnTarget.searchParams.set("intent", "adaptive");
-  returnTarget.searchParams.delete("checkout");
-  returnTarget.searchParams.delete("kind");
-  returnTarget.searchParams.delete("upgraded");
-  returnTarget.hash = "master";
-  const returnTo = `${returnTarget.pathname}${returnTarget.search}${returnTarget.hash ? `#${returnTarget.hash.replace(/^#/, "")}` : ""}`;
-  return `/pricing?intent=adaptive&returnTo=${encodeURIComponent(returnTo)}`;
+function readStoredBillingEmail(): string {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem(MASTERSOUCE_BILLING_EMAIL_KEY)?.trim() ?? "";
 }
 
 function delay(ms: number): Promise<void> {
@@ -120,12 +118,6 @@ type MasterResponse = {
     remainingMasters: number;
     planId: string;
   };
-};
-
-type AdaptiveAccessResponse = {
-  entitled: boolean;
-  planId: string;
-  upgradeUrl: string | null;
 };
 
 type PreMasterAnalysisResponse = {
@@ -171,13 +163,9 @@ export function UploadForm() {
   const [preMasterAnalysis, setPreMasterAnalysis] = useState<PreMasterAnalysisResponse["analysis"] | null>(null);
   const [preMasterDebug, setPreMasterDebug] = useState<PreMasterAnalysisResponse["debug"] | null>(null);
   const [showAdaptivePlaceholder, setShowAdaptivePlaceholder] = useState(false);
-  const [adaptiveEntitled, setAdaptiveEntitled] = useState(false);
-  const [adaptiveUnlocked, setAdaptiveUnlocked] = useState(false);
   const [adaptiveIntent, setAdaptiveIntent] = useState("");
   const [adaptiveProcessing, setAdaptiveProcessing] = useState(false);
-  const [adaptiveUpgradeUrl, setAdaptiveUpgradeUrl] = useState<string | null>(null);
   const [adaptiveModeActive, setAdaptiveModeActive] = useState(false);
-  const [resumeAdaptiveAfterUpgrade, setResumeAdaptiveAfterUpgrade] = useState(false);
   const [lastStandardResult, setLastStandardResult] = useState<MasterResponse | null>(null);
   const [confirmedContinueWithStandard, setConfirmedContinueWithStandard] = useState(false);
   const [ownerTestingPanel, setOwnerTestingPanel] = useState(false);
@@ -199,64 +187,111 @@ export function UploadForm() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const adaptiveIntentParam = params.get("intent") === "adaptive";
-    const upgraded = params.get("upgraded") === "1";
     const checkoutSuccess = params.get("checkout") === "success";
-    const postUpgradeReturn = upgraded || (checkoutSuccess && adaptiveIntentParam);
-    if (!adaptiveIntentParam && !upgraded) return;
+    const adaptiveReturn =
+      checkoutSuccess && (params.get("intent") === "adaptive" || params.get("upgraded") === "1");
+    if (!adaptiveReturn) return;
+
     let disposed = false;
-    setResumeAdaptiveAfterUpgrade(true);
     void (async () => {
-      const maxAttempts = postUpgradeReturn ? 5 : 1;
+      const sessionId = params.get("session_id");
+      if (sessionId?.startsWith("cs_")) {
+        try {
+          sessionStorage.setItem(MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY, sessionId);
+        } catch {
+          /* ignore */
+        }
+        try {
+          const syncRes = await fetch("/api/billing/sync", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ checkoutSessionId: sessionId })
+          });
+          const syncPayload = await readResponsePayload(syncRes);
+          const norm = typeof syncPayload?.normalizedEmail === "string" ? syncPayload.normalizedEmail : null;
+          if (norm) sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, norm);
+          debugAdaptive("post-checkout billing sync", { ok: syncRes.ok, normalizedEmail: norm });
+        } catch {
+          /* webhook may already have synced */
+        }
+      }
+      if (disposed) return;
+
+      const pending = loadPendingAdaptiveExport();
+      if (!pending) {
+        setStatus(
+          "Checkout complete. Run a free Adaptive preview, then use Export Final Adaptive Master with your billing email."
+        );
+        return;
+      }
+
+      setStatus("Verifying Adaptive export after checkout…");
+      const maxAttempts = 8;
       const retryDelayMs = 1200;
-      const initialMessage = postUpgradeReturn
-        ? "Finishing your upgrade... verifying Adaptive entitlement."
-        : upgraded
-          ? "Checking Adaptive entitlement after upgrade..."
-          : "Checking Adaptive entitlement...";
-      setStatus(initialMessage);
 
-      try {
-        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-          const access = await checkAdaptiveAccess();
-          if (disposed) return;
-          if (access.entitled) {
-            setAdaptiveEntitled(true);
-            setAdaptiveUnlocked(true);
-            setAdaptiveUpgradeUrl(null);
-            if (preMasterAnalysis) {
-              setShowAdaptivePlaceholder(true);
-              setStatus("Adaptive unlocked. Add optional direction and run it.");
-            } else {
-              setStatus("Adaptive unlocked. Analyze your track and continue with Adaptive.");
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        if (disposed) return;
+        const emailStored = readStoredBillingEmail();
+        if (emailStored) {
+          console.log("[ADAPTIVE_UI] post_checkout: export-access attempt", { attempt });
+          const res = await fetch("/api/adaptive/export-access", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              email: emailStored,
+              jobId: pending.jobId,
+              fileId: pending.fileId,
+              ...(sessionId?.startsWith("cs_") && attempt >= 2
+                ? { recheck: true, checkoutSessionId: sessionId }
+                : {})
+            })
+          });
+          const exportPayload = await readResponsePayload(res);
+          const entitled =
+            Boolean(exportPayload && typeof exportPayload === "object" && (exportPayload as { entitled?: boolean }).entitled);
+          const downloadUrl =
+            exportPayload && typeof exportPayload === "object"
+              ? (exportPayload as { downloadUrl?: string }).downloadUrl
+              : undefined;
+          if (res.ok && entitled && typeof downloadUrl === "string" && downloadUrl.length > 0) {
+            console.log("[ADAPTIVE_UI] adaptive export unlocked after billing sync success", {
+              jobId: pending.jobId
+            });
+            try {
+              sessionStorage.removeItem(MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY);
+            } catch {
+              /* ignore */
             }
+            clearPendingAdaptiveExport();
+            setAdaptiveModeActive(true);
+            setResult({
+              jobId: pending.jobId,
+              previews: pending.previews,
+              download: { requiresEmail: true, fileId: pending.fileId },
+              analysis: pending.analysis,
+              quota: pending.quota
+            });
+            setDownloadUrl(downloadUrl);
+            setStatus("Adaptive export ready — download your final master below.");
             return;
-          }
-
-          if (attempt < maxAttempts) {
-            setStatus("Finishing your upgrade...");
-            await delay(retryDelayMs);
-            if (disposed) return;
           }
         }
 
-        const upgradeUrl = buildAdaptiveUpgradeUrl();
-        setAdaptiveEntitled(false);
-        setAdaptiveUnlocked(false);
-        setAdaptiveUpgradeUrl(upgradeUrl);
-        setStatus("Adaptive requires premium unlock before processing.");
-      } catch (err: unknown) {
-        if (disposed) return;
-        const message = err instanceof Error ? err.message : "Unable to verify adaptive access.";
-        setError(message);
-        setStatus("Could not verify adaptive access.");
+        if (attempt < maxAttempts) {
+          setStatus("Finishing your upgrade… rechecking billing.");
+          await delay(retryDelayMs);
+        }
       }
+
+      setStatus(
+        "We could not verify your subscription yet (billing sync can take a moment). Open Export Final Adaptive Master, enter the same billing email, then use “Already paid? Re-check access” before trying checkout again."
+      );
     })();
 
     return () => {
       disposed = true;
     };
-  }, [preMasterAnalysis]);
+  }, []);
 
   const ownerOverrideArmed = useMemo(() => {
     if (!ownerTestingPanel) return false;
@@ -283,9 +318,7 @@ export function UploadForm() {
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
     setShowAdaptivePlaceholder(false);
-    setAdaptiveUnlocked(false);
     setAdaptiveIntent("");
-    setAdaptiveUpgradeUrl(null);
     setAdaptiveModeActive(false);
     setLastStandardResult(null);
     setConfirmedContinueWithStandard(false);
@@ -323,8 +356,6 @@ export function UploadForm() {
     setDownloadUrl(null);
     if (!keepPostAnalysisUi) {
       setShowAdaptivePlaceholder(false);
-      setAdaptiveUnlocked(false);
-      setAdaptiveUpgradeUrl(null);
       setAdaptiveIntent("");
       setConfirmedContinueWithStandard(false);
     }
@@ -375,31 +406,8 @@ export function UploadForm() {
     }
   }
 
-  async function checkAdaptiveAccess(): Promise<AdaptiveAccessResponse> {
-    debugAdaptive("adaptive access request started");
-    const response = await fetch("/api/adaptive-access", { method: "GET" });
-    const payload = await readResponsePayload(response);
-    debugAdaptive("adaptive access response received", {
-      ok: response.ok,
-      status: response.status,
-      payload
-    });
-    if (!response.ok) {
-      const apiError = typeof payload?.error === "string" ? payload.error : null;
-      throw new Error(apiError ?? "Unable to verify adaptive access.");
-    }
-    if (!payload || typeof payload !== "object" || !("entitled" in payload)) {
-      throw new Error("Adaptive access response was empty or invalid.");
-    }
-    return payload as AdaptiveAccessResponse;
-  }
-
   async function runAdaptiveMastering(): Promise<void> {
-    if (!adaptiveUnlocked) {
-      debugAdaptive("adaptive processing blocked: adaptive is not unlocked");
-      setError("Unlock Adaptive AI Mastering first.");
-      return;
-    }
+    console.log("[ADAPTIVE_UI] adaptive preview started");
     debugAdaptive("adaptive processing started", {
       hasIntent: adaptiveIntent.trim().length > 0,
       genre,
@@ -418,7 +426,7 @@ export function UploadForm() {
         throw new Error("Standard baseline is required before Adaptive AI Mastering.");
       }
 
-      setStatus("Running Adaptive AI Mastering...");
+      setStatus("Running Adaptive AI Mastering (preview is free)…");
       const response = await fetch("/api/master-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -438,11 +446,6 @@ export function UploadForm() {
       });
       if (!response.ok) {
         const apiError = typeof payload?.error === "string" ? payload.error : null;
-        if (apiError === "adaptive_upgrade_required") {
-          const upgradeUrl =
-            typeof payload?.upgradeUrl === "string" && payload.upgradeUrl.length > 0 ? payload.upgradeUrl : "/pricing";
-          setAdaptiveUpgradeUrl(upgradeUrl);
-        }
         throw new Error(apiError ?? "Adaptive mastering failed.");
       }
       if (!payload || !("jobId" in payload) || !("previews" in payload) || !("download" in payload)) {
@@ -468,7 +471,8 @@ export function UploadForm() {
       setResult(mergedResult);
       setDownloadUrl(null);
       setAdaptiveModeActive(true);
-      setStatus("Adaptive preview ready. Compare Original vs Adaptive, then unlock export.");
+      console.log("[ADAPTIVE_UI] adaptive preview completed", { jobId: adaptive.jobId });
+      setStatus("Adaptive preview ready — compare below, then export the final Adaptive master.");
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Unexpected adaptive error.";
       setError(raw);
@@ -533,17 +537,10 @@ export function UploadForm() {
       }
       setPreMasterAnalysis(parsed.analysis);
       setPreMasterDebug(parsed.debug ?? null);
-      setAdaptiveUnlocked(adaptiveEntitled);
-      setAdaptiveUpgradeUrl(adaptiveEntitled ? null : buildAdaptiveUpgradeUrl());
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
       setLastStandardResult(null);
-      if (resumeAdaptiveAfterUpgrade && adaptiveEntitled) {
-        setShowAdaptivePlaceholder(true);
-        setStatus("Adaptive unlocked. Add optional direction and run it.");
-      } else {
-        setStatus("Track analysis complete. Choose your mastering path.");
-      }
+      setStatus("Track analysis complete. Choose your mastering path.");
     } catch (err) {
       if (requestId !== latestAnalysisRequestIdRef.current) {
         if (process.env.NODE_ENV !== "production") {
@@ -784,105 +781,50 @@ export function UploadForm() {
               disabled={adaptiveProcessing || loading}
               style={secondaryActionStyle}
               onClick={() => {
-                if (adaptiveEntitled) {
-                  setShowAdaptivePlaceholder(true);
-                  setAdaptiveUnlocked(true);
-                  setAdaptiveUpgradeUrl(null);
-                  setStatus("Adaptive unlocked. Add optional direction and run it.");
-                  return;
-                }
-                debugAdaptive("button click fired", {
-                  adaptiveProcessing,
-                  loading,
-                  hasPreMasterAnalysis: Boolean(preMasterAnalysis)
-                });
+                debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
                 setShowAdaptivePlaceholder(true);
-                debugAdaptive("adaptive UI state enabled", { showAdaptivePlaceholder: true });
                 setError(null);
-                setStatus("Checking Adaptive AI Mastering access...");
-                void checkAdaptiveAccess()
-                  .then((access) => {
-                    if (!access) {
-                      throw new Error("Adaptive access response was null.");
-                    }
-                    if (access.entitled) {
-                      debugAdaptive("bypass/local access detected", {
-                        entitled: access.entitled,
-                        planId: access.planId,
-                        upgradeUrl: access.upgradeUrl
-                      });
-                      setAdaptiveEntitled(true);
-                      setAdaptiveUnlocked(true);
-                      setAdaptiveUpgradeUrl(null);
-                      debugAdaptive("adaptive UI state enabled", { adaptiveUnlocked: true });
-                      setStatus("Adaptive unlocked. Add optional direction and run it.");
-                      return;
-                    }
-                    debugAdaptive("adaptive access denied", {
-                      entitled: access.entitled,
-                      planId: access.planId,
-                      upgradeUrl: access.upgradeUrl
-                    });
-                    setAdaptiveUnlocked(false);
-                    setAdaptiveEntitled(false);
-                    const upgradeUrl = buildAdaptiveUpgradeUrl();
-                    setAdaptiveUpgradeUrl(upgradeUrl);
-                    setStatus("Adaptive requires premium unlock before processing. Redirecting to upgrade...");
-                    window.location.assign(upgradeUrl);
-                  })
-                  .catch((err: unknown) => {
-                    const message = err instanceof Error ? err.message : "Unable to verify adaptive access.";
-                    setError(message);
-                    setStatus("Could not verify adaptive access.");
-                  });
+                setStatus("Preview Adaptive for free — add optional direction, then run.");
               }}
             >
-              Unlock Adaptive AI Mastering
+              Try Adaptive Preview
             </button>
           </div>
           {showAdaptivePlaceholder ? (
             <div style={adaptivePlaceholderStyle}>
-              {adaptiveUnlocked ? (
-                <>
-                  <label htmlFor="adaptive-intent" style={adaptiveIntentLabelStyle}>
-                    Describe how you want your song to sound
-                  </label>
-                  <textarea
-                    id="adaptive-intent"
-                    value={adaptiveIntent}
-                    onChange={(event) => setAdaptiveIntent(event.target.value)}
-                    placeholder="More punch for clubs, warmer vocals, cleaner low end, loud and modern for streaming..."
-                    rows={4}
-                    style={adaptiveIntentTextareaStyle}
-                  />
-                  <p style={adaptiveIntentHintStyle}>
-                    Optional. This is only used for Adaptive AI Mastering as <code style={ownerTestingCodeStyle}>user_intent</code>.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={adaptiveProcessing || loading}
-                    style={buttonStyle}
-                    onClick={() => {
-                      void runAdaptiveMastering();
-                    }}
-                  >
-                    {adaptiveProcessing ? "Adaptive Mastering..." : "Run Adaptive AI Mastering"}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p style={{ margin: 0 }}>
-                    Adaptive AI Mastering is premium and must be unlocked before processing.
-                  </p>
-                  {adaptiveUpgradeUrl ? (
-                    <a href={adaptiveUpgradeUrl} style={adaptiveUpgradeLinkStyle}>
-                      Upgrade to unlock Adaptive
-                    </a>
-                  ) : (
-                    <p style={analysisContinueHintStyle}>Checking entitlement or waiting for unlock.</p>
-                  )}
-                </>
-              )}
+              <p style={{ margin: 0, color: "#c4d1f5" }}>
+                Preview Adaptive for free. Exporting the final Adaptive master requires active Adaptive access (billing email).
+              </p>
+              <label htmlFor="adaptive-intent" style={adaptiveIntentLabelStyle}>
+                Describe how you want your song to sound
+              </label>
+              <textarea
+                id="adaptive-intent"
+                value={adaptiveIntent}
+                onChange={(event) => setAdaptiveIntent(event.target.value)}
+                placeholder="More punch for clubs, warmer vocals, cleaner low end, loud and modern for streaming..."
+                rows={4}
+                style={adaptiveIntentTextareaStyle}
+              />
+              <p style={adaptiveIntentHintStyle}>
+                Optional. Sent to the AI as <code style={ownerTestingCodeStyle}>user_intent</code>.
+              </p>
+              <button
+                type="button"
+                disabled={adaptiveProcessing || loading}
+                style={buttonStyle}
+                onClick={() => {
+                  void runAdaptiveMastering();
+                }}
+              >
+                {adaptiveProcessing ? "Running preview…" : "Run free Adaptive preview"}
+              </button>
+              <p style={analysisContinueHintStyle}>
+                Need Adaptive access only?{" "}
+                <a href={buildAdaptivePricingLink()} style={{ color: "#9eb7ff", textDecoration: "underline" }}>
+                  View Adaptive pricing
+                </a>
+              </p>
             </div>
           ) : null}
           {confirmedContinueWithStandard ? (
@@ -949,7 +891,26 @@ export function UploadForm() {
             masteredSubLabel={adaptiveModeActive ? "AI mastering output" : "Enhanced by MasterSauce"}
           />
           {!downloadUrl ? (
-            <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={setDownloadUrl} />
+            adaptiveModeActive ? (
+              <AdaptiveExportGate
+                jobId={result.jobId}
+                fileId={result.download.fileId}
+                pendingCheckoutSnapshot={{
+                  v: 1,
+                  jobId: result.jobId,
+                  fileId: result.download.fileId,
+                  previews: result.previews,
+                  analysis: result.analysis,
+                  quota: result.quota
+                }}
+                onUnlocked={(url) => {
+                  console.log("[ADAPTIVE_UI] export unlocked from gate");
+                  setDownloadUrl(url);
+                }}
+              />
+            ) : (
+              <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={setDownloadUrl} />
+            )
           ) : (
             <button
               type="button"
@@ -969,7 +930,7 @@ export function UploadForm() {
                 });
               }}
             >
-              Export Final Master
+              {adaptiveModeActive ? "Download Final Adaptive Master" : "Export Final Master"}
             </button>
           )}
         </div>
@@ -1380,17 +1341,6 @@ const adaptiveIntentHintStyle: React.CSSProperties = {
   margin: 0,
   color: "#9eb0dd",
   fontSize: "0.8rem"
-};
-const adaptiveUpgradeLinkStyle: React.CSSProperties = {
-  display: "inline-flex",
-  width: "fit-content",
-  textDecoration: "none",
-  borderRadius: "10px",
-  border: "1px solid rgba(128, 145, 206, 0.58)",
-  background: "rgba(13, 19, 36, 0.9)",
-  color: "#d5ddfb",
-  fontWeight: 700,
-  padding: "10px 14px"
 };
 const analysisContinueHintStyle: React.CSSProperties = {
   margin: 0,
