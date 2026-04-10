@@ -223,7 +223,8 @@ export function PricingSection() {
         <div style={adaptiveIntentBannerStyle}>
           <p style={adaptiveIntentTitleStyle}>Unlock Adaptive AI Mastering</p>
           <p style={adaptiveIntentBodyStyle}>
-            Standard Mastering stays your base flow. Adaptive adds premium track analysis + your own sound direction prompt.
+            Use Recommended Master for the fast, automatic AI path. Customize My Master adds premium track analysis plus your
+            own sound direction prompt.
           </p>
         </div>
       ) : null}
@@ -280,9 +281,12 @@ export function PricingSection() {
       <div style={adaptiveCopyCardStyle}>
         <p style={adaptiveCopyTitleStyle}>Adaptive AI Mastering</p>
         <p style={adaptiveCopyBodyStyle}>
-          Tailor your master with your own sound direction. Adaptive shapes the master from track analysis plus your prompt.
+          Describe how you want to sound — adaptive AI shapes the master from deep track analysis plus your direction.
         </p>
-        <p style={adaptiveCopySubtleStyle}>Standard Mastering remains included as the fast preset-based baseline.</p>
+        <p style={adaptiveCopySubtleStyle}>
+          Use Recommended Master stays included as the fast, automatic baseline with AI-chosen settings for your genre and
+          loudness.
+        </p>
       </div>
       {modalOpen ? (
         <div style={backdropStyle} onClick={closeModal}>

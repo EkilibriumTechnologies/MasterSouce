@@ -220,12 +220,12 @@ export function UploadForm() {
       const pending = loadPendingAdaptiveExport();
       if (!pending) {
         setStatus(
-          "Checkout complete. Run a free Adaptive preview, then use Export Final Adaptive Master with your billing email."
+          "Checkout complete. Run a free customized preview, then use Export Final Adaptive Master with your billing email."
         );
         return;
       }
 
-      setStatus("Verifying Adaptive export after checkout…");
+      setStatus("Verifying customized master export after checkout…");
       const maxAttempts = 8;
       const retryDelayMs = 1200;
 
@@ -272,7 +272,7 @@ export function UploadForm() {
               quota: pending.quota
             });
             setDownloadUrl(downloadUrl);
-            setStatus("Adaptive export ready — download your final master below.");
+            setStatus("Customized master export ready — download your final master below.");
             return;
           }
         }
@@ -369,7 +369,7 @@ export function UploadForm() {
 
       const response = await fetch("/api/master", { method: "POST", body: formData });
 
-      setStatus("Mastering and generating previews...");
+      setStatus("Applying recommended master and generating previews…");
       const payload = await readResponsePayload(response);
 
       if (!response.ok) {
@@ -383,7 +383,7 @@ export function UploadForm() {
       setResult(masterPayload);
       setLastStandardResult(masterPayload);
       setAdaptiveModeActive(false);
-      setStatus("Preview ready. Enter email to unlock final master.");
+      setStatus("Recommended master preview ready. Enter email to unlock final master.");
       return masterPayload;
     } catch (err) {
       const isLocalhost =
@@ -415,7 +415,7 @@ export function UploadForm() {
     });
     setAdaptiveProcessing(true);
     setError(null);
-    setStatus("Preparing standard baseline for adaptive comparison...");
+    setStatus("Preparing your recommended baseline for customization…");
 
     try {
       let standard = lastStandardResult;
@@ -423,10 +423,10 @@ export function UploadForm() {
         standard = await runStandardMastering(true);
       }
       if (!standard) {
-        throw new Error("Standard baseline is required before Adaptive AI Mastering.");
+        throw new Error("We need your recommended master first before customizing.");
       }
 
-      setStatus("Running Adaptive AI Mastering (preview is free)…");
+      setStatus("Shaping your customized master with AI (free preview)…");
       const response = await fetch("/api/master-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -472,11 +472,11 @@ export function UploadForm() {
       setDownloadUrl(null);
       setAdaptiveModeActive(true);
       console.log("[ADAPTIVE_UI] adaptive preview completed", { jobId: adaptive.jobId });
-      setStatus("Adaptive preview ready — compare below, then export the final Adaptive master.");
+      setStatus("Customized preview ready — compare below, then export the final Adaptive master.");
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Unexpected adaptive error.";
       setError(raw);
-      setStatus("Adaptive mastering failed. Please try again.");
+      setStatus("Customized mastering couldn’t finish. Please try again.");
     } finally {
       setAdaptiveProcessing(false);
     }
@@ -540,7 +540,7 @@ export function UploadForm() {
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
       setLastStandardResult(null);
-      setStatus("Track analysis complete. Choose your mastering path.");
+      setStatus("Track analysis complete. Use the fast recommended master or customize your sound.");
     } catch (err) {
       if (requestId !== latestAnalysisRequestIdRef.current) {
         if (process.env.NODE_ENV !== "production") {
@@ -769,31 +769,39 @@ export function UploadForm() {
               type="button"
               disabled={loading}
               style={buttonStyle}
+              aria-busy={loading}
+              aria-label={
+                loading
+                  ? "Applying recommended master"
+                  : "Use recommended master — fast, automatic AI mastering"
+              }
               onClick={() => {
                 setConfirmedContinueWithStandard(true);
                 void runStandardMastering();
               }}
             >
-              {loading ? "Mastering..." : "Continue with Standard Mastering"}
+              {loading ? "Applying recommended master…" : "Use Recommended Master"}
             </button>
             <button
               type="button"
               disabled={adaptiveProcessing || loading}
               style={secondaryActionStyle}
+              aria-label="Customize my master — describe your sound for AI-guided shaping"
               onClick={() => {
                 debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
                 setShowAdaptivePlaceholder(true);
                 setError(null);
-                setStatus("Preview Adaptive for free — add optional direction, then run.");
+                setStatus("Customize your master — add optional direction, then run your free preview.");
               }}
             >
-              Try Adaptive Preview
+              Customize My Master
             </button>
           </div>
           {showAdaptivePlaceholder ? (
             <div style={adaptivePlaceholderStyle}>
               <p style={{ margin: 0, color: "#c4d1f5" }}>
-                Preview Adaptive for free. Exporting the final Adaptive master requires active Adaptive access (billing email).
+                Preview your customized sound for free. Exporting the final customized master requires active Adaptive access
+                tied to your billing email.
               </p>
               <label htmlFor="adaptive-intent" style={adaptiveIntentLabelStyle}>
                 Describe how you want your song to sound
@@ -813,14 +821,20 @@ export function UploadForm() {
                 type="button"
                 disabled={adaptiveProcessing || loading}
                 style={buttonStyle}
+                aria-busy={adaptiveProcessing}
+                aria-label={
+                  adaptiveProcessing
+                    ? "Shaping your customized master"
+                    : "Run free preview of your customized master"
+                }
                 onClick={() => {
                   void runAdaptiveMastering();
                 }}
               >
-                {adaptiveProcessing ? "Running preview…" : "Run free Adaptive preview"}
+                {adaptiveProcessing ? "Shaping your custom master…" : "Run free customization preview"}
               </button>
               <p style={analysisContinueHintStyle}>
-                Need Adaptive access only?{" "}
+                Need access to export customized masters only?{" "}
                 <a href={buildAdaptivePricingLink()} style={{ color: "#9eb7ff", textDecoration: "underline" }}>
                   View Adaptive pricing
                 </a>
@@ -828,7 +842,9 @@ export function UploadForm() {
             </div>
           ) : null}
           {confirmedContinueWithStandard ? (
-            <p style={analysisContinueHintStyle}>Continuing with the existing Standard Mastering flow.</p>
+            <p style={analysisContinueHintStyle}>
+              Applying your recommended master — fast, automatic AI settings from your genre and loudness choices.
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -887,8 +903,10 @@ export function UploadForm() {
             masteredPreviewUrl={result.previews.mastered}
             originalLabel="Original"
             originalSubLabel="Your uploaded track"
-            masteredLabel={adaptiveModeActive ? "Adaptive AI Master" : "Mastered"}
-            masteredSubLabel={adaptiveModeActive ? "AI mastering output" : "Enhanced by MasterSauce"}
+            masteredLabel={adaptiveModeActive ? "Customized master" : "Mastered"}
+            masteredSubLabel={
+              adaptiveModeActive ? "AI-guided from your sound direction" : "Enhanced by MasterSauce"
+            }
           />
           {!downloadUrl ? (
             adaptiveModeActive ? (
