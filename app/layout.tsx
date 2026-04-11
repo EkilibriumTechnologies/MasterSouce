@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { GoogleAnalytics } from "@next/third-parties/google";
+import Script from "next/script";
 import { ReactNode, Suspense } from "react";
 
 import { GaAppRouterPageViews } from "@/components/analytics/ga-app-router-page-views";
@@ -85,6 +86,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body style={bodyStyle}>
+        <Script
+          src="https://tools.luckyorange.com/core/lo.js?site-id=dfb08ca6"
+          strategy="afterInteractive"
+        />
         {children}
         {gaMeasurementId ? (
           <>
