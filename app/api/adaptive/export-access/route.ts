@@ -129,45 +129,73 @@ export async function POST(request: NextRequest) {
 
   const recheckRequested = parsed.data.recheck === true;
   const submittedBillingKey = normalizeBillingEmail(emailNorm) ?? emailNorm;
-  let syncAttempted = false;
+  let checkoutSessionSyncAttempted = false;
 
   if (recheckRequested) {
     const sessionId = parsed.data.checkoutSessionId?.trim();
-    console.log("[adaptive-export] re-check requested", {
-      jobId: parsed.data.jobId,
-      hasCheckoutSessionId: Boolean(sessionId?.startsWith("cs_"))
-    });
+    console.log(
+      JSON.stringify({
+        scope: "adaptive_export",
+        event: "recheck_requested",
+        jobId: parsed.data.jobId,
+        hasCheckoutSessionId: Boolean(sessionId?.startsWith("cs_"))
+      })
+    );
 
     if (sessionId?.startsWith("cs_")) {
+      checkoutSessionSyncAttempted = true;
       try {
         const syncResult = await reconcileCheckoutSessionForAdaptiveRecheck(sessionId, submittedBillingKey);
-        syncAttempted = true;
-        if (syncResult.reconciled) {
-          console.log("[adaptive-export] billing sync attempted during re-check", { reconciled: true });
-        } else if (syncResult.syncSkippedReason === "email_mismatch") {
-          console.log(
-            "[adaptive-export] re-check: skipped Stripe sync (checkout session email does not match billing email)"
-          );
-        } else {
-          console.log("[adaptive-export] billing sync during re-check skipped", {
-            reason: syncResult.syncSkippedReason ?? "unknown"
-          });
-        }
+        console.log(
+          JSON.stringify({
+            scope: "adaptive_export",
+            event: "checkout_session_reconcile",
+            jobId: parsed.data.jobId,
+            reconciled: syncResult.reconciled,
+            syncSkippedReason: syncResult.syncSkippedReason ?? null
+          })
+        );
       } catch (error) {
         const detail = error instanceof Error ? error.message : "unknown";
-        console.error("[adaptive-export] re-check: billing sync failed", { detail });
+        console.error(
+          JSON.stringify({
+            scope: "adaptive_export",
+            event: "checkout_session_reconcile_error",
+            jobId: parsed.data.jobId,
+            detail
+          })
+        );
       }
+    } else {
+      console.log(
+        JSON.stringify({
+          scope: "adaptive_export",
+          event: "checkout_session_reconcile_skipped",
+          jobId: parsed.data.jobId,
+          reason: "no_checkout_session_id",
+          note: "Re-check without cs_ in body; session id must be stored client-side after Stripe success"
+        })
+      );
     }
   }
 
-  const resolved = await resolveAdaptiveEntitlementForEmail(emailNorm);
+  const resolved = await resolveAdaptiveEntitlementForEmail(emailNorm, { stripeEmailFallback: true });
   const entitled = isDevBypass || resolved.entitled;
 
-  console.log("[adaptive-export] adaptive export entitlement check", {
-    jobId: parsed.data.jobId,
-    entitled,
-    reason: resolved.reason
-  });
+  const syncAttempted = checkoutSessionSyncAttempted || resolved.stripeEmailSyncAttempted;
+  console.log(
+    JSON.stringify({
+      scope: "adaptive_export",
+      event: "entitlement_resolved",
+      jobId: parsed.data.jobId,
+      entitled,
+      reason: resolved.reason,
+      checkoutSessionSyncAttempted,
+      stripeEmailSyncAttempted: resolved.stripeEmailSyncAttempted,
+      stripeEmailSyncRecovered: resolved.stripeEmailSyncRecovered,
+      syncAttempted
+    })
+  );
 
   if (isDevBypass) {
     console.log("[adaptive-export] dev bypass: treating as entitled");
@@ -187,7 +215,8 @@ export async function POST(request: NextRequest) {
       checkoutUrl: null as string | null,
       status: "checkout_required",
       reason: resolved.reason,
-      ...(recheckRequested ? { syncAttempted } : {})
+      syncAttempted,
+      stripeEmailSyncRecovered: resolved.stripeEmailSyncRecovered
     });
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;

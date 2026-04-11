@@ -14,17 +14,25 @@ export async function GET(request: NextRequest) {
     const sessionEmail = user.email?.trim().toLowerCase() ?? "";
     const rawBillingEmail = headerRaw || queryRaw || sessionEmail;
 
-    const resolved = await resolveAdaptiveEntitlementForEmail(rawBillingEmail || undefined);
+    const resolved = await resolveAdaptiveEntitlementForEmail(rawBillingEmail || undefined, {
+      stripeEmailFallback: true
+    });
 
     const isDevBypass = process.env.NODE_ENV !== "production" && isAdaptiveDevBypassEnabled();
     const entitled = isDevBypass || resolved.entitled;
 
-    console.log("[adaptive-access] entitlement check", {
-      isDevBypass,
-      hasBillingEmailHint: Boolean(rawBillingEmail),
-      resolvedReason: resolved.reason,
-      entitled
-    });
+    console.log(
+      JSON.stringify({
+        scope: "adaptive_access",
+        event: "entitlement_check",
+        isDevBypass,
+        hasBillingEmailHint: Boolean(rawBillingEmail),
+        resolvedReason: resolved.reason,
+        entitled,
+        stripeEmailSyncAttempted: resolved.stripeEmailSyncAttempted,
+        stripeEmailSyncRecovered: resolved.stripeEmailSyncRecovered
+      })
+    );
 
     const response = NextResponse.json({
       entitled,

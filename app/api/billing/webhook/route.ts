@@ -31,10 +31,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
-  console.log("[billing-webhook] received", { id: event.id, type: event.type, livemode: event.livemode });
+  console.log(
+    JSON.stringify({
+      scope: "billing_webhook",
+      event: "received",
+      stripeEventId: event.id,
+      stripeEventType: event.type,
+      livemode: event.livemode
+    })
+  );
 
   if (await hasProcessedStripeEvent(event.id)) {
-    console.log("[billing-webhook] deduped", { id: event.id, type: event.type });
+    console.log(
+      JSON.stringify({
+        scope: "billing_webhook",
+        event: "deduped",
+        stripeEventId: event.id,
+        stripeEventType: event.type
+      })
+    );
     return NextResponse.json({ ok: true, replay: true });
   }
 
@@ -45,11 +60,43 @@ export async function POST(request: NextRequest) {
       const session = event.data.object as Stripe.Checkout.Session;
       if (session.mode === "subscription") {
         const subId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+        const sessionEmail =
+          session.customer_details?.email?.trim().toLowerCase() ??
+          (session.customer_email ? session.customer_email.trim().toLowerCase() : null);
+        console.log(
+          JSON.stringify({
+            scope: "billing_webhook",
+            event: "checkout_session_completed_subscription",
+            stripeEventId: event.id,
+            sessionId: session.id,
+            subscriptionId: subId ?? null,
+            customerId:
+              typeof session.customer === "string" ? session.customer : session.customer && "id" in session.customer
+                ? session.customer.id
+                : null,
+            sessionEmailPresent: Boolean(sessionEmail)
+          })
+        );
         if (subId) {
           await retrieveAndReconcileSubscription(stripe, subId);
-          console.log("[billing-webhook] checkout subscription reconciled", { sessionId: session.id, subId });
+          console.log(
+            JSON.stringify({
+              scope: "billing_webhook",
+              event: "checkout_subscription_reconciled",
+              stripeEventId: event.id,
+              sessionId: session.id,
+              subscriptionId: subId
+            })
+          );
         } else {
-          console.warn("[billing-webhook] subscription checkout missing subscription id", { sessionId: session.id });
+          console.warn(
+            JSON.stringify({
+              scope: "billing_webhook",
+              event: "checkout_subscription_missing_sub_id",
+              stripeEventId: event.id,
+              sessionId: session.id
+            })
+          );
         }
       } else if (session.mode === "payment") {
         const email =
@@ -78,11 +125,27 @@ export async function POST(request: NextRequest) {
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      await reconcileStripeSubscription(stripe, event.data.object as Stripe.Subscription);
-      console.log("[billing-webhook] subscription event reconciled", {
-        type: event.type,
-        subscriptionId: (event.data.object as Stripe.Subscription).id
-      });
+      const subObj = event.data.object as Stripe.Subscription;
+      console.log(
+        JSON.stringify({
+          scope: "billing_webhook",
+          event: "subscription_lifecycle",
+          stripeEventId: event.id,
+          stripeEventType: event.type,
+          subscriptionId: subObj.id,
+          subscriptionStatus: subObj.status
+        })
+      );
+      await reconcileStripeSubscription(stripe, subObj);
+      console.log(
+        JSON.stringify({
+          scope: "billing_webhook",
+          event: "subscription_lifecycle_reconciled",
+          stripeEventId: event.id,
+          stripeEventType: event.type,
+          subscriptionId: subObj.id
+        })
+      );
     }
 
     if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
@@ -90,9 +153,26 @@ export async function POST(request: NextRequest) {
         subscription?: string | Stripe.Subscription | null;
       };
       const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+      console.log(
+        JSON.stringify({
+          scope: "billing_webhook",
+          event: "invoice_subscription_touch",
+          stripeEventId: event.id,
+          stripeEventType: event.type,
+          subscriptionId: subId ?? null
+        })
+      );
       if (subId) {
         await retrieveAndReconcileSubscription(stripe, subId);
-        console.log("[billing-webhook] invoice subscription reconciled", { type: event.type, subId });
+        console.log(
+          JSON.stringify({
+            scope: "billing_webhook",
+            event: "invoice_subscription_reconciled",
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            subscriptionId: subId
+          })
+        );
       }
     }
 

@@ -38,13 +38,28 @@ export async function reconcileStripeSubscription(stripe: Stripe, subscription: 
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
   const customer = await stripe.customers.retrieve(customerId);
   if (!customer || ("deleted" in customer && customer.deleted)) {
-    console.warn("[billing] subscription customer missing", { subscriptionId: subscription.id, customerId });
+    console.warn(
+      JSON.stringify({
+        scope: "stripe_reconcile",
+        event: "abort_customer_missing",
+        subscriptionId: subscription.id,
+        customerId
+      })
+    );
     return;
   }
   const rawEmail = typeof customer.email === "string" ? customer.email : "";
   const normalized = normalizeBillingEmail(rawEmail);
   if (!normalized) {
-    console.warn("[billing] subscription customer has no billable email", { subscriptionId: subscription.id, customerId });
+    console.warn(
+      JSON.stringify({
+        scope: "stripe_reconcile",
+        event: "abort_no_billable_email",
+        subscriptionId: subscription.id,
+        customerId,
+        customerEmailPresent: Boolean(rawEmail)
+      })
+    );
     return;
   }
 
@@ -108,11 +123,15 @@ export async function reconcileStripeSubscription(stripe: Stripe, subscription: 
     metadata: { status: subscription.status, planId }
   });
 
-  console.log("[billing] subscription reconciled", {
-    subscriptionId: subscription.id,
-    email: normalized,
-    status: subscription.status,
-    entitled,
-    planId
-  });
+  console.log(
+    JSON.stringify({
+      scope: "stripe_reconcile",
+      event: "subscription_reconciled",
+      subscriptionId: subscription.id,
+      normalizedEmail: normalized,
+      status: subscription.status,
+      entitled,
+      planId
+    })
+  );
 }
