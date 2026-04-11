@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { ReactNode } from "react";
+import { GoogleAnalytics } from "@next/third-parties/google";
+import { ReactNode, Suspense } from "react";
 
-import { GoogleAnalytics } from "@/components/analytics/google-analytics";
+import { GaAppRouterPageViews } from "@/components/analytics/ga-app-router-page-views";
 import { SOCIAL_PREVIEW_ALT, SOCIAL_PREVIEW_SIZE } from "@/lib/og/social-preview";
 import { absoluteUrl, getSiteUrlString, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 
 const metadataBaseUrl = getSiteUrlString();
 
 const googleVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
 
 export const metadata: Metadata = {
   metadataBase: new URL(metadataBaseUrl),
@@ -83,8 +85,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body style={bodyStyle}>
-        <GoogleAnalytics />
         {children}
+        {gaMeasurementId ? (
+          <>
+            <GoogleAnalytics gaId={gaMeasurementId} />
+            <Suspense fallback={null}>
+              <GaAppRouterPageViews />
+            </Suspense>
+          </>
+        ) : null}
       </body>
     </html>
   );

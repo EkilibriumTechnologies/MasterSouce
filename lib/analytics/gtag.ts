@@ -1,8 +1,8 @@
 /**
- * GA4 measurement ID (e.g. G-XXXXXXXXXX). Set NEXT_PUBLIC_GA_ID when ready.
+ * GA4 measurement ID (e.g. G-XXXXXXXXXX). Set NEXT_PUBLIC_GA_MEASUREMENT_ID in production.
  * Events are no-ops until the ID exists and gtag is loaded.
  */
-export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID?.trim() ?? "";
+export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() ?? "";
 
 /** Names reserved for future implementation — use with `trackGaEvent` when wiring UI. */
 export const GaEvents = {
