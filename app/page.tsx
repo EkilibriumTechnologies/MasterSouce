@@ -106,7 +106,11 @@ export default function HomePage({ searchParams }: HomePageProps) {
         </p>
         <p style={proseCenterStyle}>
           It is built for modern workflows: fast feedback, clear limits, and no pressure to become a mastering engineer
-          just to finish a song.
+          just to finish a song. For streaming readiness and release prep, see our{" "}
+          <Link href="/learn" style={learnHintLinkStyle}>
+            short guides
+          </Link>
+          .
         </p>
       </section>
 
@@ -194,6 +198,9 @@ export default function HomePage({ searchParams }: HomePageProps) {
           </div>
         </div>
         <div style={footerLinksStyle}>
+          <Link href="/learn" style={linkStyle}>
+            Learn
+          </Link>
           <Link href="/about" style={linkStyle}>About</Link>
           <Link href="/terms" style={linkStyle}>Terms</Link>
           <Link href="/privacy" style={linkStyle}>Privacy</Link>
@@ -457,6 +464,13 @@ const copyrightStyle: React.CSSProperties = {
 const linkStyle: React.CSSProperties = {
   color: "#b2c0f0",
   textDecoration: "none"
+};
+
+const learnHintLinkStyle: React.CSSProperties = {
+  color: "#a8b8f0",
+  textDecoration: "underline",
+  textDecorationColor: "rgba(143, 160, 230, 0.4)",
+  textUnderlineOffset: "3px"
 };
 
 const successBannerStyle: React.CSSProperties = {
