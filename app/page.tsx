@@ -162,7 +162,9 @@ export default function HomePage({ searchParams }: HomePageProps) {
         <div style={infoCardStyle}>
           <h2 style={infoTitleStyle}>Fair by design</h2>
           <p style={mutedStyle}>Master and preview as much as you want.</p>
-          <p style={mutedSecondaryStyle}>Only final mastered exports count toward your monthly masters.</p>
+          <p style={mutedSecondaryStyle}>
+            Only final mastered exports count toward your allowance—2 per month on Free, more on paid plans.
+          </p>
         </div>
       </section>
 

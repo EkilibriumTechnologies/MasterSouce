@@ -12,6 +12,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { FREE_MASTERS_PER_MONTH, consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
+import type { PlanId } from "@/lib/subscriptions/types";
 import { tryConsumeLocalBillableDownload } from "@/lib/usage/local-download-usage";
 import { hasRecentBillableDownloadForJobFile } from "@/lib/usage/supabase-download-usage";
 
@@ -20,6 +21,17 @@ function getFilenameParam(request: NextRequest): string {
   const raw = request.nextUrl.searchParams.get("as");
   if (!raw) return fallback;
   return raw.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function noMastersRemainingPayload(planId: PlanId) {
+  const isFree = planId === "free";
+  return {
+    error: "no_masters_remaining" as const,
+    upgrade_url: "/pricing",
+    message: isFree
+      ? `You've used your ${FREE_MASTERS_PER_MONTH} free mastered exports for this month. Subscribe for a higher monthly allowance, or add a 5-master credit pack for $4.`
+      : "No masters remaining. Upgrade or get 5 more for $4."
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -89,13 +101,7 @@ export async function GET(request: NextRequest) {
                 normalizedEmail: masteredUnlock.normalizedEmail
               });
               if (!entitlements.canDownload) {
-                const res = NextResponse.json(
-                  {
-                    error: "no_masters_remaining",
-                    upgrade_url: "/pricing"
-                  },
-                  { status: 403 }
-                );
+                const res = NextResponse.json(noMastersRemainingPayload(entitlements.planId), { status: 403 });
                 attachSessionCookieIfNeeded(res, sessionPrep);
                 return res;
               }
@@ -115,13 +121,7 @@ export async function GET(request: NextRequest) {
           adminBypass
         );
         if (!allowed) {
-          const res = NextResponse.json(
-            {
-              error: "no_masters_remaining",
-              upgrade_url: "/pricing"
-            },
-            { status: 403 }
-          );
+          const res = NextResponse.json(noMastersRemainingPayload("free"), { status: 403 });
           attachSessionCookieIfNeeded(res, sessionPrep);
           return res;
         }

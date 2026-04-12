@@ -10,9 +10,9 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     stems: false,
     priority: false,
     apiAccess: false,
-    description: "Start free. No credit card required.",
+    description: "Start free. No credit card. Two final exports per month included.",
     features: [
-      "2 masters / month",
+      "Try 2 Masters Free",
       "All 7 genre presets",
       "A/B preview",
       "WAV 16-bit",
@@ -35,7 +35,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     features: [
       "15 masters / month",
       "All 7 genre presets",
-      "Adaptive AI Mastering unlock",
+      "Prompt-Based Adaptive Mastering",
       "A/B preview",
       "WAV 24-bit"
     ],
@@ -57,7 +57,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     features: [
       "60 masters / month",
       "All 7 genre presets",
-      "Adaptive AI Mastering unlock",
+      "Prompt-Based Adaptive Mastering",
       "A/B preview",
       "WAV 32-bit float",
       "Priority processing"

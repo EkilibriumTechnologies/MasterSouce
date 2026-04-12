@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { PlanId } from "@/lib/subscriptions/types";
 
 type DownloadLimitModalProps = {
   open: boolean;
+  /** When known, copy distinguishes Free (2/month) from paid plan exhaustion. */
+  planId?: PlanId | null;
   onClose: () => void;
   onViewPlans: () => void;
 };
 
-export function DownloadLimitModal({ open, onClose, onViewPlans }: DownloadLimitModalProps) {
+export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: DownloadLimitModalProps) {
   const viewPlansRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -40,10 +43,12 @@ export function DownloadLimitModal({ open, onClose, onViewPlans }: DownloadLimit
           ×
         </button>
         <p id="download-limit-title" style={titleStyle}>
-          Master limit reached
+          {planId === "free" ? "Free plan limit reached" : "Master limit reached"}
         </p>
         <p id="download-limit-description" style={bodyStyle}>
-          You&apos;ve used your available masters for this period. Upgrade or add a credit pack to keep exporting finals.
+          {planId === "free"
+            ? "You've used all free mastered exports for this month. Subscribe for a higher monthly allowance, or add a 5-master credit pack to keep exporting finals."
+            : "You've used your available masters for this period. Upgrade or add a credit pack to keep exporting finals."}
         </p>
         <div style={actionsStyle}>
           <button ref={viewPlansRef} type="button" style={primaryStyle} onClick={onViewPlans}>

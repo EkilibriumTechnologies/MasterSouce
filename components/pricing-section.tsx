@@ -223,8 +223,8 @@ export function PricingSection() {
         <div style={adaptiveIntentBannerStyle}>
           <p style={adaptiveIntentTitleStyle}>Unlock Adaptive AI Mastering</p>
           <p style={adaptiveIntentBodyStyle}>
-            Use Recommended Master for the fast, automatic AI path. Customize My Master adds premium track analysis plus your
-            own sound direction prompt.
+            Use Recommended Master for the fast, automatic AI path. Refine My Sound adds premium track analysis plus your own
+            sound direction prompt.
           </p>
         </div>
       ) : null}

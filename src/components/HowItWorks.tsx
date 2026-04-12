@@ -78,10 +78,11 @@ export function HowItWorks() {
               Simple pricing for creators
             </h4>
             <p className="text-muted-foreground mb-4">
-              Start with up to 4 free downloads each month.
+              Try 2 mastered exports free each month—previews are unlimited. No credit card to start.
             </p>
             <p className="text-muted-foreground">
-              When you&apos;re ready for more, paid creator plans will unlock additional usage and future premium features.
+              When you need more finals, Creator and Pro Studio plans add monthly exports, adaptive mastering, and higher
+              quality WAV options—plus optional credit packs.
             </p>
           </div>
         </div>

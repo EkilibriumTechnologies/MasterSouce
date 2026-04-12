@@ -25,6 +25,6 @@ export const HOME_FAQ_ITEMS: HomeFaqItem[] = [
   {
     question: "What counts toward my plan?",
     answer:
-      "You can preview as much as you like. Only final mastered exports count toward your monthly masters; upgrading or credit packs is available if you need more downloads."
+      "You can preview as much as you like. Only final mastered exports count toward your allowance. The Free plan includes 2 finals per calendar month (Try 2 Masters Free). Paid plans include higher monthly totals, and you can add 5-master credit packs anytime if you run out."
   }
 ];

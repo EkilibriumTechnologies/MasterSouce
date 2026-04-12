@@ -163,5 +163,5 @@ What it is not yet:
 ## Notes
 
 - Current persistence is in-memory for leads and temp-file references; restarting the server resets it.
-- Free usage limits are not enforced yet, but architecture allows adding per-user quota checks.
+- Final-master downloads are quota-checked (Free: 2 billable exports per calendar month when Supabase billing is configured; local dev uses a per-session cap).
 - This is the first batch scaffold only; auth/subscriptions/history/queues come in later phases.

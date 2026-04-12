@@ -19,6 +19,8 @@ import {
 } from "@/lib/billing/client-key";
 import { clearPendingAdaptiveExport, loadPendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
+import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
+import type { PlanId } from "@/lib/subscriptions/types";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
 /** Owner panel: session token for owner bypass checks on GET /api/download. */
@@ -46,22 +48,23 @@ async function downloadFinalMasterWithOptionalBypass(downloadUrl: string, ownerT
   }
   const res = await fetch(downloadUrl, { credentials: "include", headers });
   if (res.status === 403) {
-    let errorCode: string | null = null;
-    let message = "No masters remaining. Upgrade or get 5 more for $4.";
+    let apiError: string | null = null;
+    let apiMessage: string | null = null;
     try {
       const j = (await res.json()) as { error?: string; message?: string };
-      if (typeof j.error === "string") errorCode = j.error;
-      if (typeof j.message === "string") message = j.message;
+      if (typeof j.error === "string") apiError = j.error;
+      if (typeof j.message === "string" && j.message.trim()) apiMessage = j.message.trim();
     } catch {
       /* ignore parse errors */
     }
-    if (errorCode === "no_masters_remaining") {
-      message = "No masters remaining. Upgrade or get 5 more for $4.";
-      const limitError = new Error(message);
+    if (apiError === "no_masters_remaining") {
+      const limitError = new Error(
+        apiMessage ?? "No masters remaining. Upgrade or get 5 more for $4."
+      );
       limitError.name = "DownloadLimitExceededError";
       throw limitError;
     }
-    throw new Error(message);
+    throw new Error(apiMessage ?? apiError ?? "Download not allowed.");
   }
   if (!res.ok) {
     throw new Error("Download failed. Please try again.");
@@ -172,6 +175,7 @@ export function UploadForm() {
   const [ownerBypassDraft, setOwnerBypassDraft] = useState("");
   const [ownerSessionToken, setOwnerSessionToken] = useState("");
   const [downloadLimitModalOpen, setDownloadLimitModalOpen] = useState(false);
+  const [downloadLimitPlanId, setDownloadLimitPlanId] = useState<PlanId | null>(null);
   const latestAnalysisRequestIdRef = useRef(0);
 
   useEffect(() => {
@@ -300,8 +304,13 @@ export function UploadForm() {
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
 
-  const DOWNLOAD_LIMIT_MESSAGE =
-    "No masters remaining. Upgrade or get 5 more for $4.";
+  const DOWNLOAD_LIMIT_MESSAGE = "No masters remaining. Upgrade or get 5 more for $4.";
+
+  function isDownloadQuotaExceededMessage(message: string | null): boolean {
+    if (!message) return false;
+    if (message === DOWNLOAD_LIMIT_MESSAGE) return true;
+    return /^You've used your \d+ free mastered exports for this month\./.test(message);
+  }
 
   function isLikelyNetworkError(err: unknown): boolean {
     if (err instanceof DOMException && err.name === "AbortError") return true;
@@ -595,6 +604,7 @@ export function UploadForm() {
 
   function handleLimitModalViewPlans() {
     setDownloadLimitModalOpen(false);
+    setDownloadLimitPlanId(null);
     window.location.assign("/pricing");
   }
 
@@ -786,15 +796,15 @@ export function UploadForm() {
               type="button"
               disabled={adaptiveProcessing || loading}
               style={secondaryActionStyle}
-              aria-label="Customize my master — describe your sound for AI-guided shaping"
+              aria-label="Refine my sound — describe your direction for AI-guided shaping"
               onClick={() => {
                 debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
                 setShowAdaptivePlaceholder(true);
                 setError(null);
-                setStatus("Customize your master — add optional direction, then run your free preview.");
+                setStatus("Refine your sound — add optional direction, then run your free preview.");
               }}
             >
-              Customize My Master
+              Refine My Sound
             </button>
           </div>
           {showAdaptivePlaceholder ? (
@@ -850,7 +860,7 @@ export function UploadForm() {
       ) : null}
 
       {error ? (
-        <p style={error === DOWNLOAD_LIMIT_MESSAGE ? quotaExhaustedMessageStyle : errorStyle}>{error}</p>
+        <p style={isDownloadQuotaExceededMessage(error) ? quotaExhaustedMessageStyle : errorStyle}>{error}</p>
       ) : null}
 
       {result ? (
@@ -868,8 +878,17 @@ export function UploadForm() {
                 >
                   {result.quota.remainingMasters > 0 ? (
                     <>
-                      {result.quota.mastersUsedThisPeriod} / {result.quota.monthlyMastersLimit} masters used.{" "}
-                      {result.quota.remainingMonthlyMasters} monthly left
+                      {result.quota.planId === "free" ? (
+                        <>
+                          {result.quota.mastersUsedThisPeriod} of {result.quota.monthlyMastersLimit} free masters used
+                          this month. {result.quota.remainingMonthlyMasters} left
+                        </>
+                      ) : (
+                        <>
+                          {result.quota.mastersUsedThisPeriod} / {result.quota.monthlyMastersLimit} masters used.{" "}
+                          {result.quota.remainingMonthlyMasters} monthly left
+                        </>
+                      )}
                       {result.quota.creditPackBalance > 0 ? ` + ${result.quota.creditPackBalance} credit pack` : ""}.
                       {result.quota.remainingMasters <= 2 ? " Running low — upgrade or get 5 more for $4" : ""}
                       {result.quota.planId === "free" ? (
@@ -883,7 +902,14 @@ export function UploadForm() {
                     </>
                   ) : (
                     <>
-                      {DOWNLOAD_LIMIT_MESSAGE}{" "}
+                      {result.quota.planId === "free" ? (
+                        <>
+                          You&apos;ve used your {PLAN_DEFINITIONS.free.monthlyMastersLimit} free masters for this month.
+                          Upgrade for more exports, or add a credit pack.
+                        </>
+                      ) : (
+                        DOWNLOAD_LIMIT_MESSAGE
+                      )}{" "}
                       <a href="/pricing" style={{ color: "#7dccb0", textDecoration: "underline" }}>
                         View pricing
                       </a>
@@ -941,6 +967,8 @@ export function UploadForm() {
                   const message = e instanceof Error ? e.message : "Download failed.";
                   if (e instanceof Error && e.name === "DownloadLimitExceededError") {
                     setError(null);
+                    const pid = result?.quota?.planId;
+                    setDownloadLimitPlanId(pid === "creator_monthly" || pid === "pro_studio_monthly" ? pid : "free");
                     setDownloadLimitModalOpen(true);
                     return;
                   }
@@ -955,7 +983,11 @@ export function UploadForm() {
       ) : null}
       <DownloadLimitModal
         open={downloadLimitModalOpen}
-        onClose={() => setDownloadLimitModalOpen(false)}
+        planId={downloadLimitPlanId}
+        onClose={() => {
+          setDownloadLimitModalOpen(false);
+          setDownloadLimitPlanId(null);
+        }}
         onViewPlans={handleLimitModalViewPlans}
       />
     </section>
