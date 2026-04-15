@@ -25,8 +25,15 @@ export type ResolveAdaptiveEntitlementOptions = {
 
 function planIdFromEntitlementMetadata(metadata: Record<string, unknown>): PlanId {
   const raw = metadata.planId;
-  if (raw === "creator_monthly" || raw === "pro_studio_monthly") return raw;
-  return "creator_monthly";
+  if (raw === "free" || raw === "creator_monthly" || raw === "pro_studio_monthly") return raw;
+  console.error(
+    JSON.stringify({
+      scope: "adaptive_entitlement",
+      event: "invalid_plan_id_in_entitlement_metadata_fallback_to_free",
+      rawPlanId: typeof raw === "string" ? raw : null
+    })
+  );
+  return "free";
 }
 
 function logAdaptiveEntitlement(event: string, fields: Record<string, unknown>): void {

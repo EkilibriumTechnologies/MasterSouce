@@ -1,6 +1,9 @@
 /** Session key for the billing email used for Adaptive / entitlement checks (browser only). */
 export const MASTERSOUCE_BILLING_EMAIL_KEY = "mastersouce_billing_email";
 
+/** Header used by APIs that consume the persisted billing email context. */
+export const MASTERSOUCE_BILLING_EMAIL_HEADER = "x-mastersouce-billing-email";
+
 /** Snapshot so post–Stripe return can restore Adaptive job + unlock export without re-running the pipeline. */
 export const MASTERSOUCE_PENDING_ADAPTIVE_EXPORT_KEY = "mastersouce_pending_adaptive_export";
 

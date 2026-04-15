@@ -10,6 +10,10 @@ import { PlanId } from "@/lib/subscriptions/types";
 const PLAN_ORDER: PlanId[] = ["free", "creator_monthly", "pro_studio_monthly"];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function formatSongArchitectBlueprintFeature(monthlyLimit: number): string {
+  return `${monthlyLimit} Song Architect Blueprint${monthlyLimit === 1 ? "" : "s"} / Month`;
+}
+
 type CheckoutSelection = {
   kind: "subscription" | "credit_pack";
   planId?: PlanId;
@@ -238,6 +242,7 @@ export function PricingSection() {
         {PLAN_ORDER.map((planId) => {
           const plan = PLAN_DEFINITIONS[planId];
           const isFree = plan.id === "free";
+          const songArchitectFeature = formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth);
           return (
             <article key={plan.id} style={plan.highlighted ? cardHighlightedStyle : cardStyle}>
               {plan.highlighted ? <p style={badgeStyle}>{plan.badgeLabel ?? "Most popular"}</p> : <p style={badgePlaceholderStyle}>&nbsp;</p>}
@@ -248,6 +253,7 @@ export function PricingSection() {
               </p>
               <p style={descriptionStyle}>{plan.description}</p>
               <ul style={featuresListStyle}>
+                <li style={featureItemStyle}>{songArchitectFeature}</li>
                 {plan.features.map((feature) => (
                   <li key={feature} style={featureItemStyle}>
                     {feature}

@@ -12,7 +12,7 @@ function unixToIsoOrNull(unix: number | undefined | null): string | null {
 
 export function resolvePlanIdFromStripeSubscription(subscription: Stripe.Subscription): PlanId {
   const meta = subscription.metadata?.plan_id;
-  if (meta === "creator_monthly" || meta === "pro_studio_monthly") return meta;
+  if (meta === "free" || meta === "creator_monthly" || meta === "pro_studio_monthly") return meta;
   const first = subscription.items.data[0];
   if (first?.price?.id) {
     try {
@@ -23,11 +23,13 @@ export function resolvePlanIdFromStripeSubscription(subscription: Stripe.Subscri
       // Price env vars may be unset in some environments; fall through to default.
     }
   }
-  console.warn("[billing] resolvePlanId fallback to creator_monthly", {
+  console.error("[billing] resolvePlanId fallback to free", {
     subscriptionId: subscription.id,
+    status: subscription.status,
+    metadataPlanId: meta ?? null,
     priceId: first?.price?.id ?? null
   });
-  return "creator_monthly";
+  return "free";
 }
 
 /**

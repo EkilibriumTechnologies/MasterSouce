@@ -7,6 +7,8 @@ export type PlanDefinition = {
   monthlyPriceUsd: number;
   /** Final mastered file entitlements included in the active period. */
   monthlyMastersLimit: number;
+  /** Song Architect blueprint generations included in the active period. */
+  songArchitectGenerationsPerMonth: number;
   quality: PlanQuality;
   stems: boolean;
   priority: boolean;

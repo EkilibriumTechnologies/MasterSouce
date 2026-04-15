@@ -59,6 +59,23 @@ export default function HomePage({ searchParams }: HomePageProps) {
     <>
       <JsonLd data={getHomePageJsonLdGraph()} />
       <main style={mainStyle}>
+      <nav aria-label="Primary" style={topNavStyle}>
+        <div style={topNavBrandWrap}>
+          <span style={topNavBrandMark}>♫</span>
+          <span style={topNavBrandText}>MasterSauce</span>
+        </div>
+        <div style={topNavLinksWrap}>
+          <Link href="/learn" style={topNavLinkStyle}>
+            Learn
+          </Link>
+          <Link href="/song-architect" style={topNavLinkStyle}>
+            Song Architect
+          </Link>
+          <a href="#pricing" style={topNavLinkStyle}>
+            Pricing
+          </a>
+        </div>
+      </nav>
       {showCheckoutSuccess ? (
         <section style={successBannerStyle} aria-live="polite">
           <p style={successEyebrowStyle}>Purchase complete</p>
@@ -154,6 +171,54 @@ export default function HomePage({ searchParams }: HomePageProps) {
         </div>
       </section>
 
+      <section id="song-architect" style={songArchitectSectionStyle} aria-labelledby="song-architect-heading">
+        <div style={songArchitectGridStyle}>
+          <div>
+            <p style={songArchitectEyebrowStyle}>Upstream Companion</p>
+            <h2 id="song-architect-heading" style={songArchitectTitleStyle}>
+              Need Help Before You Master?
+            </h2>
+            <p style={songArchitectSubTitleStyle}>Build stronger AI-ready songs before they ever hit the mastering chain.</p>
+            <p style={songArchitectBodyStyle}>
+              Song Architect helps modern creators generate structured song blueprints for Suno, Udio, and AI-assisted music
+              production — so better inputs create better masters.
+            </p>
+            <p style={songArchitectFlowStyle}>Write Better → Generate Better → Master Better</p>
+            <ul style={songArchitectListStyle}>
+              <li style={songArchitectListItemStyle}>Genre-aware songwriting presets</li>
+              <li style={songArchitectListItemStyle}>Hook & chorus optimization</li>
+              <li style={songArchitectListItemStyle}>Suno/Udio-ready export formatting</li>
+              <li style={songArchitectListItemStyle}>Rewrite weak sections instantly</li>
+            </ul>
+            <Link href="/song-architect" style={songArchitectCtaStyle}>
+              Try Song Architect
+            </Link>
+          </div>
+          <aside style={songArchitectPreviewStyle} aria-label="Song Architect preview">
+            <p style={songArchitectPreviewTitleStyle}>Song Architect</p>
+            <p style={songArchitectPreviewSubtleStyle}>Blueprint Builder</p>
+            <div style={songArchitectPreviewRowStyle}>
+              <span style={songArchitectTagStyle}>Genre</span>
+              <span style={songArchitectValueStyle}>Alt Pop / EDM</span>
+            </div>
+            <div style={songArchitectPreviewRowStyle}>
+              <span style={songArchitectTagStyle}>Hook Focus</span>
+              <span style={songArchitectValueStyle}>High replay</span>
+            </div>
+            <div style={songArchitectPreviewBlockStyle}>
+              <p style={songArchitectPreviewBlockTitleStyle}>Core Prompt Structure</p>
+              <p style={songArchitectPreviewBlockBodyStyle}>
+                Verse tension rises in 8 bars, pre-chorus lift, then a bold melodic chorus repeat with simplified lyric rhythm.
+              </p>
+            </div>
+            <div style={songArchitectPreviewFooterStyle}>
+              <span style={songArchitectStatusDotStyle} />
+              Export preset ready for Suno / Udio
+            </div>
+          </aside>
+        </div>
+      </section>
+
       <section style={dualCardSectionStyle}>
         <div style={infoCardStyle}>
           <h2 style={infoTitleStyle}>Your Rights, Always</h2>
@@ -224,6 +289,59 @@ const mainStyle: React.CSSProperties = {
   padding: "18px 20px 78px",
   display: "grid",
   gap: "34px"
+};
+
+const topNavStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
+  border: "1px solid rgba(84, 100, 148, 0.32)",
+  borderRadius: "16px",
+  background: "linear-gradient(140deg, rgba(17, 24, 44, 0.78), rgba(10, 16, 31, 0.82))",
+  boxShadow: "0 12px 24px rgba(2, 5, 14, 0.34)",
+  padding: "10px 14px"
+};
+
+const topNavBrandWrap: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px"
+};
+
+const topNavBrandMark: React.CSSProperties = {
+  width: "28px",
+  height: "28px",
+  borderRadius: "8px",
+  display: "grid",
+  placeItems: "center",
+  color: "#fff",
+  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)"
+};
+
+const topNavBrandText: React.CSSProperties = {
+  color: "#e7edff",
+  fontWeight: 700,
+  letterSpacing: "0.01em"
+};
+
+const topNavLinksWrap: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap"
+};
+
+const topNavLinkStyle: React.CSSProperties = {
+  color: "#b9c6ef",
+  textDecoration: "none",
+  fontSize: "0.92rem",
+  fontWeight: 600,
+  border: "1px solid rgba(86, 102, 156, 0.34)",
+  borderRadius: "999px",
+  padding: "8px 12px",
+  background: "rgba(14, 22, 40, 0.68)"
 };
 
 const heroStyle: React.CSSProperties = {
@@ -399,6 +517,147 @@ const stepTextStyle: React.CSSProperties = {
   color: "#9ca8cc",
   lineHeight: 1.55,
   fontSize: "0.94rem"
+};
+const songArchitectSectionStyle: React.CSSProperties = {
+  background: "linear-gradient(145deg, rgba(22, 29, 48, 0.94), rgba(12, 17, 30, 0.94))",
+  border: "1px solid rgba(142, 155, 209, 0.2)",
+  borderRadius: "24px",
+  boxShadow: "0 18px 40px rgba(2, 4, 12, 0.45)",
+  padding: "32px 24px"
+};
+const songArchitectGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: "18px",
+  alignItems: "stretch"
+};
+const songArchitectEyebrowStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#b7c4ff",
+  fontSize: "0.74rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.16em"
+};
+const songArchitectTitleStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  fontSize: "clamp(1.6rem, 2.8vw, 2.3rem)",
+  color: "#f1f4ff",
+  lineHeight: 1.2,
+  fontFamily: "Outfit, Work Sans, system-ui, sans-serif"
+};
+const songArchitectSubTitleStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  color: "#9fb0dc",
+  lineHeight: 1.55
+};
+const songArchitectBodyStyle: React.CSSProperties = {
+  margin: "12px 0 0",
+  color: "#aab8dc",
+  lineHeight: 1.6
+};
+const songArchitectFlowStyle: React.CSSProperties = {
+  margin: "12px 0 0",
+  color: "#d3dcff",
+  fontWeight: 700
+};
+const songArchitectListStyle: React.CSSProperties = {
+  margin: "14px 0 0",
+  padding: 0,
+  listStyle: "none",
+  display: "grid",
+  gap: "8px"
+};
+const songArchitectListItemStyle: React.CSSProperties = {
+  color: "#c6d2f5",
+  lineHeight: 1.5
+};
+const songArchitectCtaStyle: React.CSSProperties = {
+  marginTop: "16px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  borderRadius: "999px",
+  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)",
+  boxShadow: "0 12px 30px rgba(121, 100, 255, 0.36)",
+  color: "#ffffff",
+  fontWeight: 700,
+  padding: "12px 24px"
+};
+const songArchitectPreviewStyle: React.CSSProperties = {
+  border: "1px solid rgba(90, 110, 170, 0.38)",
+  borderRadius: "18px",
+  background: "linear-gradient(155deg, rgba(20, 29, 53, 0.66), rgba(12, 19, 38, 0.74))",
+  padding: "18px",
+  display: "grid",
+  alignContent: "start",
+  gap: "10px"
+};
+const songArchitectPreviewTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#ecf1ff",
+  fontWeight: 700,
+  fontSize: "1.05rem"
+};
+const songArchitectPreviewSubtleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#8ea2d8",
+  fontSize: "0.86rem"
+};
+const songArchitectPreviewRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "10px",
+  border: "1px solid rgba(84, 104, 156, 0.32)",
+  borderRadius: "10px",
+  padding: "8px 10px",
+  background: "rgba(11, 18, 35, 0.6)"
+};
+const songArchitectTagStyle: React.CSSProperties = {
+  color: "#93a6d8",
+  fontSize: "0.84rem"
+};
+const songArchitectValueStyle: React.CSSProperties = {
+  color: "#deebff",
+  fontWeight: 600,
+  fontSize: "0.88rem"
+};
+const songArchitectPreviewBlockStyle: React.CSSProperties = {
+  border: "1px solid rgba(88, 106, 167, 0.34)",
+  borderRadius: "12px",
+  padding: "10px",
+  background: "rgba(14, 20, 38, 0.8)"
+};
+const songArchitectPreviewBlockTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#cedbff",
+  fontWeight: 700,
+  fontSize: "0.83rem",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em"
+};
+const songArchitectPreviewBlockBodyStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#b5c4ec",
+  lineHeight: 1.5,
+  fontSize: "0.88rem"
+};
+const songArchitectPreviewFooterStyle: React.CSSProperties = {
+  marginTop: "2px",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  color: "#9fc7b9",
+  fontSize: "0.82rem"
+};
+const songArchitectStatusDotStyle: React.CSSProperties = {
+  width: "8px",
+  height: "8px",
+  borderRadius: "999px",
+  background: "#6cf3c4",
+  boxShadow: "0 0 0 6px rgba(108, 243, 196, 0.16)"
 };
 const dualCardSectionStyle: React.CSSProperties = {
   display: "grid",

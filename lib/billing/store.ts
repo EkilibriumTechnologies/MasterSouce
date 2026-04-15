@@ -43,7 +43,23 @@ export async function getBillingSubscriptionByEmail(normalizedEmail: string): Pr
     return Number.isFinite(endMs) && endMs >= nowMs;
   });
   if (!row) return null;
-  const planId = (row.plan_id ?? "creator_monthly") as PlanId;
+  const rawPlanId = typeof row.plan_id === "string" ? row.plan_id.trim() : "";
+  let planId: PlanId;
+  if (rawPlanId === "free" || rawPlanId === "creator_monthly" || rawPlanId === "pro_studio_monthly") {
+    planId = rawPlanId;
+  } else {
+    // Keep requests graceful, but fail safe and emit rich diagnostics for malformed subscription rows.
+    planId = "free";
+    console.error("[billing] malformed_subscription_plan_id_fallback_to_free", {
+      normalizedEmail,
+      stripeSubscriptionId: row.stripe_subscription_id ?? null,
+      stripeCustomerId: row.stripe_customer_id ?? null,
+      status: row.status ?? null,
+      currentPeriodStart: row.current_period_start ?? null,
+      currentPeriodEnd: row.current_period_end ?? null,
+      rawPlanId: row.plan_id ?? null
+    });
+  }
   return {
     normalizedEmail: row.normalized_email,
     stripeCustomerId: row.stripe_customer_id,
