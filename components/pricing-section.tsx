@@ -14,6 +14,77 @@ function formatSongArchitectBlueprintFeature(monthlyLimit: number): string {
   return `${monthlyLimit} Song Architect Blueprint${monthlyLimit === 1 ? "" : "s"} / Month`;
 }
 
+const PLAN_COPY: Record<
+  PlanId,
+  {
+    positioning: string;
+    features: (plan: (typeof PLAN_DEFINITIONS)[PlanId]) => string[];
+    ctaLabel: string;
+    valueCallout?: string;
+    ctaHint?: string;
+  }
+> = {
+  free: {
+    positioning: "Try MasterSauce without a credit card.",
+    features: (plan) => [
+      `${plan.monthlyMastersLimit} final masters / month`,
+      "Unlimited A/B previews",
+      "All 7 genre presets",
+      "WAV 16-bit",
+      "No watermark",
+      formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
+    ],
+    ctaLabel: "Start Free",
+    ctaHint: "No credit card required."
+  },
+  creator_monthly: {
+    positioning: "For indie artists releasing consistently.",
+    features: (plan) => [
+      `${plan.monthlyMastersLimit} final masters / month`,
+      "Unlimited A/B previews",
+      "Prompt-Based Adaptive Mastering",
+      "All 7 genre presets",
+      "WAV 24-bit",
+      formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
+    ],
+    ctaLabel: "Choose Creator",
+    valueCallout: "Best value for frequent releases",
+    ctaHint: "Upgrade when your release pace picks up."
+  },
+  pro_studio_monthly: {
+    positioning: "For producers, teams, and small labels with volume.",
+    features: (plan) => [
+      `${plan.monthlyMastersLimit} final masters / month`,
+      "Unlimited A/B previews",
+      "Prompt-Based Adaptive Mastering",
+      "WAV 32-bit float",
+      "Priority processing",
+      formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
+    ],
+    ctaLabel: "Choose Pro Studio",
+    ctaHint: "Built for higher monthly volume."
+  }
+};
+
+const PRICING_FAQ_ITEMS = [
+  {
+    question: "What counts toward my plan?",
+    answer: "Only final mastered exports count against your monthly allowance."
+  },
+  {
+    question: "Do previews use my quota?",
+    answer: "No. You can run unlimited A/B previews without using any monthly masters."
+  },
+  {
+    question: "Can I buy extra credits anytime?",
+    answer: "Yes. Credit Packs are one-time and add extra masters whenever you need them."
+  },
+  {
+    question: "Can I cancel anytime?",
+    answer: "Yes. You can manage or cancel your subscription anytime from billing."
+  }
+] as const;
+
 type CheckoutSelection = {
   kind: "subscription" | "credit_pack";
   planId?: PlanId;
@@ -222,7 +293,18 @@ export function PricingSection() {
       <h2 id="pricing-title" style={titleStyle}>
         Master like a studio. Pay like an indie.
       </h2>
-      <p style={subtitleStyle}>Preview unlimited times. Only pay when you download.</p>
+      <p style={subtitleStyle}>Unlimited previews. Only final exports count. Choose the plan that matches your release pace.</p>
+      <div style={reassuranceBarStyle} aria-label="Pricing fairness highlights">
+        <span style={reassuranceItemStyle}>Unlimited A/B previews</span>
+        <span style={reassuranceDotStyle} aria-hidden="true">
+          •
+        </span>
+        <span style={reassuranceItemStyle}>No watermark</span>
+        <span style={reassuranceDotStyle} aria-hidden="true">
+          •
+        </span>
+        <span style={reassuranceItemStyle}>Only final exports count</span>
+      </div>
       {adaptiveIntent ? (
         <div style={adaptiveIntentBannerStyle}>
           <p style={adaptiveIntentTitleStyle}>Unlock Adaptive AI Mastering</p>
@@ -241,20 +323,24 @@ export function PricingSection() {
       <div style={gridStyle}>
         {PLAN_ORDER.map((planId) => {
           const plan = PLAN_DEFINITIONS[planId];
+          const planCopy = PLAN_COPY[planId];
           const isFree = plan.id === "free";
-          const songArchitectFeature = formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth);
           return (
             <article key={plan.id} style={plan.highlighted ? cardHighlightedStyle : cardStyle}>
-              {plan.highlighted ? <p style={badgeStyle}>{plan.badgeLabel ?? "Most popular"}</p> : <p style={badgePlaceholderStyle}>&nbsp;</p>}
+              {plan.highlighted ? (
+                <p style={badgeStyle}>{plan.badgeLabel ?? "Most Popular"}</p>
+              ) : (
+                <p style={badgePlaceholderStyle}>&nbsp;</p>
+              )}
               <h3 style={planNameStyle}>{plan.name}</h3>
               <p style={priceStyle}>
                 ${plan.monthlyPriceUsd}
                 <span style={priceSuffixStyle}>/mo</span>
               </p>
-              <p style={descriptionStyle}>{plan.description}</p>
+              <p style={descriptionStyle}>{planCopy.positioning}</p>
+              {planCopy.valueCallout ? <p style={valueCalloutStyle}>{planCopy.valueCallout}</p> : null}
               <ul style={featuresListStyle}>
-                <li style={featureItemStyle}>{songArchitectFeature}</li>
-                {plan.features.map((feature) => (
+                {planCopy.features(plan).map((feature) => (
                   <li key={feature} style={featureItemStyle}>
                     {feature}
                   </li>
@@ -262,27 +348,37 @@ export function PricingSection() {
               </ul>
               {isFree ? (
                 <button type="button" disabled style={ctaNeutralStyle}>
-                  {plan.ctaLabel}
+                  {planCopy.ctaLabel}
                 </button>
               ) : (
                 <button
                   type="button"
-                  style={ctaUpgradeStyle}
+                  style={plan.highlighted ? ctaUpgradeStyle : ctaPaidSecondaryStyle}
                   onClick={() => openCheckoutModal({ kind: "subscription", planId: plan.id })}
                 >
-                  {adaptiveIntent ? "Unlock Adaptive AI Mastering" : plan.ctaLabel}
+                  {adaptiveIntent ? "Unlock Adaptive AI Mastering" : planCopy.ctaLabel}
                 </button>
               )}
+              {planCopy.ctaHint ? <p style={ctaHintStyle}>{planCopy.ctaHint}</p> : null}
             </article>
           );
         })}
       </div>
       <div style={creditPackStyle}>
+        <p style={creditPackEyebrowStyle}>Need extra masters this month?</p>
         <p style={creditPackTitleStyle}>Credit Pack - $4 one-time</p>
         <p style={creditPackBodyStyle}>Adds 5 extra masters. Your monthly plan is always consumed first.</p>
         <button type="button" style={creditPackButtonStyle} onClick={() => openCheckoutModal({ kind: "credit_pack" })}>
-          Get 5 masters for $4
+          Get Credit Pack
         </button>
+      </div>
+      <div style={pricingFaqStyle}>
+        {PRICING_FAQ_ITEMS.map((item) => (
+          <details key={item.question} style={pricingFaqItemStyle}>
+            <summary style={pricingFaqQuestionStyle}>{item.question}</summary>
+            <p style={pricingFaqAnswerStyle}>{item.answer}</p>
+          </details>
+        ))}
       </div>
       <div style={adaptiveCopyCardStyle}>
         <p style={adaptiveCopyTitleStyle}>Adaptive AI Mastering</p>
@@ -427,6 +523,31 @@ const subtitleStyle: React.CSSProperties = {
   maxWidth: "740px"
 };
 
+const reassuranceBarStyle: React.CSSProperties = {
+  margin: "14px auto 0",
+  border: "1px solid rgba(126, 141, 199, 0.35)",
+  borderRadius: "999px",
+  background: "rgba(15, 22, 41, 0.68)",
+  padding: "8px 14px",
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  maxWidth: "760px"
+};
+
+const reassuranceItemStyle: React.CSSProperties = {
+  color: "#c2cef2",
+  fontSize: "0.82rem",
+  lineHeight: 1.4
+};
+
+const reassuranceDotStyle: React.CSSProperties = {
+  color: "#7184bb",
+  fontSize: "0.78rem"
+};
+
 const manageBillingRowStyle: React.CSSProperties = {
   marginTop: "14px",
   display: "flex",
@@ -465,15 +586,16 @@ const cardStyle: React.CSSProperties = {
   border: "1px solid rgba(74, 90, 150, 0.32)",
   borderRadius: "18px",
   background: "linear-gradient(155deg, rgba(19, 28, 52, 0.62), rgba(12, 19, 37, 0.62))",
-  padding: "18px",
+  padding: "20px",
   display: "grid",
-  gap: "10px"
+  gap: "12px"
 };
 
 const cardHighlightedStyle: React.CSSProperties = {
   ...cardStyle,
   border: "1px solid rgba(151, 116, 255, 0.88)",
-  boxShadow: "inset 0 0 0 1px rgba(151, 116, 255, 0.4), 0 10px 24px rgba(121, 100, 255, 0.24)"
+  transform: "translateY(-3px)",
+  boxShadow: "inset 0 0 0 1px rgba(151, 116, 255, 0.36), 0 16px 32px rgba(121, 100, 255, 0.26)"
 };
 
 const badgeStyle: React.CSSProperties = {
@@ -498,6 +620,18 @@ const priceStyle: React.CSSProperties = {
 
 const priceSuffixStyle: React.CSSProperties = { color: "#99a8d6", fontSize: "0.95rem", marginLeft: "3px", fontWeight: 600 };
 const descriptionStyle: React.CSSProperties = { margin: 0, color: "#9ca8cc", lineHeight: 1.5, minHeight: "46px" };
+const valueCalloutStyle: React.CSSProperties = {
+  margin: "-2px 0 0",
+  border: "1px solid rgba(151, 116, 255, 0.5)",
+  borderRadius: "999px",
+  color: "#decfff",
+  background: "rgba(74, 47, 134, 0.35)",
+  fontWeight: 700,
+  fontSize: "0.78rem",
+  letterSpacing: "0.02em",
+  width: "fit-content",
+  padding: "5px 9px"
+};
 
 const featuresListStyle: React.CSSProperties = {
   margin: 0,
@@ -524,6 +658,18 @@ const ctaUpgradeStyle: React.CSSProperties = {
   cursor: "pointer"
 };
 
+const ctaPaidSecondaryStyle: React.CSSProperties = {
+  marginTop: "4px",
+  borderRadius: "12px",
+  border: "1px solid rgba(134, 154, 214, 0.5)",
+  background: "rgba(16, 25, 46, 0.9)",
+  color: "#dee8ff",
+  fontWeight: 700,
+  fontSize: "0.94rem",
+  padding: "12px 14px",
+  cursor: "pointer"
+};
+
 const ctaNeutralStyle: React.CSSProperties = {
   marginTop: "4px",
   borderRadius: "12px",
@@ -536,24 +682,67 @@ const ctaNeutralStyle: React.CSSProperties = {
   cursor: "not-allowed"
 };
 
+const ctaHintStyle: React.CSSProperties = {
+  margin: "2px 0 0",
+  color: "#8fa2d7",
+  fontSize: "0.8rem",
+  lineHeight: 1.4
+};
+
 const creditPackStyle: React.CSSProperties = {
-  marginTop: "14px",
-  border: "1px solid rgba(80, 182, 157, 0.4)",
+  marginTop: "18px",
+  border: "1px solid rgba(101, 120, 186, 0.36)",
   borderRadius: "16px",
   padding: "16px",
-  background: "linear-gradient(160deg, rgba(12, 32, 34, 0.72), rgba(11, 24, 38, 0.74))"
+  background: "linear-gradient(160deg, rgba(12, 22, 39, 0.72), rgba(10, 18, 32, 0.82))"
 };
-const creditPackTitleStyle: React.CSSProperties = { margin: 0, color: "#defef1", fontWeight: 700 };
-const creditPackBodyStyle: React.CSSProperties = { margin: "8px 0 0", color: "#9bc5ba", fontSize: "0.9rem" };
+const creditPackEyebrowStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#a8b8e5",
+  fontSize: "0.82rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em"
+};
+const creditPackTitleStyle: React.CSSProperties = { margin: "6px 0 0", color: "#def1ff", fontWeight: 700 };
+const creditPackBodyStyle: React.CSSProperties = { margin: "8px 0 0", color: "#a6b6dc", fontSize: "0.9rem" };
 const creditPackButtonStyle: React.CSSProperties = {
   marginTop: "12px",
-  border: 0,
+  border: "1px solid rgba(131, 149, 206, 0.5)",
   borderRadius: "11px",
-  background: "linear-gradient(120deg, #2de39d, #5fe6ff)",
-  color: "#072016",
+  background: "rgba(19, 31, 57, 0.9)",
+  color: "#e4ecff",
   fontWeight: 700,
   padding: "10px 14px",
   cursor: "pointer"
+};
+
+const pricingFaqStyle: React.CSSProperties = {
+  marginTop: "16px",
+  display: "grid",
+  gap: "10px"
+};
+
+const pricingFaqItemStyle: React.CSSProperties = {
+  border: "1px solid rgba(90, 109, 166, 0.32)",
+  borderRadius: "12px",
+  background: "rgba(12, 19, 36, 0.64)",
+  padding: "10px 12px"
+};
+
+const pricingFaqQuestionStyle: React.CSSProperties = {
+  cursor: "pointer",
+  color: "#dce6ff",
+  fontWeight: 600,
+  fontSize: "0.92rem",
+  listStyle: "none"
+};
+
+const pricingFaqAnswerStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#a5b4dc",
+  fontSize: "0.88rem",
+  lineHeight: 1.5
 };
 
 const adaptiveIntentBannerStyle: React.CSSProperties = {
