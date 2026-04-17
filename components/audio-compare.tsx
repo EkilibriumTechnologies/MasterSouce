@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 type AudioCompareProps = {
   originalPreviewUrl: string;
@@ -9,6 +10,8 @@ type AudioCompareProps = {
   originalSubLabel?: string;
   masteredLabel?: string;
   masteredSubLabel?: string;
+  /** Rendered after the two comparison cards (players), before the section footnote — e.g. primary export CTA. */
+  afterCompare?: ReactNode;
 };
 
 export function AudioCompare({
@@ -17,7 +20,8 @@ export function AudioCompare({
   originalLabel = "Original",
   originalSubLabel = "Your uploaded track",
   masteredLabel = "Mastered",
-  masteredSubLabel = "Enhanced by MasterSauce"
+  masteredSubLabel = "Enhanced by MasterSauce",
+  afterCompare
 }: AudioCompareProps) {
   const originalRef = useRef<HTMLAudioElement>(null);
   const masteredRef = useRef<HTMLAudioElement>(null);
@@ -260,6 +264,7 @@ export function AudioCompare({
           </div>
         </div>
       </div>
+      {afterCompare ? <div style={afterCompareSlotStyle}>{afterCompare}</div> : null}
       <p style={footNoteStyle}>Preview is completely free - enter email only to export the final master</p>
     </section>
   );
@@ -398,6 +403,15 @@ const masteredProgressSliderStyle: React.CSSProperties = {
   ...progressSliderStyle,
   border: "1px solid rgba(136, 111, 221, 0.44)"
 };
+const afterCompareSlotStyle: React.CSSProperties = {
+  marginTop: "22px",
+  marginBottom: "4px",
+  width: "100%",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center"
+};
+
 const footNoteStyle: React.CSSProperties = {
   margin: "14px 0 0",
   textAlign: "center",

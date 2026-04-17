@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import finalMasterExportDownloadCss from "@/components/final-master-export-download.module.css";
 
 /** Session-only; used only when set via owner testing panel (`?owner=1`). Never logged. */
 const MASTER_ADMIN_BYPASS_STORAGE_KEY = "master_admin_bypass_token";
@@ -176,7 +177,16 @@ export function UploadForm() {
   const [ownerSessionToken, setOwnerSessionToken] = useState("");
   const [downloadLimitModalOpen, setDownloadLimitModalOpen] = useState(false);
   const [downloadLimitPlanId, setDownloadLimitPlanId] = useState<PlanId | null>(null);
+  /** Tracks GET /api/download + blob until the browser save dialog is triggered (no server progress %). */
+  const [finalMasterExportDownloading, setFinalMasterExportDownloading] = useState(false);
+  const [finalMasterExportInlineError, setFinalMasterExportInlineError] = useState<string | null>(null);
   const latestAnalysisRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (downloadUrl) return;
+    setFinalMasterExportDownloading(false);
+    setFinalMasterExportInlineError(null);
+  }, [downloadUrl]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -796,7 +806,7 @@ export function UploadForm() {
               type="button"
               disabled={adaptiveProcessing || loading}
               style={secondaryActionStyle}
-              aria-label="Refine my sound — describe your direction for AI-guided shaping"
+              aria-label="Refine with Song Architect — describe your direction for AI-guided shaping"
               onClick={() => {
                 debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
                 setShowAdaptivePlaceholder(true);
@@ -804,7 +814,7 @@ export function UploadForm() {
                 setStatus("Refine your sound — add optional direction, then run your free preview.");
               }}
             >
-              Refine My Sound
+              Refine with Song Architect
             </button>
           </div>
           {showAdaptivePlaceholder ? (
@@ -933,6 +943,82 @@ export function UploadForm() {
             masteredSubLabel={
               adaptiveModeActive ? "AI-guided from your sound direction" : "Enhanced by MasterSauce"
             }
+            afterCompare={
+              downloadUrl ? (
+                <div style={finalMasterExportDownloadWrapStyle}>
+                  <button
+                    type="button"
+                    disabled={finalMasterExportDownloading}
+                    aria-busy={finalMasterExportDownloading}
+                    aria-describedby={finalMasterExportDownloading ? "final-master-export-status" : undefined}
+                    aria-label={
+                      finalMasterExportDownloading
+                        ? "Preparing your master, please wait"
+                        : adaptiveModeActive
+                          ? "Download final adaptive master"
+                          : "Export your master"
+                    }
+                    style={{
+                      ...exportMasterPrimaryCtaStyle,
+                      ...(finalMasterExportDownloading ? downloadStyleProcessing : null),
+                      gap: "10px"
+                    }}
+                    onClick={() => {
+                      if (finalMasterExportDownloading) return;
+                      setFinalMasterExportInlineError(null);
+                      setFinalMasterExportDownloading(true);
+                      void downloadFinalMasterWithOptionalBypass(
+                        downloadUrl,
+                        resolveOwnerSessionToken(ownerTestingPanel)
+                      )
+                        .then(() => {
+                          setFinalMasterExportDownloading(false);
+                          setFinalMasterExportInlineError(null);
+                        })
+                        .catch((e) => {
+                          setFinalMasterExportDownloading(false);
+                          if (e instanceof Error && e.name === "DownloadLimitExceededError") {
+                            setError(null);
+                            const pid = result?.quota?.planId;
+                            setDownloadLimitPlanId(pid === "creator_monthly" || pid === "pro_studio_monthly" ? pid : "free");
+                            setDownloadLimitModalOpen(true);
+                            return;
+                          }
+                          setFinalMasterExportInlineError(
+                            "We couldn't prepare your master. Please try again."
+                          );
+                        });
+                    }}
+                  >
+                    {finalMasterExportDownloading ? (
+                      <>
+                        <span className={finalMasterExportDownloadCss.spinner} aria-hidden />
+                        <span>Preparing your master...</span>
+                      </>
+                    ) : adaptiveModeActive ? (
+                      "Download Final Adaptive Master"
+                    ) : (
+                      "Export Your Master"
+                    )}
+                  </button>
+                  {finalMasterExportDownloading ? (
+                    <>
+                      <div className={finalMasterExportDownloadCss.progressTrack} aria-hidden>
+                        <div className={finalMasterExportDownloadCss.progressFill} />
+                      </div>
+                      <p id="final-master-export-status" style={finalMasterExportHelperStyle}>
+                        Your master is being prepared. This can take a few seconds.
+                      </p>
+                    </>
+                  ) : null}
+                  {finalMasterExportInlineError && !finalMasterExportDownloading ? (
+                    <p role="alert" style={finalMasterExportInlineErrorStyle}>
+                      {finalMasterExportInlineError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : undefined
+            }
           />
           {!downloadUrl ? (
             adaptiveModeActive ? (
@@ -955,30 +1041,7 @@ export function UploadForm() {
             ) : (
               <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={setDownloadUrl} />
             )
-          ) : (
-            <button
-              type="button"
-              style={downloadStyle}
-              onClick={() => {
-                void downloadFinalMasterWithOptionalBypass(
-                  downloadUrl,
-                  resolveOwnerSessionToken(ownerTestingPanel)
-                ).catch((e) => {
-                  const message = e instanceof Error ? e.message : "Download failed.";
-                  if (e instanceof Error && e.name === "DownloadLimitExceededError") {
-                    setError(null);
-                    const pid = result?.quota?.planId;
-                    setDownloadLimitPlanId(pid === "creator_monthly" || pid === "pro_studio_monthly" ? pid : "free");
-                    setDownloadLimitModalOpen(true);
-                    return;
-                  }
-                  setError(message);
-                });
-              }}
-            >
-              {adaptiveModeActive ? "Download Final Adaptive Master" : "Export Final Master"}
-            </button>
-          )}
+          ) : null}
         </div>
       ) : null}
       <DownloadLimitModal
@@ -1348,17 +1411,24 @@ const analysisDebugLineStyle: React.CSSProperties = {
 const analysisActionRowStyle: React.CSSProperties = {
   display: "grid",
   gap: "10px",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  alignItems: "stretch"
 };
 const secondaryActionStyle: React.CSSProperties = {
   borderRadius: "12px",
-  border: "1px solid rgba(128, 145, 206, 0.58)",
-  background: "rgba(13, 19, 36, 0.9)",
-  color: "#d5ddfb",
+  border: "1px solid rgba(168, 184, 235, 0.55)",
+  background: "linear-gradient(180deg, rgba(24, 32, 54, 0.96) 0%, rgba(11, 17, 34, 0.94) 100%)",
+  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+  color: "#eef2ff",
   fontWeight: 700,
-  fontSize: "0.95rem",
-  padding: "14px 16px",
-  cursor: "pointer"
+  fontSize: "1rem",
+  lineHeight: 1.35,
+  letterSpacing: "0.01em",
+  padding: "15px 18px",
+  cursor: "pointer",
+  width: "100%",
+  boxSizing: "border-box",
+  textAlign: "center"
 };
 const adaptivePlaceholderStyle: React.CSSProperties = {
   borderRadius: "10px",
@@ -1403,9 +1473,51 @@ const downloadStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   borderRadius: "14px",
+  border: "none",
+  cursor: "pointer",
   background: "linear-gradient(120deg, #2de39d, #7ce5ff)",
   color: "#031b14",
   fontWeight: 700,
   textDecoration: "none",
   padding: "13px 18px"
+};
+
+/** Primary export CTA under the A/B comparison — larger tap target and stronger presence than play/switch controls. */
+const exportMasterPrimaryCtaStyle: React.CSSProperties = {
+  ...downloadStyle,
+  width: "100%",
+  minHeight: "52px",
+  fontSize: "clamp(1.02rem, 3.2vw, 1.14rem)",
+  fontWeight: 800,
+  padding: "16px 22px",
+  borderRadius: "16px",
+  boxShadow: "0 14px 36px rgba(24, 160, 118, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.18)"
+};
+
+const downloadStyleProcessing: React.CSSProperties = {
+  cursor: "wait",
+  opacity: 0.88
+};
+
+const finalMasterExportDownloadWrapStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "stretch",
+  width: "100%",
+  maxWidth: "min(100%, 460px)",
+  margin: "0 auto"
+};
+
+const finalMasterExportHelperStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#8aa3c4",
+  fontSize: "0.8rem",
+  lineHeight: 1.45
+};
+
+const finalMasterExportInlineErrorStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#e89aab",
+  fontSize: "0.82rem",
+  lineHeight: 1.45
 };

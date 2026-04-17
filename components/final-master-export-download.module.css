@@ -1,0 +1,61 @@
+@keyframes progressMove {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes spinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progressTrack {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.progressFill {
+  height: 100%;
+  width: 36%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(45, 227, 157, 0.2),
+    rgba(124, 229, 255, 0.45),
+    rgba(45, 227, 157, 0.2)
+  );
+  animation: progressMove 1.4s ease-in-out infinite;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(3, 27, 20, 0.22);
+  border-top-color: rgba(3, 27, 20, 0.82);
+  flex-shrink: 0;
+  animation: spinnerRotate 0.75s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    animation: none;
+    width: 42%;
+    transform: translateX(69%);
+    opacity: 0.55;
+  }
+
+  .spinner {
+    animation: none;
+    border-top-color: rgba(3, 27, 20, 0.45);
+    opacity: 0.9;
+  }
+}
