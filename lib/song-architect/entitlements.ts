@@ -1,6 +1,7 @@
 import { getBillingSubscriptionByEmail } from "@/lib/billing/store";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
+import { incrementProductMetric } from "@/lib/product-metrics";
 import { getCurrentMonthKeyUtc } from "@/lib/usage/month-key";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 
@@ -150,6 +151,9 @@ export async function recordSongArchitectGenerationEvent(input: SongArchitectGen
       throw new Error(
         `Supabase public.song_architect_generation_events insert failed: message="${meta.message}" code="${meta.code ?? "unknown"}" details="${meta.details ?? ""}" hint="${meta.hint ?? ""}"`
       );
+    }
+    if (input.counted && input.status === "success") {
+      await incrementProductMetric("prompts");
     }
     return;
   }

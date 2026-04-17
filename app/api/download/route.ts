@@ -8,6 +8,7 @@ import { recordMasteredDownloadAttempt } from "@/lib/downloads/record-mastered-d
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
+import { incrementProductMetric } from "@/lib/product-metrics";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { FREE_MASTERS_PER_MONTH, consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
@@ -160,6 +161,9 @@ export async function GET(request: NextRequest) {
               fileId: record.id
             });
           }
+        }
+        if (recorded.countedUnique) {
+          await incrementProductMetric("downloads");
         }
       } catch (error) {
         const detail = error instanceof Error ? error.message : "Unknown error";

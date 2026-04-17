@@ -16,6 +16,7 @@ import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
 import { createJobId } from "@/lib/jobs/job-id";
+import { incrementProductMetric } from "@/lib/product-metrics";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
@@ -304,6 +305,8 @@ export async function POST(request: NextRequest) {
       payloadSummary: responsePayloadSummary
     });
     console.log("[MASTER_DEBUG] return:success");
+
+    await incrementProductMetric("previews");
 
     const response = NextResponse.json({
       jobId,

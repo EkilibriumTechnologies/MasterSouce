@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { HeroStatsBar } from "@/components/hero/HeroStatsBar";
 import { PricingSection } from "@/components/pricing-section";
 import { JsonLd } from "@/components/seo/json-ld";
 import { UploadForm } from "@/components/upload-form";
+import { getHomeProductMetrics } from "@/lib/product-metrics";
 import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
 import { getHomePageJsonLdGraph } from "@/lib/seo/home-json-ld";
 import { absoluteUrl, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
@@ -48,12 +50,13 @@ export const metadata: Metadata = {
   }
 };
 
-export default function HomePage({ searchParams }: HomePageProps) {
+export default async function HomePage({ searchParams }: HomePageProps) {
   const checkout = getFirst(searchParams?.checkout);
   const kind = getFirst(searchParams?.kind);
   const showCheckoutSuccess = checkout === "success";
   const checkoutSuccessMessage =
     kind === "credit_pack" ? "Your credit pack was added successfully." : "Your plan is now active.";
+  const homeProductMetrics = await getHomeProductMetrics();
 
   return (
     <>
@@ -104,6 +107,7 @@ export default function HomePage({ searchParams }: HomePageProps) {
             Start Mastering
           </a>
         </div>
+        <HeroStatsBar metrics={homeProductMetrics} />
         <div style={pillRowStyle}>
           <span style={pillStyle}>⚡ Fast Turnaround</span>
           <span style={pillStyle}>🎧 Before/After Preview</span>

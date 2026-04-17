@@ -9,6 +9,7 @@ import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/ide
 import { AdaptiveOpenAIError } from "@/lib/openai/adaptive-mastering";
 import { createJobId } from "@/lib/jobs/job-id";
 import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord } from "@/lib/storage/temp-files";
+import { incrementProductMetric } from "@/lib/product-metrics";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 
 const BodySchema = z.object({
@@ -157,6 +158,8 @@ export async function POST(request: NextRequest) {
         correctivePasses: adaptive.validation.correctivePasses
       });
     }
+
+    await incrementProductMetric("previews");
 
     const response = NextResponse.json(payload);
     attachSessionCookieIfNeeded(response, sessionPrep);
