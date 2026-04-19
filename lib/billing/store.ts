@@ -3,10 +3,25 @@ import type { PlanId } from "@/lib/subscriptions/types";
 import { ADAPTIVE_ENTITLEMENT } from "./constants";
 import { normalizeBillingEmail } from "./email";
 
+function logBillingStoreDbFailure(context: string, details: Record<string, unknown>, err: { message: string; code?: string }): void {
+  console.error(
+    JSON.stringify({
+      scope: "billing_store",
+      event: "db_write_failed",
+      context,
+      errorMessage: err.message,
+      errorCode: err.code ?? null,
+      ...details
+    })
+  );
+}
+
 export type BillingSubscription = {
   normalizedEmail: string;
   stripeCustomerId: string;
   stripeSubscriptionId: string;
+  /** First subscription line-item price id from Stripe (for diagnostics / env mismatch). */
+  stripePriceId: string | null;
   planId: PlanId;
   status: string;
   currentPeriodStart: string;
@@ -30,7 +45,7 @@ export async function getBillingSubscriptionByEmail(normalizedEmail: string): Pr
   const { data: rows, error } = await supabase
     .from("billing_subscriptions")
     .select(
-      "normalized_email, stripe_customer_id, stripe_subscription_id, plan_id, status, current_period_start, current_period_end, cancel_at_period_end"
+      "normalized_email, stripe_customer_id, stripe_subscription_id, stripe_price_id, plan_id, status, current_period_start, current_period_end, cancel_at_period_end"
     )
     .eq("normalized_email", normalizedEmail)
     .in("status", ["active", "trialing"])
@@ -64,6 +79,7 @@ export async function getBillingSubscriptionByEmail(normalizedEmail: string): Pr
     normalizedEmail: row.normalized_email,
     stripeCustomerId: row.stripe_customer_id,
     stripeSubscriptionId: row.stripe_subscription_id,
+    stripePriceId: typeof row.stripe_price_id === "string" ? row.stripe_price_id : null,
     planId,
     status: row.status,
     currentPeriodStart: row.current_period_start ?? nowIso,
@@ -90,7 +106,14 @@ export async function upsertBillingCustomer(row: {
     )
     .select("id")
     .single();
-  if (error) throw new Error(`Supabase billing_customers upsert failed: ${error.message}`);
+  if (error) {
+    logBillingStoreDbFailure(
+      "billing_customers_upsert",
+      { normalizedEmail: row.normalizedEmail, stripeCustomerId: row.stripeCustomerId },
+      error
+    );
+    throw new Error(`Supabase billing_customers upsert failed: ${error.message}`);
+  }
   if (!data?.id) throw new Error("Supabase billing_customers upsert returned no id.");
   return data.id as string;
 }
@@ -116,7 +139,20 @@ export async function upsertBillingSubscription(row: BillingSubscriptionUpsert):
     },
     { onConflict: "stripe_subscription_id" }
   );
-  if (error) throw new Error(`Supabase billing_subscriptions upsert failed: ${error.message}`);
+  if (error) {
+    logBillingStoreDbFailure(
+      "billing_subscriptions_upsert",
+      {
+        normalizedEmail: row.normalizedEmail,
+        stripeSubscriptionId: row.stripeSubscriptionId,
+        stripeCustomerId: row.stripeCustomerId,
+        planId: row.planId,
+        status: row.status
+      },
+      error
+    );
+    throw new Error(`Supabase billing_subscriptions upsert failed: ${error.message}`);
+  }
 }
 
 export async function markBillingSubscriptionCanceled(stripeSubscriptionId: string): Promise<void> {
@@ -175,7 +211,14 @@ export async function appendCreditPackLedgerEntry(row: {
     stripe_payment_intent_id: row.stripePaymentIntentId ?? null,
     metadata: row.metadata ?? null
   });
-  if (error) throw new Error(`Supabase credit_pack_ledger insert failed: ${error.message}`);
+  if (error) {
+    logBillingStoreDbFailure(
+      "credit_pack_ledger_insert",
+      { normalizedEmail: row.normalizedEmail, reason: row.reason },
+      error
+    );
+    throw new Error(`Supabase credit_pack_ledger insert failed: ${error.message}`);
+  }
 }
 
 export async function hasProcessedStripeEvent(eventId: string): Promise<boolean> {
@@ -195,6 +238,7 @@ export async function persistStripeBillingEvent(eventId: string, eventType: stri
   });
   if (error) {
     if (error.code === "23505") return;
+    logBillingStoreDbFailure("billing_events_insert", { stripeEventId: eventId, stripeEventType: eventType }, error);
     throw new Error(`Supabase billing_events insert failed: ${error.message}`);
   }
 }
@@ -221,7 +265,14 @@ export async function upsertAdaptiveEntitlement(row: {
     },
     { onConflict: "normalized_email" }
   );
-  if (error) throw new Error(`Supabase billing_entitlements upsert failed: ${error.message}`);
+  if (error) {
+    logBillingStoreDbFailure(
+      "billing_entitlements_upsert",
+      { normalizedEmail: row.normalizedEmail, entitlement: ADAPTIVE_ENTITLEMENT, isActive: row.isActive },
+      error
+    );
+    throw new Error(`Supabase billing_entitlements upsert failed: ${error.message}`);
+  }
 }
 
 export async function getAdaptiveEntitlementByEmail(normalizedEmail: string): Promise<{

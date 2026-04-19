@@ -3,6 +3,7 @@ import type { PlanId } from "@/lib/subscriptions/types";
 import { getStripePriceIdForPlan } from "@/lib/stripe/server";
 import { STRIPE_SUBSCRIPTION_ENTITLED_STATUSES } from "./constants";
 import { normalizeBillingEmail } from "./email";
+import { logStripeSubscriptionPlanAnomalies } from "./stripe-plan-anomalies";
 import { upsertAdaptiveEntitlement, upsertBillingCustomer, upsertBillingSubscription, type BillingSubscriptionUpsert } from "./store";
 
 function unixToIsoOrNull(unix: number | undefined | null): string | null {
@@ -10,25 +11,39 @@ function unixToIsoOrNull(unix: number | undefined | null): string | null {
   return new Date(unix * 1000).toISOString();
 }
 
+/** Stripe often sends `items[].price` as a string id on webhook payloads unless expanded. */
+export function firstSubscriptionItemPriceId(subscription: Stripe.Subscription): string | null {
+  const first = subscription.items?.data?.[0];
+  /** Webhooks may send a price id string; expanded retrieves send a Price object. */
+  const p = first?.price as string | Stripe.Price | null | undefined;
+  if (typeof p === "string" && p.length > 0) return p;
+  if (p && typeof p === "object" && "id" in p && typeof p.id === "string") return p.id;
+  return null;
+}
+
 export function resolvePlanIdFromStripeSubscription(subscription: Stripe.Subscription): PlanId {
   const meta = subscription.metadata?.plan_id;
   if (meta === "free" || meta === "creator_monthly" || meta === "pro_studio_monthly") return meta;
-  const first = subscription.items.data[0];
-  if (first?.price?.id) {
+  const priceId = firstSubscriptionItemPriceId(subscription);
+  if (priceId) {
     try {
-      const priceId = first.price.id;
       if (priceId === getStripePriceIdForPlan("creator_monthly")) return "creator_monthly";
       if (priceId === getStripePriceIdForPlan("pro_studio_monthly")) return "pro_studio_monthly";
     } catch {
       // Price env vars may be unset in some environments; fall through to default.
     }
   }
-  console.error("[billing] resolvePlanId fallback to free", {
-    subscriptionId: subscription.id,
-    status: subscription.status,
-    metadataPlanId: meta ?? null,
-    priceId: first?.price?.id ?? null
-  });
+  console.error(
+    JSON.stringify({
+      scope: "stripe_reconcile",
+      event: "resolve_plan_id_fallback_to_free",
+      subscriptionId: subscription.id,
+      status: subscription.status,
+      metadataPlanId: meta ?? null,
+      stripePriceId: priceId,
+      message: "No valid subscription.metadata.plan_id and line-item price did not match STRIPE_PRICE_* env vars."
+    })
+  );
   return "free";
 }
 
@@ -45,7 +60,9 @@ export async function reconcileStripeSubscription(stripe: Stripe, subscription: 
         scope: "stripe_reconcile",
         event: "abort_customer_missing",
         subscriptionId: subscription.id,
-        customerId
+        customerId,
+        metadataPlanId: subscription.metadata?.plan_id ?? null,
+        firstPriceId: firstSubscriptionItemPriceId(subscription)
       })
     );
     return;
@@ -59,7 +76,10 @@ export async function reconcileStripeSubscription(stripe: Stripe, subscription: 
         event: "abort_no_billable_email",
         subscriptionId: subscription.id,
         customerId,
-        customerEmailPresent: Boolean(rawEmail)
+        customerEmailPresent: Boolean(rawEmail),
+        metadataPlanId: subscription.metadata?.plan_id ?? null,
+        firstPriceId: firstSubscriptionItemPriceId(subscription),
+        hint: "Stripe Customer.email empty or invalid — subscription cannot be keyed to billing_subscriptions.normalized_email."
       })
     );
     return;
@@ -73,6 +93,7 @@ export async function reconcileStripeSubscription(stripe: Stripe, subscription: 
   });
 
   const firstItem = subscription.items.data[0];
+  const stripePriceId = firstSubscriptionItemPriceId(subscription);
   const subWithPeriod = subscription as Stripe.Subscription & {
     current_period_start?: number;
     current_period_end?: number;
@@ -88,7 +109,7 @@ export async function reconcileStripeSubscription(stripe: Stripe, subscription: 
   const currentPeriodEnd = unixToIsoOrNull(periodEndUnix) ?? currentPeriodStart;
 
   const planId = resolvePlanIdFromStripeSubscription(subscription);
-  const stripePriceId = firstItem?.price?.id ?? null;
+  logStripeSubscriptionPlanAnomalies(subscription, planId, stripePriceId);
 
   const canceledAt = unixToIsoOrNull(subscription.canceled_at);
   const trialStart = unixToIsoOrNull(subscription.trial_start);
@@ -131,9 +152,12 @@ export async function reconcileStripeSubscription(stripe: Stripe, subscription: 
       event: "subscription_reconciled",
       subscriptionId: subscription.id,
       normalizedEmail: normalized,
+      stripeCustomerId: customerId,
       status: subscription.status,
       entitled,
-      planId
+      planId,
+      stripePriceId,
+      dbWrites: "billing_customers,billing_subscriptions,billing_entitlements_upserted"
     })
   );
 }

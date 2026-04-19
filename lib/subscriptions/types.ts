@@ -37,5 +37,9 @@ export type EntitlementSnapshot = {
   quality: PlanQuality;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  /** From `billing_subscriptions.stripe_price_id` when a row was loaded; null otherwise. */
+  stripePriceId: string | null;
+  /** Stripe `subscription.status` when a billing_subscriptions row was loaded; null if no row. */
+  subscriptionStatus: string | null;
   customerPortalEligible: boolean;
 };

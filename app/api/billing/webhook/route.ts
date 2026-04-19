@@ -85,7 +85,10 @@ export async function POST(request: NextRequest) {
               event: "checkout_subscription_reconciled",
               stripeEventId: event.id,
               sessionId: session.id,
-              subscriptionId: subId
+              subscriptionId: subId,
+              sessionEmailNormalized: sessionEmail,
+              metadataPlanId: typeof session.metadata?.plan_id === "string" ? session.metadata.plan_id : null,
+              dbWrite: "retrieveAndReconcileSubscription_invoked_see_stripe_reconcile_logs"
             })
           );
         } else {
@@ -126,6 +129,8 @@ export async function POST(request: NextRequest) {
       event.type === "customer.subscription.deleted"
     ) {
       const subObj = event.data.object as Stripe.Subscription;
+      const customerId =
+        typeof subObj.customer === "string" ? subObj.customer : subObj.customer && "id" in subObj.customer ? subObj.customer.id : null;
       console.log(
         JSON.stringify({
           scope: "billing_webhook",
@@ -133,17 +138,21 @@ export async function POST(request: NextRequest) {
           stripeEventId: event.id,
           stripeEventType: event.type,
           subscriptionId: subObj.id,
-          subscriptionStatus: subObj.status
+          subscriptionStatus: subObj.status,
+          customerId,
+          note: "Re-fetching subscription with expanded prices — webhook payload price fields are often string ids only."
         })
       );
-      await reconcileStripeSubscription(stripe, subObj);
+      /** Always retrieve: `event.data.object` frequently omits expanded `items.data.price`, which breaks plan_id mapping. */
+      await retrieveAndReconcileSubscription(stripe, subObj.id);
       console.log(
         JSON.stringify({
           scope: "billing_webhook",
           event: "subscription_lifecycle_reconciled",
           stripeEventId: event.id,
           stripeEventType: event.type,
-          subscriptionId: subObj.id
+          subscriptionId: subObj.id,
+          dbWrite: "reconcileStripeSubscription_completed_or_noop"
         })
       );
     }
@@ -180,7 +189,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown Stripe webhook error.";
-    console.error("[billing-webhook] handler error", { id: event.id, type: event.type, detail });
+    console.error(
+      JSON.stringify({
+        scope: "billing_webhook",
+        event: "handler_error",
+        stripeEventId: event.id,
+        stripeEventType: event.type,
+        livemode: event.livemode,
+        detail,
+        stack: error instanceof Error ? error.stack : null
+      })
+    );
     return NextResponse.json({ error: detail }, { status: 500 });
   }
 }

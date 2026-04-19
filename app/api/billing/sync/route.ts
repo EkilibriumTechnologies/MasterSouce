@@ -49,7 +49,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "checkoutSessionId or email required." }, { status: 400 });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "sync failed";
-    console.error("[billing-sync] error", { detail });
+    console.error(
+      JSON.stringify({
+        scope: "billing_sync",
+        event: "handler_error",
+        detail,
+        stack: error instanceof Error ? error.stack : null
+      })
+    );
     return NextResponse.json({ error: detail }, { status: 500 });
   }
 }

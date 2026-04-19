@@ -28,15 +28,21 @@ export async function getEntitlementsForUser(
   let activePlanId: PlanId = "free";
   let stripeCustomerId: string | null = null;
   let stripeSubscriptionId: string | null = null;
+  let stripePriceId: string | null = null;
+  let subscriptionStatus: string | null = null;
   let billingPeriodStartIso: string | null = null;
   let billingPeriodEndIso: string | null = null;
 
+  let billingSubscriptionHit = false;
   if (isSupabaseConfigured() && emailForBilling) {
     const subscription = await getBillingSubscriptionByEmail(emailForBilling);
     if (subscription) {
+      billingSubscriptionHit = true;
       activePlanId = subscription.planId;
       stripeCustomerId = subscription.stripeCustomerId;
       stripeSubscriptionId = subscription.stripeSubscriptionId;
+      stripePriceId = subscription.stripePriceId;
+      subscriptionStatus = subscription.status;
       billingPeriodStartIso = subscription.currentPeriodStart;
       billingPeriodEndIso = subscription.currentPeriodEnd;
     }
@@ -78,6 +84,62 @@ export async function getEntitlementsForUser(
   const remainingTotal = remainingMonthly === null || creditPackBalance === null ? null : remainingMonthly + creditPackBalance;
   const canDownload = remainingTotal === null ? true : remainingTotal > 0;
 
+  /** Mirrors pricing UX: paid subscription missing from DB while quota is gone (typical paid-user failure). */
+  const requiresCheckout =
+    isSupabaseConfigured() &&
+    Boolean(emailForBilling) &&
+    !canDownload &&
+    (activePlanId === "free" || !billingSubscriptionHit);
+
+  let entitlementReason: string;
+  if (!isSupabaseConfigured()) {
+    entitlementReason = "supabase_not_configured_local_usage";
+  } else if (!emailForBilling) {
+    entitlementReason = "no_billing_email_context";
+  } else if (!billingSubscriptionHit) {
+    entitlementReason =
+      "no_active_trialing_subscription_in_db_or_period_ended_or_status_excluded_or_malformed_plan_row";
+  } else if (activePlanId === "free" && stripeSubscriptionId) {
+    entitlementReason = "subscription_row_present_but_plan_resolved_free_check_stripe_price_metadata_env";
+  } else if (!canDownload) {
+    entitlementReason = "monthly_and_credit_pack_quota_exhausted";
+  } else {
+    entitlementReason = "entitled_by_plan_or_unmetered_local";
+  }
+
+  const logEntitlements =
+    process.env.BILLING_DIAGNOSTIC_LOGS === "1" ||
+    !canDownload ||
+    (billingSubscriptionHit && activePlanId === "free" && Boolean(stripeSubscriptionId));
+  if (logEntitlements) {
+    console.log(
+      JSON.stringify({
+        scope: "entitlement_resolution",
+        event: "snapshot",
+        userId: user.id,
+        userEmail: user.email,
+        billingEmail: emailForBilling,
+        stripeCustomerId,
+        stripeSubscriptionId,
+        stripePriceId,
+        planId: activePlanId,
+        billingSubscriptionHit,
+        subscriptionStatus,
+        canDownload,
+        mastersUsedThisPeriod: usedThisMonth,
+        monthlyMastersLimit: monthlyCap,
+        remainingMonthlyMasters: remainingMonthly,
+        creditPackBalance,
+        remainingMasters: remainingTotal,
+        requiresCheckout,
+        reason: entitlementReason,
+        billingPeriodStartIso,
+        billingPeriodEndIso,
+        diagnosticMode: process.env.BILLING_DIAGNOSTIC_LOGS === "1"
+      })
+    );
+  }
+
   return {
     planId: activePlanId,
     canMaster: true,
@@ -92,6 +154,8 @@ export async function getEntitlementsForUser(
     quality: plan.quality,
     stripeCustomerId,
     stripeSubscriptionId,
+    stripePriceId,
+    subscriptionStatus,
     customerPortalEligible: plan.canUseCustomerPortal && Boolean(stripeCustomerId)
   };
 }

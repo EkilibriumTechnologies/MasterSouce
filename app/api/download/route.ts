@@ -9,6 +9,7 @@ import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
 import { incrementProductMetric } from "@/lib/product-metrics";
+import { warnIfUnlockEmailDiffersFromStripeCustomerEmail } from "@/lib/billing/unlock-vs-stripe-customer-email";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { FREE_MASTERS_PER_MONTH, consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
@@ -101,7 +102,42 @@ export async function GET(request: NextRequest) {
               const entitlements = await getEntitlementsForUser(user, {
                 normalizedEmail: masteredUnlock.normalizedEmail
               });
+              const compareUnlockToStripeCustomer =
+                !entitlements.canDownload || process.env.BILLING_DIAGNOSTIC_LOGS === "1";
+              if (compareUnlockToStripeCustomer) {
+                await warnIfUnlockEmailDiffersFromStripeCustomerEmail({
+                  unlockNormalizedEmail: masteredUnlock.normalizedEmail,
+                  stripeCustomerId: entitlements.stripeCustomerId,
+                  jobId: record.jobId,
+                  fileId: record.id
+                });
+              }
               if (!entitlements.canDownload) {
+                console.log(
+                  JSON.stringify({
+                    scope: "download_authorization",
+                    event: "denied_quota",
+                    userId: user.id,
+                    userEmail: user.email,
+                    unlockEmail: masteredUnlock.normalizedEmail,
+                    jobId: record.jobId,
+                    fileId: record.id,
+                    planId: entitlements.planId,
+                    subscriptionStatus: entitlements.subscriptionStatus,
+                    stripeCustomerId: entitlements.stripeCustomerId,
+                    stripeSubscriptionId: entitlements.stripeSubscriptionId,
+                    stripePriceId: entitlements.stripePriceId,
+                    mastersUsedThisPeriod: entitlements.mastersUsedThisPeriod,
+                    monthlyMastersLimit: entitlements.monthlyMastersLimit,
+                    remainingMasters: entitlements.remainingMasters,
+                    entitled: false,
+                    requiresCheckout:
+                      Boolean(masteredUnlock.normalizedEmail) &&
+                      !entitlements.canDownload &&
+                      (entitlements.planId === "free" || !entitlements.stripeSubscriptionId),
+                    reason: "getEntitlementsForUser_returned_canDownload_false"
+                  })
+                );
                 const res = NextResponse.json(noMastersRemainingPayload(entitlements.planId), { status: 403 });
                 attachSessionCookieIfNeeded(res, sessionPrep);
                 return res;
