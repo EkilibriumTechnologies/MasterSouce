@@ -1,7 +1,8 @@
 "use client";
 
-import { ChangeEvent, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { CompareSpectrum } from "@/components/audio-compare-spectrum";
 
 type AudioCompareProps = {
   originalPreviewUrl: string;
@@ -14,18 +15,38 @@ type AudioCompareProps = {
   afterCompare?: ReactNode;
 };
 
+function dynamicHintStyle(active: boolean): CSSProperties {
+  return {
+    margin: "0 0 6px",
+    fontSize: "0.7rem",
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: active ? "rgba(220, 228, 255, 0.88)" : "rgba(120, 136, 178, 0.5)",
+    opacity: active ? 1 : 0.72,
+    transition: "color 220ms ease, opacity 220ms ease",
+    fontWeight: 600,
+    minHeight: "1.15em"
+  };
+}
+
 export function AudioCompare({
   originalPreviewUrl,
   masteredPreviewUrl,
   originalLabel = "Original",
   originalSubLabel = "Your uploaded track",
   masteredLabel = "Mastered",
-  masteredSubLabel = "Enhanced by MasterSauce",
+  masteredSubLabel = "Balanced for streaming playback",
   afterCompare
 }: AudioCompareProps) {
   const originalRef = useRef<HTMLAudioElement>(null);
   const masteredRef = useRef<HTMLAudioElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const originalAnalyserRef = useRef<AnalyserNode | null>(null);
+  const masteredAnalyserRef = useRef<AnalyserNode | null>(null);
+  /** Tracks which preview URL pair the current MediaElementSource graph belongs to (Strict Mode safe). */
+  const wiredUrlPairRef = useRef<string | null>(null);
   const [activeSource, setActiveSource] = useState<"original" | "mastered">("original");
+  const activeSourceRef = useRef<"original" | "mastered">("original");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [originalDuration, setOriginalDuration] = useState(0);
@@ -35,11 +56,88 @@ export function AudioCompare({
     originalRef.current?.pause();
     masteredRef.current?.pause();
     setActiveSource("original");
+    activeSourceRef.current = "original";
     setIsPlaying(false);
     setCurrentTime(0);
     setOriginalDuration(0);
     setMasteredDuration(0);
   }, [originalPreviewUrl, masteredPreviewUrl]);
+
+  useLayoutEffect(() => {
+    activeSourceRef.current = activeSource;
+  }, [activeSource]);
+
+  /**
+   * Web Audio must not be wired in a mount-only `useEffect`: React Strict Mode runs that effect twice on the same
+   * `<audio>` DOM nodes; the second `createMediaElementSource` throws, the catch clears the context, and the
+   * elements stay bound to a closed graph so `play()` never advances. Wiring once from `playSource` (user gesture)
+   * avoids the double-invoke path entirely.
+   */
+  useEffect(() => {
+    return () => {
+      wiredUrlPairRef.current = null;
+      originalAnalyserRef.current = null;
+      masteredAnalyserRef.current = null;
+      const ctx = audioContextRef.current;
+      audioContextRef.current = null;
+      if (ctx && ctx.state !== "closed") void ctx.close();
+    };
+  }, [originalPreviewUrl, masteredPreviewUrl]);
+
+  function urlPairKey(): string {
+    return `${originalPreviewUrl}\n${masteredPreviewUrl}`;
+  }
+
+  function ensureWebAudioGraph(): void {
+    if (typeof window === "undefined") return;
+    if (!originalPreviewUrl || !masteredPreviewUrl) return;
+
+    const pair = urlPairKey();
+    const existing = audioContextRef.current;
+    if (wiredUrlPairRef.current === pair && existing && existing.state !== "closed") return;
+
+    const originalEl = originalRef.current;
+    const masteredEl = masteredRef.current;
+    if (!originalEl || !masteredEl) return;
+
+    const prev = audioContextRef.current;
+    if (prev && prev.state !== "closed") void prev.close();
+    audioContextRef.current = null;
+    originalAnalyserRef.current = null;
+    masteredAnalyserRef.current = null;
+    wiredUrlPairRef.current = null;
+
+    const AC =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+
+    const ctx = new AC({ latencyHint: "interactive" });
+    try {
+      const origSrc = ctx.createMediaElementSource(originalEl);
+      const mastSrc = ctx.createMediaElementSource(masteredEl);
+      const origAn = ctx.createAnalyser();
+      const mastAn = ctx.createAnalyser();
+      origAn.fftSize = 512;
+      mastAn.fftSize = 512;
+      origAn.smoothingTimeConstant = 0.52;
+      mastAn.smoothingTimeConstant = 0.36;
+      origSrc.connect(origAn);
+      origAn.connect(ctx.destination);
+      mastSrc.connect(mastAn);
+      mastAn.connect(ctx.destination);
+      audioContextRef.current = ctx;
+      originalAnalyserRef.current = origAn;
+      masteredAnalyserRef.current = mastAn;
+      wiredUrlPairRef.current = pair;
+    } catch {
+      wiredUrlPairRef.current = null;
+      originalAnalyserRef.current = null;
+      masteredAnalyserRef.current = null;
+      audioContextRef.current = null;
+      void ctx.close();
+    }
+  }
 
   function formatTime(seconds: number): string {
     if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -79,6 +177,7 @@ export function AudioCompare({
     syncTimeToBoth(nextTime);
     setCurrentTime(nextTime);
     setActiveSource(target);
+    activeSourceRef.current = target;
   }
 
   function seekWithSlider(event: ChangeEvent<HTMLInputElement>, target: "original" | "mastered") {
@@ -91,12 +190,25 @@ export function AudioCompare({
     const otherAudio = getAudio(target === "original" ? "mastered" : "original");
     if (!nextAudio) return;
 
+    ensureWebAudioGraph();
+
     otherAudio?.pause();
+    setActiveSource(target);
+    activeSourceRef.current = target;
+
+    const ac = audioContextRef.current;
+    if (ac?.state === "suspended") {
+      try {
+        await ac.resume();
+      } catch {
+        /* ignore */
+      }
+    }
+
     nextAudio.currentTime = Math.min(currentTime, getDuration(target) || currentTime);
 
     try {
       await nextAudio.play();
-      setActiveSource(target);
       setIsPlaying(true);
     } catch {
       setIsPlaying(false);
@@ -109,14 +221,40 @@ export function AudioCompare({
     setIsPlaying(false);
   }
 
+  const hintOriginal = "Your mix as uploaded";
+  const hintMastered = "More clarity, level, and punch";
+
   return (
-    <section style={panelStyle}>
-      <h3 style={headingStyle}>Compare Before & After</h3>
-      <p style={mutedText}>Preview your mastered track instantly - no master consumed</p>
-      <div style={gridStyle}>
-        <div style={activeSource === "original" ? masteredCardStyle : cardStyle}>
+    <section style={activeSource === "mastered" ? { ...panelStyle, ...panelMasteredGlowStyle } : panelStyle}>
+      <h3 style={headingStyle}>Hear the difference before you pay</h3>
+      <p style={mutedText}>
+        Flip between your upload and the master — unlimited playback while you decide. Nothing counts toward your plan until
+        you download the final file.
+      </p>
+      <div style={comparePlayerRegionStyle}>
+        <div style={gridStyle}>
+        <div
+          style={{
+            ...(activeSource === "original" ? masteredCardStyle : cardStyle),
+            ...cardTransitionStyle,
+            ...(activeSource === "original" ? cardActiveRingOriginalStyle : null)
+          }}
+        >
           <p style={labelStyle}>{originalLabel}</p>
           <p style={labelSubStyle}>{originalSubLabel}</p>
+          <p style={dynamicHintStyle(activeSource === "original")}>{hintOriginal}</p>
+          <div
+            style={{
+              ...spectrumShellStyle,
+              ...(activeSource === "original" ? spectrumShellActiveOriginalStyle : spectrumShellIdleStyle)
+            }}
+          >
+            <CompareSpectrum
+              analyserRef={originalAnalyserRef}
+              isActivePlaying={activeSource === "original" && isPlaying}
+              variant="original"
+            />
+          </div>
           <audio
             key={originalPreviewUrl}
             ref={originalRef}
@@ -125,27 +263,16 @@ export function AudioCompare({
             src={originalPreviewUrl}
             onLoadedMetadata={(event) => setOriginalDuration(event.currentTarget.duration || 0)}
             onTimeUpdate={(event) => {
-              if (activeSource !== "original") return;
+              if (activeSourceRef.current !== "original") return;
               setCurrentTime(event.currentTarget.currentTime || 0);
             }}
             onEnded={() => {
-              if (activeSource !== "original") return;
+              if (activeSourceRef.current !== "original") return;
               setIsPlaying(false);
               setCurrentTime(0);
               syncTimeToBoth(0);
             }}
           />
-          <div style={waveStyle}>
-            {Array.from({ length: 30 }).map((_, i) => (
-              <span
-                key={`o-${i}`}
-                style={{
-                  ...(activeSource === "original" ? masteredBarStyle : barStyle),
-                  height: `${8 + ((i * 7) % 34)}px`
-                }}
-              />
-            ))}
-          </div>
           <button
             type="button"
             style={
@@ -191,9 +318,28 @@ export function AudioCompare({
             />
           </div>
         </div>
-        <div style={activeSource === "mastered" ? masteredCardStyle : cardStyle}>
+        <div
+          style={{
+            ...(activeSource === "mastered" ? masteredCardStyle : cardStyle),
+            ...cardTransitionStyle,
+            ...(activeSource === "mastered" ? cardActiveRingMasteredStyle : null)
+          }}
+        >
           <p style={masteredLabelStyle}>{masteredLabel}</p>
           <p style={labelSubStyle}>{masteredSubLabel}</p>
+          <p style={dynamicHintStyle(activeSource === "mastered")}>{hintMastered}</p>
+          <div
+            style={{
+              ...spectrumShellStyle,
+              ...(activeSource === "mastered" ? spectrumShellActiveMasteredStyle : spectrumShellIdleStyle)
+            }}
+          >
+            <CompareSpectrum
+              analyserRef={masteredAnalyserRef}
+              isActivePlaying={activeSource === "mastered" && isPlaying}
+              variant="mastered"
+            />
+          </div>
           <audio
             key={masteredPreviewUrl}
             ref={masteredRef}
@@ -202,27 +348,16 @@ export function AudioCompare({
             src={masteredPreviewUrl}
             onLoadedMetadata={(event) => setMasteredDuration(event.currentTarget.duration || 0)}
             onTimeUpdate={(event) => {
-              if (activeSource !== "mastered") return;
+              if (activeSourceRef.current !== "mastered") return;
               setCurrentTime(event.currentTarget.currentTime || 0);
             }}
             onEnded={() => {
-              if (activeSource !== "mastered") return;
+              if (activeSourceRef.current !== "mastered") return;
               setIsPlaying(false);
               setCurrentTime(0);
               syncTimeToBoth(0);
             }}
           />
-          <div style={waveStyle}>
-            {Array.from({ length: 30 }).map((_, i) => (
-              <span
-                key={`m-${i}`}
-                style={{
-                  ...(activeSource === "mastered" ? masteredBarStyle : barStyle),
-                  height: `${12 + ((i * 9) % 38)}px`
-                }}
-              />
-            ))}
-          </div>
           <button
             type="button"
             style={
@@ -263,9 +398,10 @@ export function AudioCompare({
             />
           </div>
         </div>
+        </div>
       </div>
       {afterCompare ? <div style={afterCompareSlotStyle}>{afterCompare}</div> : null}
-      <p style={footNoteStyle}>Preview is completely free - enter email only to export the final master</p>
+      <p style={footNoteStyle}>A/B previews never touch your quota — we only ask for email when you export the final WAV.</p>
     </section>
   );
 }
@@ -291,6 +427,13 @@ const mutedText: React.CSSProperties = {
   textAlign: "center",
   fontSize: "0.98rem",
   lineHeight: 1.5
+};
+
+/** Keeps play/seek controls above DistroKid / export slot when shadows or subpixel layout visually overlap. */
+const comparePlayerRegionStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 2,
+  isolation: "isolate"
 };
 
 const gridStyle: React.CSSProperties = {
@@ -322,32 +465,58 @@ const masteredLabelStyle: React.CSSProperties = {
   fontWeight: 700
 };
 const labelSubStyle: React.CSSProperties = {
-  margin: "2px 0 10px",
+  margin: "2px 0 4px",
   fontSize: "0.85rem",
   color: "#91a1cc"
 };
+/** Avoid `display: none` — Chrome often stalls `<audio>` piped through Web Audio when the element is not rendered. */
 const hiddenAudioStyle: React.CSSProperties = {
-  display: "none"
+  position: "absolute",
+  width: "1px",
+  height: "1px",
+  padding: 0,
+  margin: "-1px",
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+  opacity: 0,
+  pointerEvents: "none"
 };
-const waveStyle: React.CSSProperties = {
-  height: "64px",
+const spectrumShellStyle: React.CSSProperties = {
   borderRadius: "10px",
-  background: "rgba(21, 30, 53, 0.7)",
-  border: "1px solid rgba(70, 84, 130, 0.3)",
-  display: "flex",
-  alignItems: "flex-end",
-  gap: "3px",
-  padding: "8px 10px",
-  overflow: "hidden"
+  background: "rgba(21, 30, 53, 0.55)",
+  border: "1px solid rgba(70, 84, 130, 0.28)",
+  padding: "5px 6px",
+  transition: "box-shadow 260ms ease, border-color 260ms ease, background 260ms ease"
 };
-const barStyle: React.CSSProperties = {
-  width: "4px",
-  borderRadius: "4px",
-  background: "rgba(166, 176, 207, 0.7)"
+const spectrumShellIdleStyle: React.CSSProperties = {
+  boxShadow: "none"
 };
-const masteredBarStyle: React.CSSProperties = {
-  ...barStyle,
-  background: "linear-gradient(to top, #815cff, #7283ff)"
+const spectrumShellActiveOriginalStyle: React.CSSProperties = {
+  borderColor: "rgba(130, 148, 210, 0.55)",
+  boxShadow: "0 0 0 1px rgba(130, 148, 210, 0.22), 0 10px 32px rgba(60, 78, 120, 0.28)",
+  background: "rgba(24, 34, 58, 0.72)"
+};
+const spectrumShellActiveMasteredStyle: React.CSSProperties = {
+  borderColor: "rgba(151, 116, 255, 0.52)",
+  boxShadow: "0 0 0 1px rgba(151, 116, 255, 0.3), 0 12px 36px rgba(94, 72, 188, 0.35)",
+  background: "rgba(34, 26, 58, 0.65)"
+};
+const cardTransitionStyle: React.CSSProperties = {
+  transition: "border-color 240ms ease, box-shadow 280ms ease, background 260ms ease, transform 240ms ease"
+};
+const cardActiveRingOriginalStyle: React.CSSProperties = {
+  boxShadow: "0 14px 36px rgba(52, 68, 115, 0.32)",
+  transform: "translateY(-1px)"
+};
+const cardActiveRingMasteredStyle: React.CSSProperties = {
+  boxShadow: "0 16px 42px rgba(88, 64, 168, 0.4)",
+  transform: "translateY(-1px)"
+};
+const panelMasteredGlowStyle: React.CSSProperties = {
+  borderColor: "rgba(124, 98, 210, 0.42)",
+  boxShadow: "0 18px 48px rgba(38, 24, 72, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04)"
 };
 const playButtonStyle: React.CSSProperties = {
   marginTop: "10px",
@@ -404,7 +573,9 @@ const masteredProgressSliderStyle: React.CSSProperties = {
   border: "1px solid rgba(136, 111, 221, 0.44)"
 };
 const afterCompareSlotStyle: React.CSSProperties = {
-  marginTop: "22px",
+  position: "relative",
+  zIndex: 1,
+  marginTop: "clamp(24px, 3.5vw, 36px)",
   marginBottom: "4px",
   width: "100%",
   display: "flex",

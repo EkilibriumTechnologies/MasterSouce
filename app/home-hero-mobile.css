@@ -1,0 +1,49 @@
+/* Homepage hero — viewports ≤639px only. Inline hero styles stay default from 640px (tablet+). */
+
+@media (max-width: 639px) {
+  .home-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 48px max(18px, calc(env(safe-area-inset-left, 0px) + 14px)) 44px
+      max(18px, calc(env(safe-area-inset-right, 0px) + 14px)) !important;
+    /* Replace single corner accent (0% 0%) with paired soft accents so the card reads centered */
+    background:
+      radial-gradient(880px 320px at 50% -30%, rgba(155, 111, 255, 0.34), rgba(155, 111, 255, 0) 62%),
+      radial-gradient(480px 380px at 14% 6%, rgba(46, 177, 255, 0.09), rgba(46, 177, 255, 0) 56%),
+      radial-gradient(480px 380px at 86% 6%, rgba(46, 177, 255, 0.09), rgba(46, 177, 255, 0) 56%),
+      linear-gradient(145deg, #121a32 0%, #0d1428 52%, #090f1f 100%) !important;
+  }
+
+  .home-hero > * {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .home-hero h1,
+  .home-hero > p {
+    text-align: center;
+  }
+
+  .home-hero-logo-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .home-hero-logo {
+    width: min(168px, 86vw) !important;
+    max-width: 100%;
+    height: auto !important;
+    display: block !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .home-hero .home-hero-stats {
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}

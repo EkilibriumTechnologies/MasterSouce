@@ -10,6 +10,7 @@ import { DownloadLimitModal } from "@/components/download-limit-modal";
 import { AdaptiveExportGate } from "@/components/adaptive-export-gate";
 import { EmailCaptureForm } from "@/components/email-capture-form";
 import { MasterReadyCallout } from "@/components/master-ready-callout";
+import { PostMasterReleaseCallout } from "@/components/post-master-release-callout";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
@@ -163,7 +164,7 @@ export function UploadForm() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MasterResponse | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState("Ready");
+  const [status, setStatus] = useState("Choose a file to begin.");
   const [preMasterAnalysis, setPreMasterAnalysis] = useState<PreMasterAnalysisResponse["analysis"] | null>(null);
   const [preMasterDebug, setPreMasterDebug] = useState<PreMasterAnalysisResponse["debug"] | null>(null);
   const [showAdaptivePlaceholder, setShowAdaptivePlaceholder] = useState(false);
@@ -234,12 +235,12 @@ export function UploadForm() {
       const pending = loadPendingAdaptiveExport();
       if (!pending) {
         setStatus(
-          "Checkout complete. Run a free customized preview, then use Export Final Adaptive Master with your billing email."
+          "Payment complete. Run a free adaptive preview if you have not yet, then open Export adaptive master and enter the same billing email you used at checkout."
         );
         return;
       }
 
-      setStatus("Verifying customized master export after checkout…");
+      setStatus("Verifying adaptive master export after checkout…");
       const maxAttempts = 8;
       const retryDelayMs = 1200;
 
@@ -286,7 +287,7 @@ export function UploadForm() {
               quota: pending.quota
             });
             setDownloadUrl(downloadUrl);
-            setStatus("Customized master export ready — download your final master below.");
+            setStatus("Adaptive master export ready — download below.");
             return;
           }
         }
@@ -298,7 +299,7 @@ export function UploadForm() {
       }
 
       setStatus(
-        "We could not verify your subscription yet (billing sync can take a moment). Open Export Final Adaptive Master, enter the same billing email, then use “Already paid? Re-check access” before trying checkout again."
+        "We could not verify your subscription yet — Stripe sync can take a moment. Open Export adaptive master, enter the same billing email you paid with, tap “Already paid? Re-check access,” then try checkout again only if it still fails."
       );
     })();
 
@@ -343,7 +344,7 @@ export function UploadForm() {
     setConfirmedContinueWithStandard(false);
     setResult(null);
     setDownloadUrl(null);
-    setStatus("Ready");
+    setStatus("Choose a file to begin.");
     if (!selected) {
       setFile(null);
       return;
@@ -378,7 +379,7 @@ export function UploadForm() {
       setAdaptiveIntent("");
       setConfirmedContinueWithStandard(false);
     }
-    setStatus("Uploading file...");
+    setStatus("Uploading your file…");
 
     try {
       const formData = new FormData();
@@ -388,7 +389,7 @@ export function UploadForm() {
 
       const response = await fetch("/api/master", { method: "POST", body: formData });
 
-      setStatus("Applying recommended master and generating previews…");
+      setStatus("Building your recommended master and previews…");
       const payload = await readResponsePayload(response);
 
       if (!response.ok) {
@@ -402,7 +403,7 @@ export function UploadForm() {
       setResult(masterPayload);
       setLastStandardResult(masterPayload);
       setAdaptiveModeActive(false);
-      setStatus("Recommended master preview ready. Enter email to unlock final master.");
+      setStatus("Recommended master is ready — A/B below, then add email only when you export.");
       return masterPayload;
     } catch (err) {
       const isLocalhost =
@@ -434,7 +435,7 @@ export function UploadForm() {
     });
     setAdaptiveProcessing(true);
     setError(null);
-    setStatus("Preparing your recommended baseline for customization…");
+    setStatus("Preparing your recommended baseline for adaptive…");
 
     try {
       let standard = lastStandardResult;
@@ -442,10 +443,10 @@ export function UploadForm() {
         standard = await runStandardMastering(true);
       }
       if (!standard) {
-        throw new Error("We need your recommended master first before customizing.");
+        throw new Error("Run the recommended master first, then try adaptive customization.");
       }
 
-      setStatus("Shaping your customized master with AI (free preview)…");
+      setStatus("Shaping your adaptive preview (free)…");
       const response = await fetch("/api/master-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -491,11 +492,11 @@ export function UploadForm() {
       setDownloadUrl(null);
       setAdaptiveModeActive(true);
       console.log("[ADAPTIVE_UI] adaptive preview completed", { jobId: adaptive.jobId });
-      setStatus("Customized preview ready — compare below, then export the final Adaptive master.");
+      setStatus("Adaptive preview ready — compare below, then export when you are happy.");
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Unexpected adaptive error.";
       setError(raw);
-      setStatus("Customized mastering couldn’t finish. Please try again.");
+      setStatus("Adaptive preview could not finish. Try again in a moment.");
     } finally {
       setAdaptiveProcessing(false);
     }
@@ -516,7 +517,7 @@ export function UploadForm() {
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
     setConfirmedContinueWithStandard(false);
-    setStatus("Analyzing track readiness...");
+    setStatus("Analyzing your mix (a few seconds)…");
     const requestId = latestAnalysisRequestIdRef.current + 1;
     latestAnalysisRequestIdRef.current = requestId;
 
@@ -559,7 +560,7 @@ export function UploadForm() {
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
       setLastStandardResult(null);
-      setStatus("Track analysis complete. Use the fast recommended master or customize your sound.");
+      setStatus("Analysis complete — run the recommended master or open adaptive customization.");
     } catch (err) {
       if (requestId !== latestAnalysisRequestIdRef.current) {
         if (process.env.NODE_ENV !== "production") {
@@ -663,17 +664,20 @@ export function UploadForm() {
         </div>
       ) : null}
       <div style={headingRowStyle}>
-        <p style={eyebrowStyle}>Mastering Workspace</p>
+        <p style={eyebrowStyle}>Mastering workspace</p>
         <p style={statusStyle}>{status}</p>
       </div>
-      <h2 style={titleStyle}>Upload & Master Your Track</h2>
-      <p style={textStyle}>Choose your settings and let our AI do the rest</p>
+      <h2 style={titleStyle}>Upload your mix</h2>
+      <p style={textStyle}>
+        Drop a WAV or MP3, set genre and loudness, then tap analyze. You will get a quick read of the file, a recommended
+        master you can A/B for free, and optional adaptive customization if you want to steer the tone further.
+      </p>
       <form onSubmit={handleSubmit} style={formStyle}>
         <div style={uploadZoneStyle}>
           <div style={uploadIconStyle}>⤴</div>
-          <p style={uploadTitleStyle}>Drop your track here</p>
-          <p style={uploadHintStyle}>or click to browse</p>
-          <p style={uploadHintSubStyle}>Supports WAV, MP3 up to {MAX_UPLOAD_FILE_SIZE_LABEL}</p>
+          <p style={uploadTitleStyle}>Drop your mix here</p>
+          <p style={uploadHintStyle}>or browse — your file stays in this session for processing only</p>
+          <p style={uploadHintSubStyle}>WAV or MP3, up to {MAX_UPLOAD_FILE_SIZE_LABEL}</p>
           <button type="button" style={browseButtonStyle} onClick={() => fileInputRef.current?.click()}>
             Browse Files
           </button>
@@ -737,14 +741,14 @@ export function UploadForm() {
 
         {(!preMasterAnalysisEnabled || !preMasterAnalysis) ? (
           <button type="submit" disabled={loading} style={buttonStyle}>
-            {loading ? "Analyzing..." : "Analyze Your Track"}
+            {loading ? "Analyzing…" : "Analyze mix"}
           </button>
         ) : null}
       </form>
 
       {preMasterAnalysisEnabled && preMasterAnalysis ? (
         <div style={analysisCardStyle}>
-          <h3 style={analysisHeadingStyle}>Track Analysis Complete</h3>
+          <h3 style={analysisHeadingStyle}>Mix analysis</h3>
           <p style={analysisVerdictStyle}>{preMasterAnalysis.verdict}</p>
           <div style={analysisMetricsGridStyle}>
             <div style={analysisMetricItemStyle}>
@@ -793,38 +797,38 @@ export function UploadForm() {
               aria-label={
                 loading
                   ? "Applying recommended master"
-                  : "Use recommended master — fast, automatic AI mastering"
+                  : "Use recommended master — fast preset mastering from your genre and loudness"
               }
               onClick={() => {
                 setConfirmedContinueWithStandard(true);
                 void runStandardMastering();
               }}
             >
-              {loading ? "Applying recommended master…" : "Use Recommended Master"}
+              {loading ? "Applying recommended master…" : "Use recommended master"}
             </button>
             <button
               type="button"
               disabled={adaptiveProcessing || loading}
               style={secondaryActionStyle}
-              aria-label="Refine with Song Architect — describe your direction for AI-guided shaping"
+              aria-label="Adaptive customization — add written direction, then run a free preview"
               onClick={() => {
                 debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
                 setShowAdaptivePlaceholder(true);
                 setError(null);
-                setStatus("Refine your sound — add optional direction, then run your free preview.");
+                setStatus("Adaptive customization — add a short note about the sound you want, then run the free preview.");
               }}
             >
-              Refine with Song Architect
+              Adaptive customization
             </button>
           </div>
           {showAdaptivePlaceholder ? (
             <div style={adaptivePlaceholderStyle}>
               <p style={{ margin: 0, color: "#c4d1f5" }}>
-                Preview your customized sound for free. Exporting the final customized master requires active Adaptive access
-                tied to your billing email.
+                Adaptive previews are free. Downloading the adaptive WAV needs Creator or Pro Studio (same billing email you
+                use at checkout).
               </p>
               <label htmlFor="adaptive-intent" style={adaptiveIntentLabelStyle}>
-                Describe how you want your song to sound
+                Notes for the adaptive engine (optional but helpful)
               </label>
               <textarea
                 id="adaptive-intent"
@@ -835,7 +839,7 @@ export function UploadForm() {
                 style={adaptiveIntentTextareaStyle}
               />
               <p style={adaptiveIntentHintStyle}>
-                Optional. Sent to the AI as <code style={ownerTestingCodeStyle}>user_intent</code>.
+                Short phrases work best — think “warmer vocal,” “tighter low end,” or “more club energy.”
               </p>
               <button
                 type="button"
@@ -844,26 +848,26 @@ export function UploadForm() {
                 aria-busy={adaptiveProcessing}
                 aria-label={
                   adaptiveProcessing
-                    ? "Shaping your customized master"
-                    : "Run free preview of your customized master"
+                    ? "Shaping adaptive preview"
+                    : "Run free adaptive preview"
                 }
                 onClick={() => {
                   void runAdaptiveMastering();
                 }}
               >
-                {adaptiveProcessing ? "Shaping your custom master…" : "Run free customization preview"}
+                {adaptiveProcessing ? "Shaping adaptive preview…" : "Run free adaptive preview"}
               </button>
               <p style={analysisContinueHintStyle}>
-                Need access to export customized masters only?{" "}
+                Need Creator or Pro for adaptive exports?{" "}
                 <a href={buildAdaptivePricingLink()} style={{ color: "#9eb7ff", textDecoration: "underline" }}>
-                  View Adaptive pricing
+                  See plans with adaptive
                 </a>
               </p>
             </div>
           ) : null}
           {confirmedContinueWithStandard ? (
             <p style={analysisContinueHintStyle}>
-              Applying your recommended master — fast, automatic AI settings from your genre and loudness choices.
+              Applying the recommended master using your genre and loudness picks — previews stay free.
             </p>
           ) : null}
         </div>
@@ -928,8 +932,8 @@ export function UploadForm() {
                 </p>
               ) : (
                 <p style={quotaUnknownLineStyle}>
-                  Plans include monthly masters and optional credit packs. Usage is tied to your verified email and enforced
-                  only on final mastered exports.
+                  Monthly plans include a set number of full exports; credit packs add more. We only count each finished
+                  download — previews never touch your quota.
                 </p>
               )
             }
@@ -939,85 +943,98 @@ export function UploadForm() {
             masteredPreviewUrl={result.previews.mastered}
             originalLabel="Original"
             originalSubLabel="Your uploaded track"
-            masteredLabel={adaptiveModeActive ? "Customized master" : "Mastered"}
+            masteredLabel={adaptiveModeActive ? "Adaptive master" : "Mastered"}
             masteredSubLabel={
-              adaptiveModeActive ? "AI-guided from your sound direction" : "Enhanced by MasterSauce"
+              adaptiveModeActive ? "Shaped from your written notes" : "Balanced for streaming playback"
             }
             afterCompare={
-              downloadUrl ? (
-                <div style={finalMasterExportDownloadWrapStyle}>
-                  <button
-                    type="button"
-                    disabled={finalMasterExportDownloading}
-                    aria-busy={finalMasterExportDownloading}
-                    aria-describedby={finalMasterExportDownloading ? "final-master-export-status" : undefined}
-                    aria-label={
-                      finalMasterExportDownloading
-                        ? "Preparing your master, please wait"
-                        : adaptiveModeActive
-                          ? "Download final adaptive master"
-                          : "Export your master"
-                    }
-                    style={{
-                      ...exportMasterPrimaryCtaStyle,
-                      ...(finalMasterExportDownloading ? downloadStyleProcessing : null),
-                      gap: "10px"
-                    }}
-                    onClick={() => {
-                      if (finalMasterExportDownloading) return;
-                      setFinalMasterExportInlineError(null);
-                      setFinalMasterExportDownloading(true);
-                      void downloadFinalMasterWithOptionalBypass(
-                        downloadUrl,
-                        resolveOwnerSessionToken(ownerTestingPanel)
-                      )
-                        .then(() => {
-                          setFinalMasterExportDownloading(false);
-                          setFinalMasterExportInlineError(null);
-                        })
-                        .catch((e) => {
-                          setFinalMasterExportDownloading(false);
-                          if (e instanceof Error && e.name === "DownloadLimitExceededError") {
-                            setError(null);
-                            const pid = result?.quota?.planId;
-                            setDownloadLimitPlanId(pid === "creator_monthly" || pid === "pro_studio_monthly" ? pid : "free");
-                            setDownloadLimitModalOpen(true);
-                            return;
-                          }
-                          setFinalMasterExportInlineError(
-                            "We couldn't prepare your master. Please try again."
-                          );
-                        });
-                    }}
-                  >
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: "100%",
+                  boxSizing: "border-box",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "20px"
+                }}
+              >
+                <PostMasterReleaseCallout />
+                {downloadUrl ? (
+                  <div style={finalMasterExportDownloadWrapStyle}>
+                    <button
+                      type="button"
+                      disabled={finalMasterExportDownloading}
+                      aria-busy={finalMasterExportDownloading}
+                      aria-describedby={finalMasterExportDownloading ? "final-master-export-status" : undefined}
+                      aria-label={
+                        finalMasterExportDownloading
+                          ? "Preparing your master, please wait"
+                          : adaptiveModeActive
+                            ? "Download adaptive master file"
+                            : "Download final master file"
+                      }
+                      style={{
+                        ...exportMasterPrimaryCtaStyle,
+                        ...(finalMasterExportDownloading ? downloadStyleProcessing : null),
+                        gap: "10px"
+                      }}
+                      onClick={() => {
+                        if (finalMasterExportDownloading) return;
+                        setFinalMasterExportInlineError(null);
+                        setFinalMasterExportDownloading(true);
+                        void downloadFinalMasterWithOptionalBypass(
+                          downloadUrl,
+                          resolveOwnerSessionToken(ownerTestingPanel)
+                        )
+                          .then(() => {
+                            setFinalMasterExportDownloading(false);
+                            setFinalMasterExportInlineError(null);
+                          })
+                          .catch((e) => {
+                            setFinalMasterExportDownloading(false);
+                            if (e instanceof Error && e.name === "DownloadLimitExceededError") {
+                              setError(null);
+                              const pid = result?.quota?.planId;
+                              setDownloadLimitPlanId(pid === "creator_monthly" || pid === "pro_studio_monthly" ? pid : "free");
+                              setDownloadLimitModalOpen(true);
+                              return;
+                            }
+                            setFinalMasterExportInlineError(
+                              "We couldn't prepare your master. Please try again."
+                            );
+                          });
+                      }}
+                    >
+                      {finalMasterExportDownloading ? (
+                        <>
+                          <span className={finalMasterExportDownloadCss.spinner} aria-hidden />
+                          <span>Preparing your master…</span>
+                        </>
+                      ) : adaptiveModeActive ? (
+                        "Download adaptive master"
+                      ) : (
+                        "Download final master"
+                      )}
+                    </button>
                     {finalMasterExportDownloading ? (
                       <>
-                        <span className={finalMasterExportDownloadCss.spinner} aria-hidden />
-                        <span>Preparing your master...</span>
+                        <div className={finalMasterExportDownloadCss.progressTrack} aria-hidden>
+                          <div className={finalMasterExportDownloadCss.progressFill} />
+                        </div>
+                        <p id="final-master-export-status" style={finalMasterExportHelperStyle}>
+                          Your master is being prepared. This can take a few seconds.
+                        </p>
                       </>
-                    ) : adaptiveModeActive ? (
-                      "Download Final Adaptive Master"
-                    ) : (
-                      "Export Your Master"
-                    )}
-                  </button>
-                  {finalMasterExportDownloading ? (
-                    <>
-                      <div className={finalMasterExportDownloadCss.progressTrack} aria-hidden>
-                        <div className={finalMasterExportDownloadCss.progressFill} />
-                      </div>
-                      <p id="final-master-export-status" style={finalMasterExportHelperStyle}>
-                        Your master is being prepared. This can take a few seconds.
+                    ) : null}
+                    {finalMasterExportInlineError && !finalMasterExportDownloading ? (
+                      <p role="alert" style={finalMasterExportInlineErrorStyle}>
+                        {finalMasterExportInlineError}
                       </p>
-                    </>
-                  ) : null}
-                  {finalMasterExportInlineError && !finalMasterExportDownloading ? (
-                    <p role="alert" style={finalMasterExportInlineErrorStyle}>
-                      {finalMasterExportInlineError}
-                    </p>
-                  ) : null}
-                </div>
-              ) : undefined
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             }
           />
           {!downloadUrl ? (

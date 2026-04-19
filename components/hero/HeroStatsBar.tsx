@@ -5,13 +5,14 @@ import { useEffect, useMemo, useState } from "react";
 import type { HomeProductMetrics } from "@/lib/product-metrics";
 
 const METRICS_LABELS = {
-  downloads: "Tracks mastered & downloaded",
-  previews: "Masters previewed before release",
-  prompts: "Song ideas built with Song Architect"
+  downloads: "Final masters exported",
+  previews: "A/B previews before committing",
+  prompts: "Song Architect blueprints generated"
 };
 
 type HeroStatsBarProps = {
   metrics: HomeProductMetrics;
+  className?: string;
 };
 
 function formatCount(n: number): string {
@@ -29,7 +30,7 @@ function easeOutCubic(t: number): number {
   return 1 - u * u * u;
 }
 
-export function HeroStatsBar({ metrics }: HeroStatsBarProps) {
+export function HeroStatsBar({ metrics, className }: HeroStatsBarProps) {
   const targets = useMemo(
     () => ({
       downloads: metrics.downloads,
@@ -123,7 +124,7 @@ export function HeroStatsBar({ metrics }: HeroStatsBarProps) {
   };
 
   return (
-    <div style={wrapStyle} aria-label="Product usage highlights">
+    <div style={wrapStyle} className={className} aria-label="Product usage highlights">
       {columns.map((col, index) => {
         const cellPad: CSSProperties = narrow
           ? { padding: "12px 6px", minWidth: 0, textAlign: "center" as const }

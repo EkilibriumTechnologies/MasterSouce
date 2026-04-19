@@ -56,7 +56,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
     event.preventDefault();
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) {
-      setError("Enter the billing email you used (or will use) at checkout.");
+      setError("Enter the billing email from Stripe checkout (the one on the receipt).");
       return;
     }
     setLoading(true);
@@ -82,7 +82,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
         console.log("[ADAPTIVE_UI] export gate: requires checkout", { reason: payload.reason });
         setNeedsCheckoutPath(true);
         setInfo(
-          "No active Adaptive subscription found for this billing email yet. If you already completed payment, use the same billing email and check again — billing sync can take a moment after checkout. You can continue to checkout below, or re-check access without paying again."
+          "We still do not see an active paid plan on that billing email. If checkout just finished, wait a few seconds and tap “Already paid? Re-check access.” If you have not subscribed yet, continue to checkout — you will not be charged twice for the same plan."
         );
         return;
       }
@@ -98,7 +98,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
   async function handleRecheckAccess() {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) {
-      setError("Enter the billing email you used at checkout.");
+      setError("Enter the billing email shown on your Stripe receipt.");
       return;
     }
     setRecheckLoading(true);
@@ -133,7 +133,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
       if (payload?.requiresCheckout) {
         setNeedsCheckoutPath(true);
         setInfo(
-          "Still no active Adaptive subscription for this email. If you just paid, wait a few seconds and try “Re-check access” again, or continue to checkout if you have not subscribed yet."
+          "Still no active plan on that email. If payment just cleared, wait a few seconds and tap “Already paid? Re-check access.” Otherwise continue to checkout to activate Creator or Pro Studio."
         );
         return;
       }
@@ -149,7 +149,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
   async function handleContinueToCheckout() {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) {
-      setError("Enter your billing email first so we can match it after checkout.");
+      setError("Add your billing email first so we can match it after checkout.");
       return;
     }
     setCheckoutLoading(true);
@@ -206,15 +206,15 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
   return (
     <section style={panelStyle}>
       <div style={iconStyle}>⬇</div>
-      <h3 style={headingStyle}>Export Final Adaptive Master</h3>
+      <h3 style={headingStyle}>Export adaptive master</h3>
       <p style={mutedText}>
-        <strong style={{ color: "#e2e8ff" }}>Adaptive Preview is free.</strong>
+        <strong style={{ color: "#e2e8ff" }}>Adaptive previews are already free.</strong>
         <br />
-        Enter your billing email to export the final master.
+        Enter the billing email from your subscription so we can unlock the paid WAV export.
       </p>
       <form onSubmit={handleSubmit} style={formStyle}>
         <label htmlFor="adaptive-billing-email" style={labelStyle}>
-          Billing email
+          Billing email (matches Stripe)
         </label>
         <input
           id="adaptive-billing-email"
@@ -225,19 +225,18 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
             setNeedsCheckoutPath(false);
             setInfo(null);
           }}
-          placeholder="same email as Stripe checkout"
+          placeholder="name@email-used-at-checkout.com"
           required
           style={inputStyle}
           autoComplete="email"
         />
         <button type="submit" disabled={busy} style={buttonStyle}>
-          {loading ? "Checking…" : "Check access & unlock export"}
+          {loading ? "Checking…" : "Verify billing email & unlock export"}
         </button>
       </form>
       {!needsCheckoutPath ? (
         <p style={hintStyle}>
-          We verify your subscription from billing records — no login required. If you already subscribe, use the same billing
-          email and tap check access.
+          No separate login — we match the email on your Stripe subscription. Use the exact receipt email, then tap verify.
         </p>
       ) : null}
       {needsCheckoutPath ? (
@@ -249,7 +248,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
             style={buttonStyle}
             onClick={() => void handleContinueToCheckout()}
           >
-            {checkoutLoading ? "Starting checkout…" : "Continue to checkout for Adaptive access"}
+            {checkoutLoading ? "Starting checkout…" : "Continue to checkout for adaptive access"}
           </button>
           <button
             type="button"
@@ -261,7 +260,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
           </button>
         </div>
       ) : null}
-      <p style={privacyNoteStyle}>We use this email only to match your Stripe subscription and unlock export.</p>
+      <p style={privacyNoteStyle}>Used only to confirm your plan with Stripe — never for marketing.</p>
       {error ? <p style={errorStyle}>{error}</p> : null}
     </section>
   );

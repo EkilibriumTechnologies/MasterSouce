@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "./home-hero-mobile.css";
 import Image from "next/image";
 import Link from "next/link";
 import { HeroStatsBar } from "@/components/hero/HeroStatsBar";
@@ -85,33 +86,34 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <p style={successBodyStyle}>{checkoutSuccessMessage}</p>
         </section>
       ) : null}
-      <section style={heroStyle}>
-        <div style={heroLogoWrap}>
+      <section className="home-hero" style={heroStyle}>
+        <div className="home-hero-logo-wrap" style={heroLogoWrap}>
           <Image
             src="/mastersauce-logo.png"
             alt="MasterSauce logo"
             width={466}
             height={381}
             priority
-            sizes="(max-width: 640px) min(180px, 90vw), (max-width: 1024px) 260px, 320px"
+            className="home-hero-logo"
+            sizes="(max-width: 639px) min(168px, 86vw), (max-width: 1024px) 260px, 320px"
             style={heroLogoImgStyle}
           />
         </div>
-        <h1 style={h1Style}>Professional Mastering in Minutes, Not Hours</h1>
+        <h1 style={h1Style}>Release-ready sound from your mix — in minutes</h1>
         <p style={subStyle}>
-          Smart automatic mastering built for independent musicians, bedroom producers, and AI music creators. Upload your
-          track, preview instantly, export the final master.
+          MasterSauce balances clarity and loudness for streaming, then lets you A/B the result before you commit. Upload,
+          analyze once, preview as long as you like — export only when you are ready.
         </p>
         <div style={heroCtaRow}>
           <a href="#master" style={ctaPrimaryStyle}>
-            Start Mastering
+            Start mastering
           </a>
         </div>
-        <HeroStatsBar metrics={homeProductMetrics} />
+        <HeroStatsBar metrics={homeProductMetrics} className="home-hero-stats" />
         <div style={pillRowStyle}>
-          <span style={pillStyle}>⚡ Fast Turnaround</span>
-          <span style={pillStyle}>🎧 Before/After Preview</span>
-          <span style={pillStyle}>✉️ Email Only for Final Master</span>
+          <span style={pillStyle}>⚡ Minutes, not studio turnaround</span>
+          <span style={pillStyle}>🎧 Hear the lift before you export</span>
+          <span style={pillStyle}>✉️ Email unlocks the final file</span>
         </div>
       </section>
 
@@ -120,14 +122,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           What is MasterSauce?
         </h2>
         <p style={proseCenterStyle}>
-          MasterSauce is an automatic mastering tool in the browser. You upload a mix, choose the genre and loudness that
-          match your track, and hear a real before/after preview before you commit. When it sounds right, you unlock the
-          full-quality master and keep moving — whether you are polishing a single, a sync pitch, or the next release on
-          your own timeline.
+          MasterSauce is in-browser mastering tuned for loudness and clarity on Spotify, Apple Music, and similar platforms.
+          You upload a mix, set genre and loudness, run a short analysis, then listen to a real A/B preview. When the tone
+          feels right, you export the full-quality WAV — ideal for singles, demos, sync pitches, or late-night finish lines.
         </p>
         <p style={proseCenterStyle}>
-          It is built for modern workflows: fast feedback, clear limits, and no pressure to become a mastering engineer
-          just to finish a song. For streaming readiness and release prep, see our{" "}
+          The workflow stays simple: no plugin rabbit holes, no guesswork about whether you are “done.” For more on
+          streaming targets and release prep, see our{" "}
           <Link href="/learn" style={learnHintLinkStyle}>
             short guides
           </Link>
@@ -150,27 +151,27 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
       <section id="how-it-works" style={sectionStyle}>
         <h2 style={sectionTitle}>How It Works</h2>
-        <p style={sectionSubTitle}>Professional mastering in four simple steps</p>
+        <p style={sectionSubTitle}>Analyze once, preview freely, export when it locks in</p>
         <div style={stepsGridStyle}>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⤴</div>
-            <h3 style={stepTitleStyle}>Upload Your Track</h3>
-            <p style={stepTextStyle}>Drag and drop your WAV or MP3 file. Simple and fast.</p>
+            <h3 style={stepTitleStyle}>Upload your mix</h3>
+            <p style={stepTextStyle}>WAV or MP3, drag-and-drop or browse — processed securely, not shared as a library.</p>
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⚙</div>
-            <h3 style={stepTitleStyle}>Choose Settings</h3>
-            <p style={stepTextStyle}>Pick your genre and loudness. Our AI handles the rest.</p>
+            <h3 style={stepTitleStyle}>Set genre & loudness</h3>
+            <p style={stepTextStyle}>Choose the preset that matches the record — the engine adapts around your choices.</p>
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>🎧</div>
-            <h3 style={stepTitleStyle}>Preview Instantly</h3>
-            <p style={stepTextStyle}>Compare before exporting. No surprises.</p>
+            <h3 style={stepTitleStyle}>Analyze, then A/B</h3>
+            <p style={stepTextStyle}>A quick read of your file, then unlimited before/after playback while you decide.</p>
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⬇</div>
-            <h3 style={stepTitleStyle}>Export & Go</h3>
-            <p style={stepTextStyle}>Enter your email and get your mastered track immediately.</p>
+            <h3 style={stepTitleStyle}>Export the final</h3>
+            <p style={stepTextStyle}>Unlock the full-resolution master with email — only that export touches your quota.</p>
           </div>
         </div>
       </section>
@@ -234,9 +235,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
         <div style={infoCardStyle}>
           <h2 style={infoTitleStyle}>Fair by design</h2>
-          <p style={mutedStyle}>Master and preview as much as you want.</p>
+          <p style={mutedStyle}>Preview and iterate without watching the meter.</p>
           <p style={mutedSecondaryStyle}>
-            Only final mastered exports count toward your allowance—2 per month on Free, more on paid plans.
+            Monthly limits apply to finished WAV exports only; paid tiers add adaptive customization and higher bit depth.
           </p>
         </div>
       </section>
@@ -245,7 +246,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <h2 id="faq-heading" style={sectionTitle}>
           Common questions
         </h2>
-        <p style={sectionSubTitle}>Straight answers about how MasterSauce fits your workflow.</p>
+        <p style={sectionSubTitle}>How uploads, previews, and billing work in practice.</p>
         <dl style={faqListStyle}>
           {HOME_FAQ_ITEMS.map((item) => (
             <div key={item.question} style={faqItemStyle}>
@@ -263,7 +264,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div style={footerLogoStyle}>♫</div>
           <div>
             <p style={footerNameStyle}>MasterSauce</p>
-            <p style={footerTaglineStyle}>Smart mastering for creators</p>
+            <p style={footerTaglineStyle}>Release-ready mastering for creators</p>
           </div>
         </div>
         <div style={footerLinksStyle}>

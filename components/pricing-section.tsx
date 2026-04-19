@@ -25,63 +25,63 @@ const PLAN_COPY: Record<
   }
 > = {
   free: {
-    positioning: "Try MasterSauce without a credit card.",
+    positioning: "Hear the master before you spend — no card on file.",
     features: (plan) => [
-      `${plan.monthlyMastersLimit} final masters / month`,
-      "Unlimited A/B previews",
+      `${plan.monthlyMastersLimit} full WAV exports / month`,
+      "Unlimited A/B previews (never counted)",
       "All 7 genre presets",
       "WAV 16-bit",
       "No watermark",
       formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
     ],
-    ctaLabel: "Start Free",
-    ctaHint: "No credit card required."
+    ctaLabel: "Start free",
+    ctaHint: "No card on file. Upgrade from checkout when you need more finals or adaptive exports."
   },
   creator_monthly: {
-    positioning: "For indie artists releasing consistently.",
+    positioning: "Weekly releases with room to iterate.",
     features: (plan) => [
-      `${plan.monthlyMastersLimit} final masters / month`,
-      "Unlimited A/B previews",
-      "Prompt-Based Adaptive Mastering",
+      `${plan.monthlyMastersLimit} full WAV exports / month`,
+      "Unlimited A/B previews (never counted)",
+      "Adaptive customization + exports",
       "All 7 genre presets",
       "WAV 24-bit",
       formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
     ],
     ctaLabel: "Choose Creator",
-    valueCallout: "Best value for frequent releases",
-    ctaHint: "Upgrade when your release pace picks up."
+    valueCallout: "Sweet spot for steady output",
+    ctaHint: "Adds adaptive steering plus higher bit depth."
   },
   pro_studio_monthly: {
-    positioning: "For producers, teams, and small labels with volume.",
+    positioning: "Studios, small labels, or anyone mastering in batches.",
     features: (plan) => [
-      `${plan.monthlyMastersLimit} final masters / month`,
-      "Unlimited A/B previews",
-      "Prompt-Based Adaptive Mastering",
+      `${plan.monthlyMastersLimit} full WAV exports / month`,
+      "Unlimited A/B previews (never counted)",
+      "Adaptive customization + exports",
       "WAV 32-bit float",
       "Priority processing",
       formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
     ],
     ctaLabel: "Choose Pro Studio",
-    ctaHint: "Built for higher monthly volume."
+    ctaHint: "Highest monthly cap plus float WAV."
   }
 };
 
 const PRICING_FAQ_ITEMS = [
   {
-    question: "What counts toward my plan?",
-    answer: "Only final mastered exports count against your monthly allowance."
+    question: "What actually uses my monthly allowance?",
+    answer: "Each finished, full-quality WAV download. Generating previews, switching genres, or A/B listening does not."
   },
   {
     question: "Do previews use my quota?",
-    answer: "No. You can run unlimited A/B previews without using any monthly masters."
+    answer: "No. Preview as many masters as you like — the counter moves only when you export a final file."
   },
   {
-    question: "Can I buy extra credits anytime?",
-    answer: "Yes. Credit Packs are one-time and add extra masters whenever you need them."
+    question: "Can I buy extra exports mid-month?",
+    answer: "Yes. One-time credit packs add five more finals and stack after your plan allowance."
   },
   {
     question: "Can I cancel anytime?",
-    answer: "Yes. You can manage or cancel your subscription anytime from billing."
+    answer: "Yes. Manage or cancel inside the Stripe customer portal whenever you need."
   }
 ] as const;
 
@@ -291,11 +291,14 @@ export function PricingSection() {
     <section id="pricing" style={sectionStyle} aria-labelledby="pricing-title">
       <p style={eyebrowStyle}>Pricing</p>
       <h2 id="pricing-title" style={titleStyle}>
-        Master like a studio. Pay like an indie.
+        Clear plans. Pay for finished exports.
       </h2>
-      <p style={subtitleStyle}>Unlimited previews. Only final exports count. Choose the plan that matches your release pace.</p>
+      <p style={subtitleStyle}>
+        Free tier proves the sound with unlimited A/B previews. Paid tiers add higher export caps, adaptive customization,
+        and deeper WAV formats — you are never charged for listening.
+      </p>
       <div style={reassuranceBarStyle} aria-label="Pricing fairness highlights">
-        <span style={reassuranceItemStyle}>Unlimited A/B previews</span>
+        <span style={reassuranceItemStyle}>Listen all you want</span>
         <span style={reassuranceDotStyle} aria-hidden="true">
           •
         </span>
@@ -303,14 +306,14 @@ export function PricingSection() {
         <span style={reassuranceDotStyle} aria-hidden="true">
           •
         </span>
-        <span style={reassuranceItemStyle}>Only final exports count</span>
+        <span style={reassuranceItemStyle}>Exports = finished WAVs only</span>
       </div>
       {adaptiveIntent ? (
         <div style={adaptiveIntentBannerStyle}>
-          <p style={adaptiveIntentTitleStyle}>Unlock Adaptive AI Mastering</p>
+          <p style={adaptiveIntentTitleStyle}>Finish adaptive checkout</p>
           <p style={adaptiveIntentBodyStyle}>
-            Use Recommended Master for the fast, automatic AI path. Refine My Sound adds premium track analysis plus your own
-            sound direction prompt.
+            Recommended masters stay on every plan. Creator and Pro Studio add adaptive customization — write a short note,
+            preview free, then export with the billing email from Stripe.
           </p>
         </div>
       ) : null}
@@ -356,7 +359,7 @@ export function PricingSection() {
                   style={plan.highlighted ? ctaUpgradeStyle : ctaPaidSecondaryStyle}
                   onClick={() => openCheckoutModal({ kind: "subscription", planId: plan.id })}
                 >
-                  {adaptiveIntent ? "Unlock Adaptive AI Mastering" : planCopy.ctaLabel}
+                  {adaptiveIntent ? "Continue to checkout" : planCopy.ctaLabel}
                 </button>
               )}
               {planCopy.ctaHint ? <p style={ctaHintStyle}>{planCopy.ctaHint}</p> : null}
@@ -365,11 +368,11 @@ export function PricingSection() {
         })}
       </div>
       <div style={creditPackStyle}>
-        <p style={creditPackEyebrowStyle}>Need extra masters this month?</p>
-        <p style={creditPackTitleStyle}>Credit Pack - $4 one-time</p>
-        <p style={creditPackBodyStyle}>Adds 5 extra masters. Your monthly plan is always consumed first.</p>
+        <p style={creditPackEyebrowStyle}>Need more finals this month?</p>
+        <p style={creditPackTitleStyle}>Credit pack — $4 one-time</p>
+        <p style={creditPackBodyStyle}>Adds five more full WAV exports. We always use your plan allowance before touching credits.</p>
         <button type="button" style={creditPackButtonStyle} onClick={() => openCheckoutModal({ kind: "credit_pack" })}>
-          Get Credit Pack
+          Add credit pack
         </button>
       </div>
       <div style={pricingFaqStyle}>
@@ -381,13 +384,14 @@ export function PricingSection() {
         ))}
       </div>
       <div style={adaptiveCopyCardStyle}>
-        <p style={adaptiveCopyTitleStyle}>Adaptive AI Mastering</p>
+        <p style={adaptiveCopyTitleStyle}>Adaptive customization</p>
         <p style={adaptiveCopyBodyStyle}>
-          Describe how you want to sound — adaptive AI shapes the master from deep track analysis plus your direction.
+          Add a short written brief and the engine reshapes loudness, tone, and punch around your mix — still previewed with
+          the same A/B player before you spend an export.
         </p>
         <p style={adaptiveCopySubtleStyle}>
-          Use Recommended Master stays included as the fast, automatic baseline with AI-chosen settings for your genre and
-          loudness.
+          Recommended masters remain the fast default on every plan; adaptive is an optional layer when you want hands-on
+          direction without building a plugin chain.
         </p>
       </div>
       {modalOpen ? (
@@ -407,17 +411,18 @@ export function PricingSection() {
             </h3>
             <p id="checkout-modal-description" style={modalBodyStyle}>
               {modalMode === "manage" ? (
-                "Enter the billing email linked to your subscription."
+                "Type the email printed on your Stripe invoices so we can pull up the right subscription."
               ) : (
                 <>
-                  Enter the billing email you want linked to this purchase.
+                  Use the inbox you want on Stripe receipts — it becomes the key we match for adaptive exports and billing
+                  support.
                   <br />
-                  We&apos;ll use it for your plan or credit pack and send you securely to Stripe checkout next.
+                  Next step sends you straight into secure Stripe checkout.
                 </>
               )}
             </p>
             <label htmlFor="billing-email" style={modalLabelStyle}>
-              Billing email
+              Billing email (Stripe receipt)
             </label>
             <input
               id="billing-email"
@@ -452,8 +457,10 @@ export function PricingSection() {
             ) : (
               <p id="checkout-helper" style={helperTextStyle}>
                 {modalMode === "manage"
-                  ? "We'll use this email to find your active subscription."
-                  : "Your purchase will be linked to this email."}
+                  ? "Must match the email on your active subscription."
+                  : adaptiveIntent
+                    ? "Use the same email you will enter in Export adaptive master after checkout."
+                    : "Shown on Stripe receipts — also how we reference your subscription if you need help."}
               </p>
             )}
             {checkoutError ? (

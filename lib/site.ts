@@ -25,10 +25,10 @@ export function absoluteUrl(path: string): string {
 
 export const SITE_NAME = "MasterSauce";
 
-export const SITE_TAGLINE = "Automatic mastering for modern music creators";
+export const SITE_TAGLINE = "Release-ready mastering for modern creators";
 
 /** Default meta description — also used in JSON-LD where a short summary is needed. */
 export const SITE_DESCRIPTION =
-  "Upload your track, preview a master in seconds, and download the result. Built for independent artists, bedroom producers, and AI music creators who want a polished sound without a complicated workflow.";
+  "Turn your mix into a streaming-ready master: quick analysis, unlimited A/B previews, then export when you are satisfied. Built for independent artists, bedroom producers, and AI-assisted music.";
 
 export const LEGAL_CONTACT_EMAIL = "consulting@ekilibriumtechnologies.com";

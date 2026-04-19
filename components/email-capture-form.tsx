@@ -50,8 +50,11 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
   return (
     <section style={panelStyle}>
       <div style={iconStyle}>⬇</div>
-      <h3 style={headingStyle}>Ready to Export?</h3>
-      <p style={mutedText}>Enter your email to unlock your mastered track. We&apos;ll enable final master export instantly.</p>
+      <h3 style={headingStyle}>Export your final master</h3>
+      <p style={mutedText}>
+        Enter the email you want tied to this export. It unlocks the download link in this browser session and keeps your
+        monthly quota accurate — not a mailing list signup.
+      </p>
       <form onSubmit={handleSubmit} style={formStyle}>
         <input
           type="email"
@@ -62,10 +65,10 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
           style={inputStyle}
         />
         <button type="submit" disabled={loading} style={buttonStyle}>
-          {loading ? "Unlocking..." : "Unlock Final Master"}
+          {loading ? "Unlocking download…" : "Unlock download"}
         </button>
       </form>
-      <p style={privacyNoteStyle}>Your email is only used to unlock and deliver your final master. We respect your privacy.</p>
+      <p style={privacyNoteStyle}>No marketing spam — this step exists so exports stay tied to a real inbox you control.</p>
       {error ? <p style={errorStyle}>{error}</p> : null}
     </section>
   );
