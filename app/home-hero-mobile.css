@@ -6,8 +6,11 @@
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 48px max(18px, calc(env(safe-area-inset-left, 0px) + 14px)) 44px
-      max(18px, calc(env(safe-area-inset-right, 0px) + 14px)) !important;
+    /* top / right / bottom / left — must pair each side with its own safe-area inset */
+    padding-top: 48px !important;
+    padding-right: max(18px, calc(env(safe-area-inset-right, 0px) + 14px)) !important;
+    padding-bottom: 44px !important;
+    padding-left: max(18px, calc(env(safe-area-inset-left, 0px) + 14px)) !important;
     /* Replace single corner accent (0% 0%) with paired soft accents so the card reads centered */
     background:
       radial-gradient(880px 320px at 50% -30%, rgba(155, 111, 255, 0.34), rgba(155, 111, 255, 0) 62%),
