@@ -6,6 +6,7 @@ import { HeroStatsBar } from "@/components/hero/HeroStatsBar";
 import { PricingSection } from "@/components/pricing-section";
 import { JsonLd } from "@/components/seo/json-ld";
 import { UploadForm } from "@/components/upload-form";
+import { TestimonialsSection } from "@/components/testimonials-section";
 import { getHomeProductMetrics } from "@/lib/product-metrics";
 import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
 import { MobileMasterBanner } from "@/components/mobile-master-banner";
@@ -217,6 +218,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </div>
       </section>
+
+      <TestimonialsSection />
 
       <section id="faq" style={sectionStyle} aria-labelledby="faq-heading">
         <h2 id="faq-heading" style={sectionTitle}>
