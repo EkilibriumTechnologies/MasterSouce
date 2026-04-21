@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { HeroStatsBar } from "@/components/hero/HeroStatsBar";
 import { PricingSection } from "@/components/pricing-section";
-import { JsonLd } from "@/components/seo/json-ld";
+import { JsonLdClient } from "@/components/seo/JsonLdClient";
 import { UploadForm } from "@/components/upload-form";
 import { TestimonialsSection } from "@/components/testimonials-section";
 import { getHomeProductMetrics } from "@/lib/product-metrics";
@@ -63,7 +63,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <>
-      <JsonLd data={getHomePageJsonLdGraph()} />
+      <JsonLdClient
+        data={{
+          "@context": "https://schema.org",
+          "@graph": getHomePageJsonLdGraph()
+        }}
+      />
       <main style={mainStyle}>
       <nav aria-label="Primary" style={topNavStyle}>
         <div style={topNavBrandWrap}>
@@ -141,7 +146,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </a>
         </div>
         <HeroStatsBar metrics={homeProductMetrics} className="home-hero-stats" />
-        <style>{`
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
           .home-hero-stats {
             padding: 20px 18px !important;
           }
@@ -150,7 +157,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           }
           .home-hero-stats > div > p:first-child { font-size: 2rem !important; font-weight: 700 !important; }
           .home-hero-stats > div > p:last-child { font-size: 0.85rem !important; letter-spacing: normal !important; text-transform: none !important; }
-        `}</style>
+        `
+          }}
+        />
 
         <div style={pillRowStyle}>
           <span style={pillStyle}>⚡ Minutes, not studio turnaround</span>
