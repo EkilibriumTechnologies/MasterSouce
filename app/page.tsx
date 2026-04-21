@@ -8,6 +8,7 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { UploadForm } from "@/components/upload-form";
 import { getHomeProductMetrics } from "@/lib/product-metrics";
 import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
+import { MobileMasterBanner } from "@/components/mobile-master-banner";
 import { getHomePageJsonLdGraph } from "@/lib/seo/home-json-ld";
 import { absoluteUrl, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import { SOCIAL_PREVIEW_ALT, SOCIAL_PREVIEW_SIZE } from "@/lib/og/social-preview";
@@ -187,6 +188,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </p>
       </section>
 
+      <MobileMasterBanner />
       <UploadForm />
 
       <section id="how-it-works" style={sectionStyle}>
