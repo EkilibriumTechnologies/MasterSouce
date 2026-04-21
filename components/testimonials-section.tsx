@@ -119,8 +119,11 @@ export function TestimonialsSection() {
 }
 
 const sectionStyle: React.CSSProperties = {
-  padding: "48px 24px",
-  textAlign: "center"
+  padding: "48px clamp(16px, 5vw, 48px)",
+  textAlign: "center",
+  overflowX: "hidden",
+  width: "100%",
+  boxSizing: "border-box"
 };
 const titleStyle: React.CSSProperties = {
   fontSize: "clamp(1.5rem, 2.5vw, 2rem)",
@@ -135,10 +138,12 @@ const subtitleStyle: React.CSSProperties = {
 };
 const gridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 90vw), 1fr))",
   gap: "16px",
   maxWidth: "960px",
-  margin: "0 auto"
+  margin: "0 auto",
+  overflowX: "hidden",
+  width: "100%"
 };
 const cardStyle: React.CSSProperties = {
   background:
@@ -150,7 +155,9 @@ const cardStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   justifyContent: "space-between",
-  gap: "16px"
+  gap: "16px",
+  maxWidth: "100%",
+  boxSizing: "border-box"
 };
 const quoteStyle: React.CSSProperties = {
   color: "#c6d2f5",
