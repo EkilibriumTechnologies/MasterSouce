@@ -336,10 +336,20 @@ export function PricingSection() {
                 <p style={badgePlaceholderStyle}>&nbsp;</p>
               )}
               <h3 style={planNameStyle}>{plan.name}</h3>
+              {plan.id === "free" ? <p style={ctaHintStyle}>Test the workflow</p> : null}
+              {plan.id === "creator_monthly" ? (
+                <p style={ctaHintStyle}>Best for artists releasing regularly</p>
+              ) : null}
+              {plan.id === "pro_studio_monthly" ? (
+                <p style={ctaHintStyle}>Best for producers, teams, and catalog work</p>
+              ) : null}
               <p style={priceStyle}>
                 ${plan.monthlyPriceUsd}
                 <span style={priceSuffixStyle}>/mo</span>
               </p>
+              {plan.id === "creator_monthly" ? (
+                <p style={ctaHintStyle}>Less than the cost of one manual master revision.</p>
+              ) : null}
               <p style={descriptionStyle}>{planCopy.positioning}</p>
               {planCopy.valueCallout ? <p style={valueCalloutStyle}>{planCopy.valueCallout}</p> : null}
               <ul style={featuresListStyle}>

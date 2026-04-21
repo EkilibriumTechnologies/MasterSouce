@@ -99,21 +99,61 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             style={heroLogoImgStyle}
           />
         </div>
-        <h1 style={h1Style}>Release-ready sound from your mix — in minutes</h1>
+        <h1 style={h1Style}>Your track sounds finished today — not almost ready.</h1>
         <p style={subStyle}>
-          MasterSauce balances clarity and loudness for streaming, then lets you A/B the result before you commit. Upload,
-          analyze once, preview as long as you like — export only when you are ready.
+          Upload your mix, hear a real before/after preview, and export a release-ready master — no plugins, no chains,
+          no expensive revisions.
         </p>
+        <div style={platformRowStyle} aria-label="Streaming platform optimization">
+          <span style={platformLabelStyle}>Optimized for:</span>
+          <span style={platformIconsWrapStyle} aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" role="img">
+              <title>Spotify</title>
+              <circle cx="12" cy="12" r="12" fill="#1DB954" />
+              <path d="M6.6 10.3c3.6-1.1 7.5-.8 10.7.9" stroke="#0B0F16" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+              <path d="M7.2 13c2.8-.8 5.8-.6 8.2.7" stroke="#0B0F16" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+              <path d="M7.8 15.5c2.1-.5 4.3-.4 6.1.5" stroke="#0B0F16" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+            </svg>
+            <svg viewBox="0 0 24 24" width="26" height="26" role="img">
+              <title>Apple Music</title>
+              <defs>
+                <linearGradient id="appleMusicGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#FA233B" />
+                  <stop offset="100%" stopColor="#FB5C74" />
+                </linearGradient>
+              </defs>
+              <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#appleMusicGrad)" />
+              <path d="M14.6 5.8v8.4a2.1 2.1 0 1 1-1.1-1.9V7.6l5-1.1v7.1a2.1 2.1 0 1 1-1.1-1.9V5.8z" fill="#FFFFFF" />
+            </svg>
+            <svg viewBox="0 0 24 24" width="26" height="26" role="img">
+              <title>YouTube Music</title>
+              <circle cx="12" cy="12" r="12" fill="#FF0033" />
+              <circle cx="12" cy="12" r="7.2" fill="none" stroke="#FFFFFF" strokeWidth="1.6" />
+              <polygon points="11,8.8 15.4,12 11,15.2" fill="#FFFFFF" />
+            </svg>
+          </span>
+        </div>
         <div style={heroCtaRow}>
           <a href="#master" style={ctaPrimaryStyle}>
             Start mastering
           </a>
         </div>
         <HeroStatsBar metrics={homeProductMetrics} className="home-hero-stats" />
+        <style>{`
+          .home-hero-stats {
+            padding: 20px 18px !important;
+          }
+          .home-hero-stats > div {
+            padding: 12px 14px !important;
+          }
+          .home-hero-stats > div > p:first-child { font-size: 2rem !important; font-weight: 700 !important; }
+          .home-hero-stats > div > p:last-child { font-size: 0.85rem !important; letter-spacing: normal !important; text-transform: none !important; }
+        `}</style>
+
         <div style={pillRowStyle}>
           <span style={pillStyle}>⚡ Minutes, not studio turnaround</span>
           <span style={pillStyle}>🎧 Hear the lift before you export</span>
-          <span style={pillStyle}>✉️ Email unlocks the final file</span>
+          <span style={pillStyle}>✉️ Preview first. Email only when you're ready to export.</span>
         </div>
       </section>
 
@@ -176,72 +216,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
       </section>
 
-      <section id="song-architect" style={songArchitectSectionStyle} aria-labelledby="song-architect-heading">
-        <div style={songArchitectGridStyle}>
-          <div>
-            <p style={songArchitectEyebrowStyle}>Upstream Companion</p>
-            <h2 id="song-architect-heading" style={songArchitectTitleStyle}>
-              Need Help Before You Master?
-            </h2>
-            <p style={songArchitectSubTitleStyle}>Build stronger AI-ready songs before they ever hit the mastering chain.</p>
-            <p style={songArchitectBodyStyle}>
-              Song Architect helps modern creators generate structured song blueprints for Suno, Udio, and AI-assisted music
-              production — so better inputs create better masters.
-            </p>
-            <p style={songArchitectFlowStyle}>Write Better → Generate Better → Master Better</p>
-            <ul style={songArchitectListStyle}>
-              <li style={songArchitectListItemStyle}>Genre-aware songwriting presets</li>
-              <li style={songArchitectListItemStyle}>Hook & chorus optimization</li>
-              <li style={songArchitectListItemStyle}>Suno/Udio-ready export formatting</li>
-              <li style={songArchitectListItemStyle}>Rewrite weak sections instantly</li>
-            </ul>
-            <Link href="/song-architect" style={songArchitectCtaStyle}>
-              Try Song Architect
-            </Link>
-          </div>
-          <aside style={songArchitectPreviewStyle} aria-label="Song Architect preview">
-            <p style={songArchitectPreviewTitleStyle}>Song Architect</p>
-            <p style={songArchitectPreviewSubtleStyle}>Blueprint Builder</p>
-            <div style={songArchitectPreviewRowStyle}>
-              <span style={songArchitectTagStyle}>Genre</span>
-              <span style={songArchitectValueStyle}>Alt Pop / EDM</span>
-            </div>
-            <div style={songArchitectPreviewRowStyle}>
-              <span style={songArchitectTagStyle}>Hook Focus</span>
-              <span style={songArchitectValueStyle}>High replay</span>
-            </div>
-            <div style={songArchitectPreviewBlockStyle}>
-              <p style={songArchitectPreviewBlockTitleStyle}>Core Prompt Structure</p>
-              <p style={songArchitectPreviewBlockBodyStyle}>
-                Verse tension rises in 8 bars, pre-chorus lift, then a bold melodic chorus repeat with simplified lyric rhythm.
-              </p>
-            </div>
-            <div style={songArchitectPreviewFooterStyle}>
-              <span style={songArchitectStatusDotStyle} />
-              Export preset ready for Suno / Udio
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <section style={dualCardSectionStyle}>
-        <div style={infoCardStyle}>
-          <h2 style={infoTitleStyle}>Your Rights, Always</h2>
-          <p style={mutedStyle}>
-            You retain 100% ownership of your music. We process your tracks securely and never store or distribute your
-            files without permission.
-          </p>
-          <p style={mutedSecondaryStyle}>MasterSauce is a tool, not a rights holder. Your creative work stays yours.</p>
-        </div>
-        <div style={infoCardStyle}>
-          <h2 style={infoTitleStyle}>Fair by design</h2>
-          <p style={mutedStyle}>Preview and iterate without watching the meter.</p>
-          <p style={mutedSecondaryStyle}>
-            Monthly limits apply to finished WAV exports only; paid tiers add adaptive customization and higher bit depth.
-          </p>
-        </div>
-      </section>
-
       <section id="faq" style={sectionStyle} aria-labelledby="faq-heading">
         <h2 id="faq-heading" style={sectionTitle}>
           Common questions
@@ -257,7 +231,37 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </dl>
       </section>
 
+      <section style={dualCardSectionStyle}>
+        <div style={infoCardStyle}>
+          <h2 style={infoTitleStyle}>Your Rights, Always</h2>
+          <ul style={trustListStyle}>
+            <li style={trustListItemStyle}>✅ You keep 100% of your rights</li>
+            <li style={trustListItemStyle}>✅ Unlimited previews — never counted toward your plan</li>
+            <li style={trustListItemStyle}>✅ No watermark on finished masters</li>
+            <li style={trustListItemStyle}>✅ Your files are never stored or distributed</li>
+            <li style={trustListItemStyle}>✅ Pay only for final exports you choose to download</li>
+          </ul>
+        </div>
+        <div style={infoCardStyle}>
+          <h2 style={infoTitleStyle}>Fair by design</h2>
+          <ul style={trustListStyle}>
+            <li style={trustListItemStyle}>✅ You keep 100% of your rights</li>
+            <li style={trustListItemStyle}>✅ Unlimited previews — never counted toward your plan</li>
+            <li style={trustListItemStyle}>✅ No watermark on finished masters</li>
+            <li style={trustListItemStyle}>✅ Your files are never stored or distributed</li>
+            <li style={trustListItemStyle}>✅ Pay only for final exports you choose to download</li>
+          </ul>
+        </div>
+      </section>
+
       <PricingSection />
+      <p style={mutedSecondaryStyle}>
+        🎵 Need help writing before you master? Try{" "}
+        <Link href="/song-architect" style={linkStyle}>
+          Song Architect
+        </Link>{" "}
+        — blueprint builder for Suno, Udio, and AI music creators.
+      </p>
 
       <footer style={footerStyle}>
         <div style={footerBrandStyle}>
@@ -393,10 +397,22 @@ const h1Style: React.CSSProperties = {
 const subStyle: React.CSSProperties = {
   margin: "0 auto",
   color: "#95a2c8",
-  maxWidth: "640px",
-  lineHeight: 1.58,
-  fontSize: "1.05rem"
+  maxWidth: "680px",
+  lineHeight: 1.75,
+  fontSize: "1.2rem",
+  textAlign: "center"
 };
+
+const platformRowStyle: React.CSSProperties = {
+  marginTop: "14px",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+  justifyContent: "center"
+};
+const platformLabelStyle: React.CSSProperties = { color: "#a9b7dd", fontSize: "0.84rem", fontWeight: 600 };
+const platformIconsWrapStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: "8px" };
 
 const heroCtaRow: React.CSSProperties = {
   marginTop: "28px",
@@ -524,147 +540,6 @@ const stepTextStyle: React.CSSProperties = {
   lineHeight: 1.55,
   fontSize: "0.94rem"
 };
-const songArchitectSectionStyle: React.CSSProperties = {
-  background: "linear-gradient(145deg, rgba(22, 29, 48, 0.94), rgba(12, 17, 30, 0.94))",
-  border: "1px solid rgba(142, 155, 209, 0.2)",
-  borderRadius: "24px",
-  boxShadow: "0 18px 40px rgba(2, 4, 12, 0.45)",
-  padding: "32px 24px"
-};
-const songArchitectGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: "18px",
-  alignItems: "stretch"
-};
-const songArchitectEyebrowStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#b7c4ff",
-  fontSize: "0.74rem",
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: "0.16em"
-};
-const songArchitectTitleStyle: React.CSSProperties = {
-  margin: "10px 0 0",
-  fontSize: "clamp(1.6rem, 2.8vw, 2.3rem)",
-  color: "#f1f4ff",
-  lineHeight: 1.2,
-  fontFamily: "Outfit, Work Sans, system-ui, sans-serif"
-};
-const songArchitectSubTitleStyle: React.CSSProperties = {
-  margin: "10px 0 0",
-  color: "#9fb0dc",
-  lineHeight: 1.55
-};
-const songArchitectBodyStyle: React.CSSProperties = {
-  margin: "12px 0 0",
-  color: "#aab8dc",
-  lineHeight: 1.6
-};
-const songArchitectFlowStyle: React.CSSProperties = {
-  margin: "12px 0 0",
-  color: "#d3dcff",
-  fontWeight: 700
-};
-const songArchitectListStyle: React.CSSProperties = {
-  margin: "14px 0 0",
-  padding: 0,
-  listStyle: "none",
-  display: "grid",
-  gap: "8px"
-};
-const songArchitectListItemStyle: React.CSSProperties = {
-  color: "#c6d2f5",
-  lineHeight: 1.5
-};
-const songArchitectCtaStyle: React.CSSProperties = {
-  marginTop: "16px",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  textDecoration: "none",
-  borderRadius: "999px",
-  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)",
-  boxShadow: "0 12px 30px rgba(121, 100, 255, 0.36)",
-  color: "#ffffff",
-  fontWeight: 700,
-  padding: "12px 24px"
-};
-const songArchitectPreviewStyle: React.CSSProperties = {
-  border: "1px solid rgba(90, 110, 170, 0.38)",
-  borderRadius: "18px",
-  background: "linear-gradient(155deg, rgba(20, 29, 53, 0.66), rgba(12, 19, 38, 0.74))",
-  padding: "18px",
-  display: "grid",
-  alignContent: "start",
-  gap: "10px"
-};
-const songArchitectPreviewTitleStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#ecf1ff",
-  fontWeight: 700,
-  fontSize: "1.05rem"
-};
-const songArchitectPreviewSubtleStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#8ea2d8",
-  fontSize: "0.86rem"
-};
-const songArchitectPreviewRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "10px",
-  border: "1px solid rgba(84, 104, 156, 0.32)",
-  borderRadius: "10px",
-  padding: "8px 10px",
-  background: "rgba(11, 18, 35, 0.6)"
-};
-const songArchitectTagStyle: React.CSSProperties = {
-  color: "#93a6d8",
-  fontSize: "0.84rem"
-};
-const songArchitectValueStyle: React.CSSProperties = {
-  color: "#deebff",
-  fontWeight: 600,
-  fontSize: "0.88rem"
-};
-const songArchitectPreviewBlockStyle: React.CSSProperties = {
-  border: "1px solid rgba(88, 106, 167, 0.34)",
-  borderRadius: "12px",
-  padding: "10px",
-  background: "rgba(14, 20, 38, 0.8)"
-};
-const songArchitectPreviewBlockTitleStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#cedbff",
-  fontWeight: 700,
-  fontSize: "0.83rem",
-  textTransform: "uppercase",
-  letterSpacing: "0.08em"
-};
-const songArchitectPreviewBlockBodyStyle: React.CSSProperties = {
-  margin: "8px 0 0",
-  color: "#b5c4ec",
-  lineHeight: 1.5,
-  fontSize: "0.88rem"
-};
-const songArchitectPreviewFooterStyle: React.CSSProperties = {
-  marginTop: "2px",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-  color: "#9fc7b9",
-  fontSize: "0.82rem"
-};
-const songArchitectStatusDotStyle: React.CSSProperties = {
-  width: "8px",
-  height: "8px",
-  borderRadius: "999px",
-  background: "#6cf3c4",
-  boxShadow: "0 0 0 6px rgba(108, 243, 196, 0.16)"
-};
 const dualCardSectionStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
@@ -686,6 +561,17 @@ const infoTitleStyle: React.CSSProperties = {
 };
 const mutedStyle: React.CSSProperties = { color: "#b2bcdf", margin: "12px 0 0", lineHeight: 1.65 };
 const mutedSecondaryStyle: React.CSSProperties = { color: "#9da8cb", margin: "10px 0 0", lineHeight: 1.65 };
+const trustListStyle: React.CSSProperties = {
+  margin: "12px 0 0",
+  padding: 0,
+  listStyle: "none",
+  display: "grid",
+  gap: "8px"
+};
+const trustListItemStyle: React.CSSProperties = {
+  color: "#b2bcdf",
+  lineHeight: 1.55
+};
 
 const footerStyle: React.CSSProperties = {
   marginTop: "8px",
