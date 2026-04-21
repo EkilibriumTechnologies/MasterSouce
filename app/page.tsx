@@ -303,7 +303,8 @@ const mainStyle: React.CSSProperties = {
   /* top, right, bottom, left — respect iOS safe areas so the column stays visually centered */
   padding: "18px max(20px, env(safe-area-inset-right, 0px)) 78px max(20px, env(safe-area-inset-left, 0px))",
   display: "grid",
-  gap: "34px"
+  gap: "34px",
+  overflowX: "hidden"
 };
 
 const topNavStyle: React.CSSProperties = {
@@ -362,8 +363,11 @@ const topNavLinkStyle: React.CSSProperties = {
 const heroStyle: React.CSSProperties = {
   position: "relative",
   overflow: "hidden",
+  overflowX: "hidden",
   textAlign: "center",
   padding: "54px clamp(20px, 5vw, 56px)",
+  paddingLeft: "clamp(16px, 5vw, 48px)",
+  paddingRight: "clamp(16px, 5vw, 48px)",
   borderRadius: "34px",
   border: "1px solid rgba(74, 90, 150, 0.22)",
   boxShadow: "0 30px 72px rgba(4, 7, 16, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
@@ -393,7 +397,7 @@ const h1Style: React.CSSProperties = {
   margin: "0 auto clamp(16px, 2.2vw, 22px)",
   maxWidth: "760px",
   lineHeight: 1.08,
-  fontSize: "clamp(2rem, 4.6vw, 3.9rem)",
+  fontSize: "clamp(2rem, 7vw, 4rem)",
   letterSpacing: "-0.018em",
   fontFamily: "Outfit, Work Sans, system-ui, sans-serif",
   color: "#f1f4ff"
@@ -402,7 +406,7 @@ const h1Style: React.CSSProperties = {
 const subStyle: React.CSSProperties = {
   margin: "0 auto",
   color: "#95a2c8",
-  maxWidth: "680px",
+  maxWidth: "min(680px, 90vw)",
   lineHeight: 1.75,
   fontSize: "1.2rem",
   textAlign: "center"
