@@ -22,7 +22,7 @@ export function MobileMasterBanner() {
 
   return (
     <div style={mobileBannerStyle}>
-      <span>🎧 For best results, master from desktop.</span>
+      <span>🎧 Works on mobile — or save the link to finish on desktop.</span>
       <button
         type="button"
         style={mobileBannerBtnStyle}
@@ -31,7 +31,7 @@ export function MobileMasterBanner() {
           setCopied(true);
         }}
       >
-        {copied ? "Copied!" : "Copy link for desktop"}
+        {copied ? "Copied!" : "Save link"}
       </button>
     </div>
   );
