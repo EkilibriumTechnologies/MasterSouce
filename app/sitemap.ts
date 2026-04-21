@@ -12,8 +12,10 @@ const PATHS = [
   "/privacy",
   "/contact",
   "/learn",
-  "/learn/streaming-ready-master",
-  "/learn/ai-music-still-needs-mastering"
+  "/learn/why-ai-songs-sound-bad",
+  "/learn/best-mastering-for-suno-ai-songs",
+  "/learn/spotify-ready-mastering",
+  "/learn/ai-mastering-explained"
 ] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {

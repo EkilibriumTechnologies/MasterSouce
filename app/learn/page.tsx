@@ -6,6 +6,8 @@ import { buildPageMetadata } from "@/lib/seo/page-metadata";
 import {
   articleCardDescStyle,
   articleCardListStyle,
+  articleCardMetaDotStyle,
+  articleCardMetaRowStyle,
   articleCardReadStyle,
   articleCardStyle,
   articleCardTitleLinkStyle,
@@ -18,6 +20,7 @@ import {
   ctaSecondaryStyle,
   ctaSectionStyle,
   eyebrowStyle,
+  featuredPillStyle,
   h1Style,
   h2Style,
   heroStyle,
@@ -34,6 +37,54 @@ export const metadata: Metadata = buildPageMetadata({
 });
 
 const hubIntroStyle = { ...introStyle, textAlign: "center" as const };
+
+type LearnArticleCard = {
+  title: string;
+  slug: string;
+  excerpt: string;
+  date: string;
+  readingTime: string;
+  cta: string;
+  featured?: boolean;
+};
+
+const articles: LearnArticleCard[] = [
+  {
+    title: "Why AI Songs Sound Bad (And How to Fix Them in 2 Minutes)",
+    slug: "why-ai-songs-sound-bad",
+    excerpt:
+      "AI-generated songs often sound flat or unfinished. Learn why that happens and how to fix it fast with the right mastering approach.",
+    date: "April 21, 2026",
+    readingTime: "5 min read",
+    cta: "Fix your AI song →",
+    featured: true
+  },
+  {
+    title: "Best Mastering for Suno AI Songs",
+    slug: "best-mastering-for-suno-ai-songs",
+    excerpt:
+      "Suno songs can sound strong creatively but still need polish. Learn how mastering helps make Suno tracks louder, cleaner, and more release-ready.",
+    date: "April 21, 2026",
+    readingTime: "6 min read",
+    cta: "Improve your sound →"
+  },
+  {
+    title: "How to Make Your Song Spotify-Ready (LUFS, Loudness & Clarity Explained)",
+    slug: "spotify-ready-mastering",
+    excerpt: "Learn how to make your track Spotify-ready with the right LUFS, loudness balance, and mastering choices.",
+    date: "April 21, 2026",
+    readingTime: "7 min read",
+    cta: "Make your track release-ready →"
+  },
+  {
+    title: "AI Mastering Explained: What It Actually Does to Your Song",
+    slug: "ai-mastering-explained",
+    excerpt: "Understand what AI mastering actually changes in loudness, dynamics, EQ balance, and stereo image.",
+    date: "April 21, 2026",
+    readingTime: "6 min read",
+    cta: "Understand mastering better →"
+  }
+];
 
 export default function LearnHubPage() {
   return (
@@ -58,32 +109,38 @@ export default function LearnHubPage() {
           Guides
         </h2>
         <ul style={articleCardListStyle}>
-          <li style={articleCardStyle}>
-            <h3 style={articleCardTitleStyle}>
-              <Link href="/learn/streaming-ready-master" style={articleCardTitleLinkStyle}>
-                What Makes a Track Streaming-Ready?
+          {articles.map((article) => (
+            <li
+              key={article.slug}
+              style={
+                article.featured
+                  ? {
+                      ...articleCardStyle,
+                      border: "1px solid rgba(143, 98, 255, 0.6)",
+                      boxShadow: "0 18px 42px rgba(56, 40, 124, 0.45)"
+                    }
+                  : articleCardStyle
+              }
+            >
+              {article.featured ? <span style={featuredPillStyle}>Featured</span> : null}
+              <h3 style={{ ...articleCardTitleStyle, marginTop: article.featured ? "12px" : "0" }}>
+                <Link href={`/learn/${article.slug}`} style={articleCardTitleLinkStyle}>
+                  {article.title}
+                </Link>
+              </h3>
+              <p style={articleCardMetaRowStyle}>
+                <span>{article.date}</span>
+                <span style={articleCardMetaDotStyle} aria-hidden>
+                  ·
+                </span>
+                <span>{article.readingTime}</span>
+              </p>
+              <p style={articleCardDescStyle}>{article.excerpt}</p>
+              <Link href={`/learn/${article.slug}`} style={articleCardReadStyle}>
+                {article.cta}
               </Link>
-            </h3>
-            <p style={articleCardDescStyle}>
-              Learn why loudness alone is not enough and what to check before releasing a song.
-            </p>
-            <Link href="/learn/streaming-ready-master" style={articleCardReadStyle}>
-              Read guide →
-            </Link>
-          </li>
-          <li style={articleCardStyle}>
-            <h3 style={articleCardTitleStyle}>
-              <Link href="/learn/ai-music-still-needs-mastering" style={articleCardTitleLinkStyle}>
-                Why AI Music Still Needs Mastering
-              </Link>
-            </h3>
-            <p style={articleCardDescStyle}>
-              Learn why generated music can still benefit from a finishing step before release.
-            </p>
-            <Link href="/learn/ai-music-still-needs-mastering" style={articleCardReadStyle}>
-              Read guide →
-            </Link>
-          </li>
+            </li>
+          ))}
         </ul>
       </section>
 

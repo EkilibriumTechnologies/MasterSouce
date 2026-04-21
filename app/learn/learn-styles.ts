@@ -234,3 +234,32 @@ export const articleCardReadStyle: CSSProperties = {
   color: "#a8b8f0",
   textDecoration: "none"
 };
+
+export const articleCardMetaRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: "6px 10px",
+  margin: "0 0 12px",
+  fontSize: "0.8rem",
+  color: "rgba(156, 168, 204, 0.92)"
+};
+
+export const articleCardMetaDotStyle: CSSProperties = {
+  color: "rgba(142, 160, 208, 0.45)",
+  userSelect: "none"
+};
+
+export const featuredPillStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  borderRadius: "999px",
+  border: "1px solid rgba(143, 98, 255, 0.5)",
+  background: "rgba(104, 87, 199, 0.2)",
+  color: "#d9ccff",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  padding: "4px 9px"
+};
