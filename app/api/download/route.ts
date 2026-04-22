@@ -10,6 +10,7 @@ import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/ide
 import { cleanupExpiredTempFiles, findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
 import { incrementProductMetric } from "@/lib/product-metrics";
 import { warnIfUnlockEmailDiffersFromStripeCustomerEmail } from "@/lib/billing/unlock-vs-stripe-customer-email";
+import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { FREE_MASTERS_PER_MONTH, consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
@@ -79,12 +80,48 @@ export async function GET(request: NextRequest) {
     }
 
     const sessionPrep = prepareSessionForRequest(request);
+    const clientIp = getClientIp(request);
     const user = buildApiUser(request, sessionPrep.sessionId);
     const adminBypass = isMasterAdminBypassGranted(request);
     const freePlanCap = Math.min(PLAN_DEFINITIONS.free.monthlyMastersLimit, FREE_MASTERS_PER_MONTH);
 
     // Only explicit attachment downloads of the final master consume plan usage (not inline playback / previews).
     if (isMasteredAsset && forceDownload) {
+      const finalDownloadRate = consumeRateLimit({
+        bucket: "master_final_download_ip",
+        key: clientIp,
+        limit: 10,
+        windowMs: 60 * 60 * 1000
+      });
+      if (!finalDownloadRate.allowed) {
+        logAbuseGuard("rate_limited", {
+          endpoint: "/api/download",
+          bucket: "master_final_download_ip",
+          ipHash: hashIdentifier(clientIp),
+          jobId: record.jobId,
+          fileId: record.id,
+          retryAfterSec: finalDownloadRate.retryAfterSec
+        });
+        const res = tooManyAttemptsResponse(finalDownloadRate.retryAfterSec);
+        attachSessionCookieIfNeeded(res, sessionPrep);
+        return res;
+      }
+
+      if (isSupabaseConfigured() && masteredUnlock && !masteredUnlock.emailVerifiedAt) {
+        logAbuseGuard("unverified_master_download_blocked", {
+          endpoint: "/api/download",
+          jobId: record.jobId,
+          fileId: record.id,
+          ipHash: hashIdentifier(clientIp)
+        });
+        const res = NextResponse.json(
+          { error: "Please confirm email access before downloading your master." },
+          { status: 403 }
+        );
+        attachSessionCookieIfNeeded(res, sessionPrep);
+        return res;
+      }
+
       if (isSupabaseConfigured() && masteredUnlock) {
         try {
           const hasRecent = await hasRecentBillableDownloadForJobFile(

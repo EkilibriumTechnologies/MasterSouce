@@ -11,6 +11,7 @@ import { createJobId } from "@/lib/jobs/job-id";
 import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord } from "@/lib/storage/temp-files";
 import { incrementProductMetric } from "@/lib/product-metrics";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
+import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 
 const BodySchema = z.object({
   standardMasterFileId: z.string().min(8),
@@ -23,6 +24,25 @@ const BodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const sessionPrep = prepareSessionForRequest(request);
+    const clientIp = getClientIp(request);
+    const masteringRate = consumeRateLimit({
+      bucket: "master_process_ip",
+      key: clientIp,
+      limit: 10,
+      windowMs: 60 * 60 * 1000
+    });
+    if (!masteringRate.allowed) {
+      logAbuseGuard("rate_limited", {
+        endpoint: "/api/master-ai",
+        bucket: "master_process_ip",
+        ipHash: hashIdentifier(clientIp),
+        retryAfterSec: masteringRate.retryAfterSec
+      });
+      const res = tooManyAttemptsResponse(masteringRate.retryAfterSec);
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+
     const user = buildApiUser(request, sessionPrep.sessionId);
 
     let body: unknown;

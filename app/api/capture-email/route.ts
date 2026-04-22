@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
-import { normalizeCaptureEmail } from "@/lib/email/normalize-capture-email";
 import { upsertMasterJobUnlock } from "@/lib/downloads/master-job-unlocks";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
+import {
+  consumeRateLimit,
+  getClientIp,
+  hashIdentifier,
+  logAbuseGuard,
+  maskEmail,
+  shouldChallengeSuspiciousRequest,
+  tooManyAttemptsResponse
+} from "@/lib/security/abuse-guard";
+import { validateEmailAddress } from "@/lib/security/validate-email-address";
 import { resolveTempRecord } from "@/lib/storage/temp-files";
 import {
   getSupabaseAdminConfig,
@@ -17,6 +26,14 @@ const BodySchema = z.object({
   jobId: z.string().min(4),
   fileId: z.string().min(4)
 });
+
+const EMAIL_VALIDATION_MESSAGES = {
+  invalid_format: "Please enter a valid email address.",
+  blocked_domain: "Please use a real email domain you control.",
+  disposable_domain: "Temporary/disposable inboxes are not supported.",
+  suspicious_local_part: "Please use your regular email address."
+} as const;
+const RATE_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * GET does not capture email. Browsers get HTML; clients requesting JSON still get JSON.
@@ -44,6 +61,25 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).slice(2, 10);
   const isLocalDev = process.env.NODE_ENV !== "production";
+  const clientIp = getClientIp(request);
+  const emailSubmitRate = consumeRateLimit({
+    bucket: "capture_email_submit_ip",
+    key: clientIp,
+    limit: 5,
+    windowMs: RATE_WINDOW_MS
+  });
+  if (!emailSubmitRate.allowed) {
+    logAbuseGuard("rate_limited", {
+      endpoint: "/api/capture-email",
+      bucket: "capture_email_submit_ip",
+      ipHash: hashIdentifier(clientIp),
+      retryAfterSec: emailSubmitRate.retryAfterSec
+    });
+    const res = tooManyAttemptsResponse(emailSubmitRate.retryAfterSec);
+    const sessionPrep = prepareSessionForRequest(request);
+    attachSessionCookieIfNeeded(res, sessionPrep);
+    return res;
+  }
   console.log("[capture-email] request:start", {
     requestId,
     method: request.method,
@@ -83,16 +119,69 @@ export async function POST(request: NextRequest) {
       fileId: parsed.data.fileId
     });
 
-    const email = normalizeCaptureEmail(parsed.data.email);
-    if (!email) {
+    const emailValidation = validateEmailAddress(parsed.data.email);
+    if (!emailValidation.allowed || !emailValidation.normalizedEmail) {
+      const validationReason = emailValidation.reason ?? "invalid_format";
+      if (validationReason === "blocked_domain" || validationReason === "disposable_domain" || validationReason === "suspicious_local_part") {
+        const blockedAttemptsRate = consumeRateLimit({
+          bucket: "blocked_email_attempts_ip",
+          key: clientIp,
+          limit: 10,
+          windowMs: RATE_WINDOW_MS
+        });
+        logAbuseGuard(validationReason, {
+          endpoint: "/api/capture-email",
+          reason: validationReason,
+          ipHash: hashIdentifier(clientIp),
+          emailMasked: maskEmail(parsed.data.email),
+          challenge: shouldChallengeSuspiciousRequest({
+            suspiciousReason: validationReason,
+            ip: clientIp
+          })
+        });
+        if (!blockedAttemptsRate.allowed) {
+          logAbuseGuard("rate_limited", {
+            endpoint: "/api/capture-email",
+            bucket: "blocked_email_attempts_ip",
+            ipHash: hashIdentifier(clientIp),
+            retryAfterSec: blockedAttemptsRate.retryAfterSec
+          });
+          const res = tooManyAttemptsResponse(blockedAttemptsRate.retryAfterSec);
+          attachSessionCookieIfNeeded(res, sessionPrep);
+          return res;
+        }
+      }
       console.error("[capture-email] Email rejected after normalization", {
         rawLength: parsed.data.email.length,
-        rawPreview: parsed.data.email.slice(0, 160)
+        rawPreview: parsed.data.email.slice(0, 160),
+        reason: validationReason
       });
       const res = NextResponse.json(
-        { error: "Valid email required.", code: "VALIDATION_EMAIL" },
+        {
+          error: EMAIL_VALIDATION_MESSAGES[validationReason],
+          code: `VALIDATION_EMAIL_${validationReason.toUpperCase()}`
+        },
         { status: 400 }
       );
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+    const email = emailValidation.normalizedEmail;
+    const emailScopedRate = consumeRateLimit({
+      bucket: "capture_email_submit_pair",
+      key: `${clientIp}:${email}`,
+      limit: 10,
+      windowMs: RATE_WINDOW_MS
+    });
+    if (!emailScopedRate.allowed) {
+      logAbuseGuard("rate_limited", {
+        endpoint: "/api/capture-email",
+        bucket: "capture_email_submit_pair",
+        ipHash: hashIdentifier(clientIp),
+        emailMasked: maskEmail(email),
+        retryAfterSec: emailScopedRate.retryAfterSec
+      });
+      const res = tooManyAttemptsResponse(emailScopedRate.retryAfterSec);
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -174,7 +263,8 @@ export async function POST(request: NextRequest) {
         jobId: parsed.data.jobId,
         fileId: masteredFileId,
         normalizedEmail: email,
-        originalEmail: originalEmailTrimmed || email
+        originalEmail: originalEmailTrimmed || email,
+        emailVerifiedAt: new Date().toISOString()
       });
       unlockPersisted = true;
       console.log("[capture-email] unlock:persisted", {

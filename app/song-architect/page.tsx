@@ -209,7 +209,7 @@ export default function SongArchitectPage() {
         setResult(null);
         if (data?.usage) setUsage(data.usage);
         if (data?.code === "email_verification_required") {
-          console.info("[song-architect] verification required before generation");
+          console.info("[song-architect] email access confirmation required before generation");
           setVerifyError("");
           setVerifyEmail(storedBillingEmail);
           setPendingRetryAfterVerify(true);
@@ -263,19 +263,19 @@ export default function SongArchitectPage() {
         | { ok: true; usage: SongArchitectUsage }
         | { ok: false; message?: string };
       if (!response.ok || !data.ok) {
-        setVerifyError(data && "message" in data && typeof data.message === "string" ? data.message : "Unable to verify email.");
+        setVerifyError(data && "message" in data && typeof data.message === "string" ? data.message : "Unable to confirm email access.");
         return;
       }
       persistBillingEmail(normalizedEmail);
       setUsage(data.usage);
       setShowEmailVerifyModal(false);
       if (pendingRetryAfterVerify) {
-        console.info("[song-architect] generation resumed after verification");
+        console.info("[song-architect] generation resumed after email access confirmation");
         setPendingRetryAfterVerify(false);
         await runGeneration(toPayload(form));
       }
     } catch {
-      setVerifyError("Could not verify your email right now. Please try again.");
+      setVerifyError("Could not confirm email access right now. Please try again.");
     } finally {
       setIsVerifyingEmail(false);
     }
@@ -341,7 +341,7 @@ export default function SongArchitectPage() {
               {getUsageMessage(usage)} <span style={usagePlanStyle}>({getPlanDisplayName(usage.planId)} plan)</span>
             </p>
           ) : (
-            <p style={usageLineMutedStyle}>Usage is tracked per verified email and resets monthly (UTC).</p>
+            <p style={usageLineMutedStyle}>Usage is tracked per confirmed email access and resets monthly (UTC).</p>
           )}
 
           <div style={fieldGridStyle}>
@@ -612,12 +612,12 @@ export default function SongArchitectPage() {
       {showEmailVerifyModal ? (
         <div style={modalBackdropStyle}>
           <div style={modalCardStyle} role="dialog" aria-modal="true" aria-labelledby="verify-song-architect-email-title">
-            <p style={modalEyebrowStyle}>Verification Required</p>
+            <p style={modalEyebrowStyle}>Confirmation Required</p>
             <h3 id="verify-song-architect-email-title" style={modalTitleStyle}>
-              Verify your email to generate
+              Confirm email access to generate
             </h3>
             <p style={modalBodyStyle}>
-              Song Architect generation is tied to verified email usage, just like other MasterSauce gated actions.
+              Song Architect generation is tied to confirmed email access and anti-abuse checks.
             </p>
             <form onSubmit={verifyEmailAndMaybeRetry} style={modalFormStyle}>
               <input
@@ -641,7 +641,7 @@ export default function SongArchitectPage() {
                   Cancel
                 </button>
                 <button type="submit" style={modalPrimaryButtonStyle} disabled={isVerifyingEmail}>
-                  {isVerifyingEmail ? "Verifying..." : "Verify & Continue"}
+                  {isVerifyingEmail ? "Confirming..." : "Confirm & Continue"}
                 </button>
               </div>
             </form>

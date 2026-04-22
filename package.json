@@ -7,7 +7,8 @@
     "build": "next build && node scripts/copy-standalone-assets.js",
     "start": "node scripts/start-standalone.js",
     "typecheck": "tsc --noEmit",
-    "favicon": "node scripts/generate-favicon.mjs"
+    "favicon": "node scripts/generate-favicon.mjs",
+    "test:anti-abuse": "node scripts/anti-abuse-invariants.mjs"
   },
   "dependencies": {
     "@next/third-parties": "^14.2.5",

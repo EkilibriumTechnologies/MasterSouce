@@ -17,6 +17,7 @@ import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/up
 import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
 import { createJobId } from "@/lib/jobs/job-id";
 import { incrementProductMetric } from "@/lib/product-metrics";
+import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
@@ -47,6 +48,26 @@ export async function POST(request: NextRequest) {
   });
 
   try {
+    const earlySessionPrep = prepareSessionForRequest(request);
+    const clientIp = getClientIp(request);
+    const masteringRate = consumeRateLimit({
+      bucket: "master_process_ip",
+      key: clientIp,
+      limit: 10,
+      windowMs: 60 * 60 * 1000
+    });
+    if (!masteringRate.allowed) {
+      logAbuseGuard("rate_limited", {
+        endpoint: "/api/master",
+        bucket: "master_process_ip",
+        ipHash: hashIdentifier(clientIp),
+        retryAfterSec: masteringRate.retryAfterSec
+      });
+      const res = tooManyAttemptsResponse(masteringRate.retryAfterSec);
+      attachSessionCookieIfNeeded(res, earlySessionPrep);
+      return res;
+    }
+
     console.log("[MASTER_DEBUG] temp:cleanup:before", { tempRoot: getTempRoot() });
     await cleanupExpiredTempFiles();
     console.log("[MASTER_DEBUG] temp:cleanup:after", { tempRoot: getTempRoot() });

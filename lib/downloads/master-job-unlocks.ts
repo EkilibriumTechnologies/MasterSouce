@@ -4,6 +4,7 @@ export type MasterJobUnlockRow = {
   fileId: string;
   normalizedEmail: string;
   originalEmail: string | null;
+  emailVerifiedAt: string | null;
 };
 
 export async function upsertMasterJobUnlock(row: {
@@ -11,6 +12,7 @@ export async function upsertMasterJobUnlock(row: {
   fileId: string;
   normalizedEmail: string;
   originalEmail: string;
+  emailVerifiedAt?: string;
 }): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("master_job_unlocks").upsert(
@@ -18,7 +20,8 @@ export async function upsertMasterJobUnlock(row: {
       job_id: row.jobId,
       file_id: row.fileId,
       normalized_email: row.normalizedEmail,
-      original_email: row.originalEmail
+      original_email: row.originalEmail,
+      email_verified_at: row.emailVerifiedAt ?? new Date().toISOString()
     },
     { onConflict: "job_id" }
   );
@@ -32,7 +35,7 @@ export async function getMasterJobUnlock(jobId: string): Promise<MasterJobUnlock
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("master_job_unlocks")
-    .select("file_id, normalized_email, original_email")
+    .select("file_id, normalized_email, original_email, email_verified_at")
     .eq("job_id", jobId)
     .maybeSingle();
 
@@ -44,6 +47,7 @@ export async function getMasterJobUnlock(jobId: string): Promise<MasterJobUnlock
   return {
     fileId: data.file_id as string,
     normalizedEmail: data.normalized_email as string,
-    originalEmail: (data.original_email as string | null) ?? null
+    originalEmail: (data.original_email as string | null) ?? null,
+    emailVerifiedAt: (data.email_verified_at as string | null) ?? null
   };
 }

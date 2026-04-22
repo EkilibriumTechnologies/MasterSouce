@@ -17,10 +17,19 @@ import { isAdaptiveDevBypassEnabled } from "@/lib/billing/adaptive-dev-bypass";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { reconcileCheckoutSessionForAdaptiveRecheck } from "@/lib/billing/reconcile-from-checkout-session";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
-import { normalizeCaptureEmail } from "@/lib/email/normalize-capture-email";
 import { upsertMasterJobUnlock } from "@/lib/downloads/master-job-unlocks";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
+import {
+  consumeRateLimit,
+  getClientIp,
+  hashIdentifier,
+  logAbuseGuard,
+  maskEmail,
+  shouldChallengeSuspiciousRequest,
+  tooManyAttemptsResponse
+} from "@/lib/security/abuse-guard";
+import { validateEmailAddress } from "@/lib/security/validate-email-address";
 import { resolveTempRecord } from "@/lib/storage/temp-files";
 import {
   getSupabaseAdminConfig,
@@ -38,6 +47,14 @@ const BodySchema = z.object({
   checkoutSessionId: z.string().optional()
 });
 
+const EMAIL_VALIDATION_MESSAGES = {
+  invalid_format: "Please enter a valid billing email.",
+  blocked_domain: "Please use a real billing email domain you control.",
+  disposable_domain: "Temporary/disposable inboxes are not supported for billing verification.",
+  suspicious_local_part: "Please use your regular billing email address."
+} as const;
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+
 function buildAdaptiveDownloadUrl(fileId: string): string {
   return `/api/download?fileId=${fileId}&as=adaptive-master.wav&dl=1`;
 }
@@ -45,6 +62,24 @@ function buildAdaptiveDownloadUrl(fileId: string): string {
 export async function POST(request: NextRequest) {
   const sessionPrep = prepareSessionForRequest(request);
   const isDevBypass = process.env.NODE_ENV !== "production" && isAdaptiveDevBypassEnabled();
+  const clientIp = getClientIp(request);
+  const emailSubmitRate = consumeRateLimit({
+    bucket: "adaptive_export_email_submit_ip",
+    key: clientIp,
+    limit: 5,
+    windowMs: RATE_WINDOW_MS
+  });
+  if (!emailSubmitRate.allowed) {
+    logAbuseGuard("rate_limited", {
+      endpoint: "/api/adaptive/export-access",
+      bucket: "adaptive_export_email_submit_ip",
+      ipHash: hashIdentifier(clientIp),
+      retryAfterSec: emailSubmitRate.retryAfterSec
+    });
+    const res = tooManyAttemptsResponse(emailSubmitRate.retryAfterSec);
+    attachSessionCookieIfNeeded(res, sessionPrep);
+    return res;
+  }
 
   let body: unknown;
   try {
@@ -112,17 +147,67 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
-  const emailNorm = normalizeCaptureEmail(parsed.data.email);
-  if (!emailNorm) {
+  const emailValidation = validateEmailAddress(parsed.data.email);
+  if (!emailValidation.allowed || !emailValidation.normalizedEmail) {
+    const validationReason = emailValidation.reason ?? "invalid_format";
+    if (validationReason === "blocked_domain" || validationReason === "disposable_domain" || validationReason === "suspicious_local_part") {
+      const blockedAttemptsRate = consumeRateLimit({
+        bucket: "blocked_email_attempts_ip",
+        key: clientIp,
+        limit: 10,
+        windowMs: RATE_WINDOW_MS
+      });
+      logAbuseGuard(validationReason, {
+        endpoint: "/api/adaptive/export-access",
+        reason: validationReason,
+        ipHash: hashIdentifier(clientIp),
+        emailMasked: maskEmail(parsed.data.email),
+        challenge: shouldChallengeSuspiciousRequest({
+          suspiciousReason: validationReason,
+          ip: clientIp
+        })
+      });
+      if (!blockedAttemptsRate.allowed) {
+        logAbuseGuard("rate_limited", {
+          endpoint: "/api/adaptive/export-access",
+          bucket: "blocked_email_attempts_ip",
+          ipHash: hashIdentifier(clientIp),
+          retryAfterSec: blockedAttemptsRate.retryAfterSec
+        });
+        const res = tooManyAttemptsResponse(blockedAttemptsRate.retryAfterSec);
+        attachSessionCookieIfNeeded(res, sessionPrep);
+        return res;
+      }
+    }
     const res = NextResponse.json(
       {
-        error: "Valid billing email required.",
+        error: EMAIL_VALIDATION_MESSAGES[validationReason],
         entitled: false,
         requiresCheckout: true,
-        status: "invalid_email"
+        status: "invalid_email",
+        code: `invalid_email_${validationReason}`
       },
       { status: 400 }
     );
+    attachSessionCookieIfNeeded(res, sessionPrep);
+    return res;
+  }
+  const emailNorm = emailValidation.normalizedEmail;
+  const emailScopedRate = consumeRateLimit({
+    bucket: "adaptive_export_email_submit_pair",
+    key: `${clientIp}:${emailNorm}`,
+    limit: 10,
+    windowMs: RATE_WINDOW_MS
+  });
+  if (!emailScopedRate.allowed) {
+    logAbuseGuard("rate_limited", {
+      endpoint: "/api/adaptive/export-access",
+      bucket: "adaptive_export_email_submit_pair",
+      ipHash: hashIdentifier(clientIp),
+      emailMasked: maskEmail(emailNorm),
+      retryAfterSec: emailScopedRate.retryAfterSec
+    });
+    const res = tooManyAttemptsResponse(emailScopedRate.retryAfterSec);
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   }
@@ -282,7 +367,8 @@ export async function POST(request: NextRequest) {
       jobId: parsed.data.jobId,
       fileId: masteredFileId,
       normalizedEmail: emailNorm,
-      originalEmail: originalEmailTrimmed || emailNorm
+      originalEmail: originalEmailTrimmed || emailNorm,
+      emailVerifiedAt: new Date().toISOString()
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";

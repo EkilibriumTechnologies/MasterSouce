@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
+import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
+import { hasTrustedEmailAccess } from "@/lib/security/verified-email-state";
 import { recordSongArchitectGenerationEvent } from "@/lib/song-architect/entitlements";
 import { normalizeSongArchitectOutput } from "@/lib/song-architect/normalize-output";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
@@ -310,6 +312,24 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
 export async function POST(request: NextRequest) {
   const requestStartedAt = Date.now();
   const sessionPrep = prepareSessionForRequest(request);
+  const clientIp = getClientIp(request);
+  const generateRate = consumeRateLimit({
+    bucket: "song_architect_generate_ip",
+    key: clientIp,
+    limit: 10,
+    windowMs: 60 * 60 * 1000
+  });
+  if (!generateRate.allowed) {
+    logAbuseGuard("rate_limited", {
+      endpoint: "/api/song-architect/generate",
+      bucket: "song_architect_generate_ip",
+      ipHash: hashIdentifier(clientIp),
+      retryAfterSec: generateRate.retryAfterSec
+    });
+    const res = tooManyAttemptsResponse(generateRate.retryAfterSec);
+    attachSessionCookieIfNeeded(res, sessionPrep);
+    return res;
+  }
   try {
     let body: unknown;
     try {
@@ -394,35 +414,71 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    const verified = await resolveSongArchitectVerifiedContext({
+    const access = await resolveSongArchitectVerifiedContext({
       request,
       sessionId: sessionPrep.sessionId,
       billingEmailHint: parsed.data.billingEmail
     });
-    if (!verified) {
+    if (!access.ok) {
       const res = NextResponse.json(
         {
           ok: false,
-          code: "email_verification_required",
-          message: "Verify your email to unlock Song Architect generation."
+          code: access.code,
+          message: access.message
         },
         { status: 403 }
       );
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
+    const trustedAccess = access;
+    if (!hasTrustedEmailAccess(request, trustedAccess.normalizedEmail)) {
+      logAbuseGuard("unverified_song_architect_output_blocked", {
+        endpoint: "/api/song-architect/generate",
+        ipHash: hashIdentifier(clientIp),
+        emailHash: hashIdentifier(trustedAccess.normalizedEmail)
+      });
+      const res = NextResponse.json(
+        {
+          ok: false,
+          code: "email_verification_required",
+          message: "Please confirm email access before generating Song Architect output."
+        },
+        { status: 403 }
+      );
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+    const generateEmailRate = consumeRateLimit({
+      bucket: "song_architect_generate_email",
+      key: trustedAccess.normalizedEmail,
+      limit: 10,
+      windowMs: 60 * 60 * 1000
+    });
+    if (!generateEmailRate.allowed) {
+      logAbuseGuard("rate_limited", {
+        endpoint: "/api/song-architect/generate",
+        bucket: "song_architect_generate_email",
+        ipHash: hashIdentifier(clientIp),
+        emailHash: hashIdentifier(trustedAccess.normalizedEmail),
+        retryAfterSec: generateEmailRate.retryAfterSec
+      });
+      const res = tooManyAttemptsResponse(generateEmailRate.retryAfterSec);
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
 
     console.info("[song-architect] usage_before_generation", {
       sessionId: sessionPrep.sessionId,
-      normalizedEmail: verified.normalizedEmail,
-      planId: verified.usage.planId,
-      used: verified.usage.used,
-      limit: verified.usage.limit,
-      remaining: verified.usage.remaining
+      normalizedEmail: trustedAccess.normalizedEmail,
+      planId: trustedAccess.usage.planId,
+      used: trustedAccess.usage.used,
+      limit: trustedAccess.usage.limit,
+      remaining: trustedAccess.usage.remaining
     });
 
-    if (verified.usage.remaining <= 0) {
-      const isFree = verified.usage.planId === "free";
+    if (trustedAccess.usage.remaining <= 0) {
+      const isFree = trustedAccess.usage.planId === "free";
       const res = NextResponse.json(
         {
           ok: false,
@@ -430,7 +486,7 @@ export async function POST(request: NextRequest) {
           message: isFree
             ? "You’ve used your free Song Architect blueprint for this month."
             : "You’ve used all Song Architect blueprints for this month.",
-          usage: verified.usage
+          usage: trustedAccess.usage
         },
         { status: 403 }
       );
@@ -474,16 +530,16 @@ export async function POST(request: NextRequest) {
     logDebug("request_success", {
       elapsedMs: Date.now() - requestStartedAt
     });
-    const usagePlanId = verified.usage.planId ?? "free";
-    if (!verified.usage.planId) {
+    const usagePlanId = trustedAccess.usage.planId ?? "free";
+    if (!trustedAccess.usage.planId) {
       console.warn("[song-architect] verified_usage_missing_plan_id_fallback", {
         sessionId: sessionPrep.sessionId,
-        normalizedEmail: verified.normalizedEmail,
+        normalizedEmail: trustedAccess.normalizedEmail,
         fallbackPlanId: usagePlanId
       });
     }
     await recordSongArchitectGenerationEvent({
-      normalizedEmail: verified.normalizedEmail,
+      normalizedEmail: trustedAccess.normalizedEmail,
       planId: usagePlanId,
       presetUsed: openAiResult.presetUsed ?? inputPayload.preset,
       genre: openAiResult.resolvedInput.genre,
@@ -492,9 +548,9 @@ export async function POST(request: NextRequest) {
       counted: true
     });
     const nextUsage = {
-      ...verified.usage,
-      used: verified.usage.used + 1,
-      remaining: Math.max(verified.usage.remaining - 1, 0)
+      ...trustedAccess.usage,
+      used: trustedAccess.usage.used + 1,
+      remaining: Math.max(trustedAccess.usage.remaining - 1, 0)
     };
     const res = NextResponse.json(
       {
