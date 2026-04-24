@@ -19,6 +19,34 @@ import type { PlanId } from "@/lib/subscriptions/types";
 import { tryConsumeLocalBillableDownload } from "@/lib/usage/local-download-usage";
 import { hasRecentBillableDownloadForJobFile } from "@/lib/usage/supabase-download-usage";
 
+type DownloadRateKeyType = "user" | "session" | "ip" | "fallback";
+
+function getAuthenticatedUserIdFromRequest(request: NextRequest): string | null {
+  const raw =
+    request.headers.get("x-authenticated-user-id") ??
+    request.headers.get("x-user-id") ??
+    request.headers.get("x-auth-user-id");
+  const normalized = raw?.trim();
+  return normalized ? normalized : null;
+}
+
+function resolveFinalDownloadRateIdentity(params: {
+  authenticatedUserId: string | null;
+  sessionId: string | null;
+  clientIp: string;
+}): { key: string; keyType: DownloadRateKeyType } {
+  if (params.authenticatedUserId) {
+    return { key: `user:${params.authenticatedUserId}`, keyType: "user" };
+  }
+  if (params.sessionId) {
+    return { key: `session:${params.sessionId}`, keyType: "session" };
+  }
+  if (params.clientIp && params.clientIp !== "unknown") {
+    return { key: `ip:${params.clientIp}`, keyType: "ip" };
+  }
+  return { key: "fallback:download-identity-unavailable", keyType: "fallback" };
+}
+
 function getFilenameParam(request: NextRequest): string {
   const fallback = "audio-file.wav";
   const raw = request.nextUrl.searchParams.get("as");
@@ -81,8 +109,12 @@ export async function GET(request: NextRequest) {
 
     const sessionPrep = prepareSessionForRequest(request);
     const clientIp = getClientIp(request);
-    const finalDownloadRateKey =
-      clientIp && clientIp !== "unknown" ? clientIp : `unknown:${sessionPrep.sessionId}`;
+    const authenticatedUserId = getAuthenticatedUserIdFromRequest(request);
+    const rateIdentity = resolveFinalDownloadRateIdentity({
+      authenticatedUserId,
+      sessionId: sessionPrep.sessionId,
+      clientIp
+    });
     const user = buildApiUser(request, sessionPrep.sessionId);
     const adminBypass = isMasterAdminBypassGranted(request);
     const freePlanCap = Math.min(PLAN_DEFINITIONS.free.monthlyMastersLimit, FREE_MASTERS_PER_MONTH);
@@ -91,10 +123,23 @@ export async function GET(request: NextRequest) {
     if (isMasteredAsset && forceDownload) {
       const finalDownloadRate = consumeRateLimit({
         bucket: "master_final_download_ip",
-        key: finalDownloadRateKey,
+        key: rateIdentity.key,
         limit: 10,
         windowMs: 60 * 60 * 1000
       });
+      if (process.env.DOWNLOAD_RATE_LIMIT_DEBUG === "true") {
+        console.log(
+          JSON.stringify({
+            scope: "download_rate_limit",
+            event: "identity_selected",
+            bucket: "master_final_download_ip",
+            keyType: rateIdentity.keyType,
+            hasClientIp: clientIp !== "unknown",
+            hasSessionId: Boolean(sessionPrep.sessionId),
+            hasAuthenticatedUser: Boolean(authenticatedUserId)
+          })
+        );
+      }
       if (!finalDownloadRate.allowed) {
         logAbuseGuard("rate_limited", {
           endpoint: "/api/download",

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 import { NextRequest, NextResponse } from "next/server";
 
 type RateWindow = {
@@ -38,13 +39,44 @@ function gcRateWindows(now: number): void {
   }
 }
 
+function normalizeIpCandidate(value: string | null): string | null {
+  if (!value) return null;
+  let candidate = value.trim();
+  if (!candidate) return null;
+
+  // Some proxies include quoted values.
+  candidate = candidate.replace(/^"(.*)"$/, "$1").trim();
+  if (!candidate) return null;
+
+  // Normalize IPv4 values that include a trailing port.
+  const ipv4WithPort = /^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/;
+  const ipv4Match = candidate.match(ipv4WithPort);
+  if (ipv4Match?.[1]) {
+    candidate = ipv4Match[1];
+  }
+
+  return isIP(candidate) ? candidate : null;
+}
+
 export function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
-    const first = forwardedFor.split(",")[0]?.trim();
-    if (first) return first;
+    for (const part of forwardedFor.split(",")) {
+      const normalized = normalizeIpCandidate(part);
+      if (normalized) return normalized;
+    }
   }
-  return request.ip ?? "unknown";
+
+  const realIp = normalizeIpCandidate(request.headers.get("x-real-ip"));
+  if (realIp) return realIp;
+
+  const cfConnectingIp = normalizeIpCandidate(request.headers.get("cf-connecting-ip"));
+  if (cfConnectingIp) return cfConnectingIp;
+
+  const directIp = normalizeIpCandidate(request.ip ?? null);
+  if (directIp) return directIp;
+
+  return "unknown";
 }
 
 export function hashIdentifier(value: string): string {
