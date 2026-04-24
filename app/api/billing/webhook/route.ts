@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { trackGa4PurchaseFromCheckoutSession, trackGa4PurchaseFromPaidSubscriptionInvoice } from "@/lib/analytics/stripe-ga4-purchase";
 import { appendCreditPackLedgerEntry, hasProcessedStripeEvent, persistStripeBillingEvent } from "@/lib/billing/store";
 import { reconcileStripeSubscription } from "@/lib/billing/stripe-reconcile";
 import { getStripeClient, getStripeWebhookSecret } from "@/lib/stripe/server";
@@ -121,6 +122,12 @@ export async function POST(request: NextRequest) {
           console.log("[billing-webhook] credit pack ledger", { email, sessionId: session.id });
         }
       }
+      try {
+        await trackGa4PurchaseFromCheckoutSession(session);
+      } catch (ga4Err) {
+        const message = ga4Err instanceof Error ? ga4Err.message : String(ga4Err);
+        console.warn("[GA4_PURCHASE] failed", { scope: "checkout_session_completed", message });
+      }
     }
 
     if (
@@ -157,7 +164,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
+    if (
+      event.type === "invoice.paid" ||
+      event.type === "invoice.payment_succeeded" ||
+      event.type === "invoice.payment_failed"
+    ) {
       const invoice = event.data.object as Stripe.Invoice & {
         subscription?: string | Stripe.Subscription | null;
       };
@@ -182,6 +193,14 @@ export async function POST(request: NextRequest) {
             subscriptionId: subId
           })
         );
+      }
+      if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
+        try {
+          await trackGa4PurchaseFromPaidSubscriptionInvoice(invoice);
+        } catch (ga4Err) {
+          const message = ga4Err instanceof Error ? ga4Err.message : String(ga4Err);
+          console.warn("[GA4_PURCHASE] failed", { scope: "invoice_paid_or_payment_succeeded", message });
+        }
       }
     }
 
