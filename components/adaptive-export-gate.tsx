@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { getGaClientId } from "@/lib/analytics/gtag";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import {
   MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY,
@@ -159,6 +160,7 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
       sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, trimmed);
       savePendingAdaptiveExport(pendingCheckoutSnapshot);
 
+      const ga_client_id = await getGaClientId();
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -167,7 +169,8 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
           planId: "creator_monthly",
           email: trimmed,
           returnTo: buildAdaptiveCheckoutReturnTo(),
-          intent: "adaptive"
+          intent: "adaptive",
+          ...(ga_client_id ? { ga_client_id } : {})
         })
       });
       const payload = (await res.json()) as ExportAccessPayload;

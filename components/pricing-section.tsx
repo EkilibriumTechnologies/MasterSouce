@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { getGaClientId } from "@/lib/analytics/gtag";
 import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { PlanId } from "@/lib/subscriptions/types";
@@ -169,15 +170,23 @@ export function PricingSection() {
     if (!EMAIL_REGEX.test(trimmed)) {
       throw new Error("invalid_billing_email");
     }
+    const ga_client_id = await getGaClientId();
     const body =
       nextSelection.kind === "credit_pack"
-        ? { kind: nextSelection.kind, email: trimmed, returnTo: safeReturnTo, intent: adaptiveIntent ? "adaptive" : undefined }
+        ? {
+            kind: nextSelection.kind,
+            email: trimmed,
+            returnTo: safeReturnTo,
+            intent: adaptiveIntent ? "adaptive" : undefined,
+            ...(ga_client_id ? { ga_client_id } : {})
+          }
         : {
             kind: nextSelection.kind,
             planId: nextSelection.planId,
             email: trimmed,
             returnTo: safeReturnTo,
-            intent: adaptiveIntent ? "adaptive" : undefined
+            intent: adaptiveIntent ? "adaptive" : undefined,
+            ...(ga_client_id ? { ga_client_id } : {})
           };
     if (typeof window !== "undefined") {
       sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, trimmed.toLowerCase());

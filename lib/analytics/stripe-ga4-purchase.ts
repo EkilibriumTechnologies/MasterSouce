@@ -4,7 +4,7 @@ import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
 
 /**
- * Prefer `metadata.ga_client_id` from Stripe (set by checkout later) so browser and MP share a client.
+ * Prefer `session.metadata.ga_client_id` (set from `/api/billing/checkout` when the browser sends it).
  * Fallback: Stripe Customer id (`cus_…`) when Checkout created a Customer before completion.
  * Otherwise a stable synthetic id — does not block the webhook.
  */
@@ -21,6 +21,7 @@ export function resolveGa4ClientIdFromCheckoutSession(session: Stripe.Checkout.S
   return `stripe_checkout_${session.id}`;
 }
 
+/** Prefer `invoice.metadata.ga_client_id` when Stripe copies it; else same fallbacks as checkout. */
 function resolveGa4ClientIdFromInvoice(invoice: Stripe.Invoice): string {
   const fromMeta = invoice.metadata?.ga_client_id;
   if (typeof fromMeta === "string" && fromMeta.trim().length > 0) {

@@ -4,19 +4,28 @@ import { getAdaptiveEntitlementByEmail } from "@/lib/billing/store";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { getStripeClient, getStripeCreditPackPriceId, getStripePriceIdForPlan } from "@/lib/stripe/server";
 
+const optionalGaClientId = z.preprocess((val) => {
+  if (val == null) return undefined;
+  if (typeof val !== "string") return undefined;
+  const t = val.trim().slice(0, 120);
+  return t.length > 0 ? t : undefined;
+}, z.string().max(120).optional());
+
 const BodySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("subscription"),
     planId: z.enum(["creator_monthly", "pro_studio_monthly"]),
     email: z.string(),
     returnTo: z.string().optional(),
-    intent: z.enum(["adaptive"]).optional()
+    intent: z.enum(["adaptive"]).optional(),
+    ga_client_id: optionalGaClientId
   }),
   z.object({
     kind: z.literal("credit_pack"),
     email: z.string(),
     returnTo: z.string().optional(),
-    intent: z.enum(["adaptive"]).optional()
+    intent: z.enum(["adaptive"]).optional(),
+    ga_client_id: optionalGaClientId
   })
 ]);
 const BILLING_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -89,6 +98,22 @@ export async function POST(request: NextRequest) {
       successUrl.searchParams.set("intent", "adaptive");
     }
 
+    const ga_client_id = parsed.data.ga_client_id;
+    console.log("[GA4_CLIENT_ID]", { source: "checkout_metadata", hasClientId: Boolean(ga_client_id) });
+
+    const sessionMetadata =
+      parsed.data.kind === "subscription"
+        ? {
+            product_type: "subscription",
+            plan_id: parsed.data.planId,
+            ...(ga_client_id ? { ga_client_id } : {})
+          }
+        : {
+            product_type: "credit_pack",
+            credits_added: "5",
+            ...(ga_client_id ? { ga_client_id } : {})
+          };
+
     const session = await stripe.checkout.sessions.create({
       mode: parsed.data.kind === "subscription" ? "subscription" : "payment",
       customer_email: email,
@@ -104,16 +129,14 @@ export async function POST(request: NextRequest) {
       success_url:
         parsed.data.kind === "subscription" ? appendStripeCheckoutSessionPlaceholder(successUrl) : successUrl.toString(),
       cancel_url: `${baseUrl}/pricing?checkout=cancel`,
-      metadata:
-        parsed.data.kind === "subscription"
-          ? { product_type: "subscription", plan_id: parsed.data.planId }
-          : { product_type: "credit_pack", credits_added: "5" },
+      metadata: sessionMetadata,
       subscription_data:
         parsed.data.kind === "subscription"
           ? {
               metadata: {
                 plan_id: parsed.data.planId,
-                product_type: "subscription"
+                product_type: "subscription",
+                ...(ga_client_id ? { ga_client_id } : {})
               }
             }
           : undefined

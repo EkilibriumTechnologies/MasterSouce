@@ -26,3 +26,34 @@ export function trackGaEvent(
   ) as Record<string, string | number | boolean>;
   window.gtag?.("event", eventName, payload);
 }
+
+/** Resolves GA4 `client_id` for Measurement Protocol / Stripe metadata (non-blocking). */
+export function getGaClientId(): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !GA_MEASUREMENT_ID) {
+      resolve(null);
+      return;
+    }
+    const gtag = window.gtag;
+    if (typeof gtag !== "function") {
+      resolve(null);
+      return;
+    }
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const t = window.setTimeout(() => finish(null), 2000);
+    try {
+      gtag("get", GA_MEASUREMENT_ID, "client_id", (id: unknown) => {
+        window.clearTimeout(t);
+        finish(typeof id === "string" && id.trim().length > 0 ? id.trim() : null);
+      });
+    } catch {
+      window.clearTimeout(t);
+      finish(null);
+    }
+  });
+}
