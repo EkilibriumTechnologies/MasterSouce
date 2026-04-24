@@ -81,6 +81,8 @@ export async function GET(request: NextRequest) {
 
     const sessionPrep = prepareSessionForRequest(request);
     const clientIp = getClientIp(request);
+    const finalDownloadRateKey =
+      clientIp && clientIp !== "unknown" ? clientIp : `unknown:${sessionPrep.sessionId}`;
     const user = buildApiUser(request, sessionPrep.sessionId);
     const adminBypass = isMasterAdminBypassGranted(request);
     const freePlanCap = Math.min(PLAN_DEFINITIONS.free.monthlyMastersLimit, FREE_MASTERS_PER_MONTH);
@@ -89,7 +91,7 @@ export async function GET(request: NextRequest) {
     if (isMasteredAsset && forceDownload) {
       const finalDownloadRate = consumeRateLimit({
         bucket: "master_final_download_ip",
-        key: clientIp,
+        key: finalDownloadRateKey,
         limit: 10,
         windowMs: 60 * 60 * 1000
       });
