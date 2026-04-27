@@ -108,8 +108,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
         <h1 style={h1Style}>Your track sounds finished today — not almost ready.</h1>
         <p style={subStyle}>
-          Upload your mix, hear a real before/after preview, and export a release-ready master — no plugins, no chains,
-          no expensive revisions.
+          Two ways to master your track — pick yours: Preset Mastering or Prompt Mastering. No plugins. No studio time.
+          Hear the difference before you export.
         </p>
         <div style={platformRowStyle} aria-label="Streaming platform optimization">
           <span style={platformLabelStyle}>Optimized for:</span>
@@ -173,18 +173,21 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           What is MasterSauce?
         </h2>
         <p style={proseCenterStyle}>
-          MasterSauce is in-browser mastering tuned for loudness and clarity on Spotify, Apple Music, and similar platforms.
-          You upload a mix, set genre and loudness, run a short analysis, then listen to a real A/B preview. When the tone
-          feels right, you export the full-quality WAV — ideal for singles, demos, sync pitches, or late-night finish lines.
+          MasterSauce gives you two ways to get a release-ready master.
+        </p>
+        <p style={proseCenterStyle}>Preset Mastering</p>
+        <p style={proseCenterStyle}>
+          Pick your genre and get an instant master ready for Spotify, Apple Music, and YouTube.
+        </p>
+        <p style={proseCenterStyle}>Prompt Mastering</p>
+        <p style={proseCenterStyle}>
+          Describe the sound you want in plain words — warm, punchy, wide. The engine adapts the master around your
+          direction.
         </p>
         <p style={proseCenterStyle}>
-          The workflow stays simple: no plugin rabbit holes, no guesswork about whether you are “done.” For more on
-          streaming targets and release prep, see our{" "}
-          <Link href="/learn" style={learnHintLinkStyle}>
-            short guides
-          </Link>
-          .
+          Not ready to record yet? Try Song Architect — build your Suno or Udio blueprint first, then come back to master.
         </p>
+        <p style={proseCenterStyle}>Upload free. Preview first, then export your master.</p>
       </section>
 
       <section id="who-its-for" style={sectionStyle} aria-labelledby="who-heading">
@@ -192,9 +195,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           Who it is for
         </h2>
         <p style={proseCenterStyle}>
-          Bedroom producers finishing tracks at odd hours. Independent artists self-releasing without a big studio budget.
-          AI music creators who want a consistent, release-ready level on their outputs. Anyone making music today who
-          values speed, clarity, and a straightforward path from mix to master.
+          Bedroom producers finishing tracks at odd hours. Independent artists self-releasing without a studio budget. AI
+          music creators on Suno and Udio who want every track to sound release-ready. Anyone who values speed, clarity, and
+          a clean path from mix to master — without rebuilding a signal chain every time.
         </p>
       </section>
 
@@ -212,8 +215,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⚙</div>
-            <h3 style={stepTitleStyle}>Set genre & loudness</h3>
-            <p style={stepTextStyle}>Choose the preset that matches the record — the engine adapts around your choices.</p>
+            <h3 style={stepTitleStyle}>Set genre, loudness, or prompt</h3>
+            <p style={stepTextStyle}>
+              Choose a genre preset for instant results — or describe the sound you want in plain words and the engine
+              steers the master around your direction.
+            </p>
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>🎧</div>
@@ -270,11 +276,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
       <PricingSection />
       <p style={mutedSecondaryStyle}>
-        🎵 Need help writing before you master? Try{" "}
+        🎵 Starting from scratch in Suno or Udio? Try{" "}
         <Link href="/song-architect" style={linkStyle}>
           Song Architect
         </Link>{" "}
-        — blueprint builder for Suno, Udio, and AI music creators.
+        — build your complete song blueprint first. Genre, lyrics, hooks, and a ready-to-paste prompt before you hit
+        generate.
       </p>
 
       <footer style={footerStyle}>

@@ -320,21 +320,39 @@ export default function SongArchitectPage() {
       <section style={compactIntroStyle} aria-labelledby="song-architect-heading">
         <p style={eyebrowStyle}>Workspace</p>
         <h1 id="song-architect-heading" style={titleStyle}>
-          Build Your Song Blueprint
+          Write better Suno and Udio prompts — in seconds.
         </h1>
         <p style={introBodyStyle}>
-          Start with a preset or your own direction, then generate Suno/Udio-ready lyrics, hooks, and export prompt in one
-          pass.
+          Stop guessing what to type. Song Architect builds your complete creative blueprint — genre, lyrics, hooks, style
+          prompt, and a ready-to-paste Suno or Udio export prompt. One pass. No blank page.
         </p>
+        <div style={howItWorksGridStyle} aria-label="How Song Architect works">
+          <article style={howItWorksStepStyle}>
+            <p style={howItWorksTitleStyle}>Step 1 — 🎚️ Pick a preset or build custom</p>
+            <p style={howItWorksBodyStyle}>
+              Choose from Radio Pop, Dark Trap, Festival EDM, and more — or configure every detail yourself.
+            </p>
+          </article>
+          <article style={howItWorksStepStyle}>
+            <p style={howItWorksTitleStyle}>Step 2 — ⚙️ Generate your blueprint</p>
+            <p style={howItWorksBodyStyle}>
+              Song Architect writes your concept, style prompt, lyrics, and a ready-to-paste export prompt in one pass.
+            </p>
+          </article>
+          <article style={howItWorksStepStyle}>
+            <p style={howItWorksTitleStyle}>Step 3 — 🎵 Paste into Suno or Udio</p>
+            <p style={howItWorksBodyStyle}>
+              Copy your export prompt directly into Suno or Udio and create. When your track is ready, master it free on
+              MasterSauce.
+            </p>
+          </article>
+        </div>
       </section>
 
       <section style={workspaceGridStyle} aria-label="Song Architect tool">
         <form onSubmit={handleGenerate} style={panelStyle}>
           <div style={rowHeaderStyle}>
             <h2 style={panelTitleStyle}>Input</h2>
-            <button type="submit" style={primaryButtonStyle} disabled={isGenerating}>
-              {isGenerating ? "Generating..." : "Generate Blueprint"}
-            </button>
           </div>
           {usage ? (
             <p style={usage.remaining <= 0 ? usageLineWarningStyle : usageLineStyle}>
@@ -515,6 +533,10 @@ export default function SongArchitectPage() {
           </label>
 
           {selectedPreset ? <p style={presetHintStyle}>{selectedPreset.description}</p> : null}
+          <p style={freeTierNoticeStyle}>1 free blueprint per month — no card required. Email confirmed at export.</p>
+          <button type="submit" style={primaryButtonStyle} disabled={isGenerating}>
+            {isGenerating ? "Generating..." : "Generate Blueprint"}
+          </button>
           {error ? <p style={errorStyle}>{error}</p> : null}
           {error && usage && usage.remaining <= 0 ? (
             <p style={quotaHintStyle}>
@@ -608,6 +630,14 @@ export default function SongArchitectPage() {
             </div>
           )}
         </aside>
+      </section>
+      <section style={bottomCtaWrapStyle} aria-label="MasterSauce mastering call to action">
+        <p style={bottomCtaTextStyle}>
+          Track ready? Master it free on MasterSauce{" "}
+          <a href="https://www.mastersauce.ai/#master" style={bottomCtaLinkStyle}>
+            →
+          </a>
+        </p>
       </section>
       {showEmailVerifyModal ? (
         <div style={modalBackdropStyle}>
@@ -746,6 +776,35 @@ const introBodyStyle: React.CSSProperties = {
   lineHeight: 1.5
 };
 
+const howItWorksGridStyle: React.CSSProperties = {
+  marginTop: "12px",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: "10px"
+};
+
+const howItWorksStepStyle: React.CSSProperties = {
+  border: "1px solid rgba(110, 128, 190, 0.24)",
+  borderRadius: "12px",
+  background: "rgba(14, 21, 38, 0.68)",
+  padding: "10px"
+};
+
+const howItWorksTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#d7e3ff",
+  fontWeight: 700,
+  fontSize: "0.83rem",
+  lineHeight: 1.4
+};
+
+const howItWorksBodyStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#a7b6dc",
+  fontSize: "0.83rem",
+  lineHeight: 1.5
+};
+
 const workspaceGridStyle: React.CSSProperties = {
   display: "grid",
   gap: "12px",
@@ -815,6 +874,13 @@ const primaryButtonStyle: React.CSSProperties = {
   color: "#fff",
   fontWeight: 700,
   padding: "10px 16px"
+};
+
+const freeTierNoticeStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  color: "#95a4d2",
+  fontSize: "0.78rem",
+  lineHeight: 1.4
 };
 
 const presetHintStyle: React.CSSProperties = {
@@ -1047,4 +1113,23 @@ const lyricsStyle: React.CSSProperties = {
 const readonlyTextareaStyle: React.CSSProperties = {
   ...textareaStyle,
   minHeight: "170px"
+};
+
+const bottomCtaWrapStyle: React.CSSProperties = {
+  border: "1px solid rgba(142, 155, 209, 0.2)",
+  borderRadius: "14px",
+  background: "linear-gradient(145deg, rgba(22, 29, 48, 0.88), rgba(12, 17, 30, 0.88))",
+  padding: "12px 14px"
+};
+
+const bottomCtaTextStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#b2c0e6",
+  lineHeight: 1.5
+};
+
+const bottomCtaLinkStyle: React.CSSProperties = {
+  color: "#8de8cb",
+  textDecoration: "none",
+  fontWeight: 700
 };

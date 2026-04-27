@@ -804,7 +804,7 @@ export function UploadForm() {
                 void runStandardMastering();
               }}
             >
-              {loading ? "Applying recommended master…" : "Use recommended master"}
+              {loading ? "Applying recommended master…" : "Preset Master — instant result"}
             </button>
             <button
               type="button"
@@ -818,7 +818,7 @@ export function UploadForm() {
                 setStatus("Adaptive customization — add a short note about the sound you want, then run the free preview.");
               }}
             >
-              Adaptive customization
+              Prompt Master — describe your sound
             </button>
           </div>
           {showAdaptivePlaceholder ? (
