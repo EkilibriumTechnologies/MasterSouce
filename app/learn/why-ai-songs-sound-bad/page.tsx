@@ -207,7 +207,7 @@ export default function WhyAiSongsSoundBadPage() {
               sectionTitle: "Hear the difference on a real Suno track",
               sectionSubtitle: "Hip-Hop track generated in Suno — before and after MasterSauce. Free to try.",
               badgeLabel: "Hip-Hop",
-              originalSrc: "/audio/Jucy Mama Juice before.wav",
+              originalSrc: "/audio/Jucy Mama Juice Before.wav",
               masteredSrc: "/audio/Jucy Mama Juice After.wav",
               originalTitle: "Original",
               masteredTitle: "Mastered",

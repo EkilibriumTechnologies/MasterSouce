@@ -10,14 +10,14 @@ const EDM_MASTERED_SRC = "/audio/Mercaba Center Earth After.wav";
 const REGGAETON_ORIGINAL_SRC = "/audio/Vamo Alla Before.wav";
 const REGGAETON_MASTERED_SRC = "/audio/Vamo Alla After.wav";
 
-const HIPHOP_ORIGINAL_SRC = "/audio/Jucy Mama Juice before.wav";
+const HIPHOP_ORIGINAL_SRC = "/audio/Jucy Mama Juice Before.wav";
 const HIPHOP_MASTERED_SRC = "/audio/Jucy Mama Juice After.wav";
 
 /**
  * Bump this whenever the underlying demo assets change but filenames stay the same.
  * This avoids stale browser/CDN caches serving the old full-length WAVs.
  */
-const STATIC_DEMO_AUDIO_ASSET_REV = "20260428c";
+const STATIC_DEMO_AUDIO_ASSET_REV = "20260428d";
 
 /** Encode each path segment so filenames with spaces (e.g. /public/audio/...) load reliably in <audio src>. */
 function encodePathSegments(pathWithOptionalQuery: string): string {
