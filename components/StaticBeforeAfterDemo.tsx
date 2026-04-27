@@ -104,11 +104,13 @@ function StaticBeforeAfterPair({ pairId, badgeLabel, originalSrc, masteredSrc, p
   function syncTimeToBoth(timeInSec: number) {
     const original = originalRef.current;
     const mastered = masteredRef.current;
+    const originalLiveDur = original?.duration;
+    const masteredLiveDur = mastered?.duration;
     const maxDur = Math.max(
       originalDuration,
       masteredDuration,
-      Number.isFinite(original?.duration) ? original.duration : 0,
-      Number.isFinite(mastered?.duration) ? mastered.duration : 0
+      typeof originalLiveDur === "number" && Number.isFinite(originalLiveDur) ? originalLiveDur : 0,
+      typeof masteredLiveDur === "number" && Number.isFinite(masteredLiveDur) ? masteredLiveDur : 0
     );
     const clamped = maxDur > 0 ? Math.min(timeInSec, maxDur) : timeInSec;
     if (original) original.currentTime = clamped;
