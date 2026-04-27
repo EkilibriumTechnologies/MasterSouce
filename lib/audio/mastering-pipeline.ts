@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { analyzeTrack, TrackAnalysis } from "@/lib/audio/analyze-track";
 import { getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
+import { getPreviewStartSeconds, getSafePreviewDurationSeconds } from "@/lib/audio/preview-segment";
 import {
   GENRE_PRESETS,
   GenrePreset,
@@ -214,6 +215,13 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
   ]);
 
   // 30s preview snippets for fast before/after checks.
+  const previewStartSeconds = getPreviewStartSeconds(originalAnalysis.durationSec);
+  const previewDurationSeconds = getSafePreviewDurationSeconds(
+    originalAnalysis.durationSec,
+    previewStartSeconds,
+    30
+  );
+
   await Promise.all([
     runFfmpeg([
       "-y",
@@ -221,9 +229,9 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
       "-i",
       request.inputPath,
       "-ss",
-      "0",
+      previewStartSeconds.toFixed(2),
       "-t",
-      "30",
+      previewDurationSeconds.toFixed(2),
       "-codec:a",
       "libmp3lame",
       "-b:a",
@@ -236,9 +244,9 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
       "-i",
       masteredPath,
       "-ss",
-      "0",
+      previewStartSeconds.toFixed(2),
       "-t",
-      "30",
+      previewDurationSeconds.toFixed(2),
       "-codec:a",
       "libmp3lame",
       "-b:a",

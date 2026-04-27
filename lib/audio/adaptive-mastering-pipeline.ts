@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { analyzeTrack, type TrackAnalysis } from "@/lib/audio/analyze-track";
 import { getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
+import { getPreviewStartSeconds, getSafePreviewDurationSeconds } from "@/lib/audio/preview-segment";
 import { requestAdaptiveDecisionFromOpenAI } from "@/lib/openai/adaptive-mastering";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
 import { GENRE_PRESETS, type LoudnessMode } from "@/lib/genre-presets";
@@ -357,6 +358,13 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     warnings.push("Post-render analysis was unavailable for adaptive output.");
   }
 
+  const previewStartSeconds = getPreviewStartSeconds(baselineAnalysis.durationSec);
+  const previewDurationSeconds = getSafePreviewDurationSeconds(
+    baselineAnalysis.durationSec,
+    previewStartSeconds,
+    30
+  );
+
   await Promise.all([
     runFfmpeg([
       "-y",
@@ -364,9 +372,9 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
       "-i",
       request.inputPath,
       "-ss",
-      "0",
+      previewStartSeconds.toFixed(2),
       "-t",
-      "30",
+      previewDurationSeconds.toFixed(2),
       "-codec:a",
       "libmp3lame",
       "-b:a",
@@ -379,9 +387,9 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
       "-i",
       adaptiveMasteredPath,
       "-ss",
-      "0",
+      previewStartSeconds.toFixed(2),
       "-t",
-      "30",
+      previewDurationSeconds.toFixed(2),
       "-codec:a",
       "libmp3lame",
       "-b:a",
