@@ -148,6 +148,103 @@ function CopyButton({ label, value }: { label: string; value: string }) {
   );
 }
 
+const songLengthSectionStyle: React.CSSProperties = {
+  marginTop: "14px",
+  padding: "12px",
+  borderRadius: "14px",
+  border: "1px solid rgba(118, 136, 210, 0.35)",
+  background: "linear-gradient(155deg, rgba(18, 26, 48, 0.95), rgba(10, 16, 32, 0.88))",
+  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)"
+};
+
+const songLengthHeaderRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "10px",
+  flexWrap: "wrap",
+  marginBottom: "10px"
+};
+
+const songLengthHeadingStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#e8edff",
+  fontWeight: 700,
+  fontSize: "0.88rem",
+  letterSpacing: "0.02em"
+};
+
+const songLengthBadgeStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  color: "#8de8cb",
+  border: "1px solid rgba(141, 232, 203, 0.35)",
+  borderRadius: "999px",
+  padding: "4px 10px",
+  background: "rgba(12, 32, 28, 0.55)"
+};
+
+const songLengthGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))",
+  gap: "8px"
+};
+
+const songLengthCardStyle: React.CSSProperties = {
+  position: "relative",
+  display: "grid",
+  gap: "4px",
+  padding: "10px 10px 11px",
+  borderRadius: "12px",
+  border: "1px solid rgba(86, 104, 160, 0.45)",
+  background: "rgba(8, 14, 28, 0.72)",
+  cursor: "pointer",
+  transition: "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease",
+  minHeight: "92px",
+  alignContent: "start"
+};
+
+const songLengthCardSelectedStyle: React.CSSProperties = {
+  border: "1px solid rgba(154, 132, 255, 0.75)",
+  boxShadow: "0 0 0 1px rgba(154, 132, 255, 0.25), 0 10px 22px rgba(95, 110, 255, 0.22)",
+  background: "linear-gradient(160deg, rgba(32, 26, 58, 0.95), rgba(14, 20, 42, 0.95))"
+};
+
+const songLengthRadioStyle: React.CSSProperties = {
+  position: "absolute",
+  opacity: 0,
+  width: 0,
+  height: 0,
+  margin: 0
+};
+
+const songLengthCardTitleRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: "8px",
+  flexWrap: "wrap"
+};
+
+const songLengthCardLabelStyle: React.CSSProperties = {
+  color: "#f0f4ff",
+  fontWeight: 700,
+  fontSize: "0.86rem"
+};
+
+const songLengthCardHintStyle: React.CSSProperties = {
+  color: "#9eb6ff",
+  fontSize: "0.76rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap"
+};
+
+const songLengthCardDescStyle: React.CSSProperties = {
+  color: "#9aa8cf",
+  fontSize: "0.74rem",
+  lineHeight: 1.45
+};
+
 export default function SongArchitectPage() {
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -888,103 +985,6 @@ const panelTitleStyle: React.CSSProperties = {
   color: "#ecf1ff",
   fontSize: "1.05rem",
   fontFamily: "Outfit, Work Sans, system-ui, sans-serif"
-};
-
-const songLengthSectionStyle: React.CSSProperties = {
-  marginTop: "14px",
-  padding: "12px",
-  borderRadius: "14px",
-  border: "1px solid rgba(118, 136, 210, 0.35)",
-  background: "linear-gradient(155deg, rgba(18, 26, 48, 0.95), rgba(10, 16, 32, 0.88))",
-  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)"
-};
-
-const songLengthHeaderRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "10px",
-  flexWrap: "wrap",
-  marginBottom: "10px"
-};
-
-const songLengthHeadingStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#e8edff",
-  fontWeight: 700,
-  fontSize: "0.88rem",
-  letterSpacing: "0.02em"
-};
-
-const songLengthBadgeStyle: React.CSSProperties = {
-  fontSize: "0.72rem",
-  fontWeight: 600,
-  color: "#8de8cb",
-  border: "1px solid rgba(141, 232, 203, 0.35)",
-  borderRadius: "999px",
-  padding: "4px 10px",
-  background: "rgba(12, 32, 28, 0.55)"
-};
-
-const songLengthGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))",
-  gap: "8px"
-};
-
-const songLengthCardStyle: React.CSSProperties = {
-  position: "relative",
-  display: "grid",
-  gap: "4px",
-  padding: "10px 10px 11px",
-  borderRadius: "12px",
-  border: "1px solid rgba(86, 104, 160, 0.45)",
-  background: "rgba(8, 14, 28, 0.72)",
-  cursor: "pointer",
-  transition: "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease",
-  minHeight: "92px",
-  alignContent: "start"
-};
-
-const songLengthCardSelectedStyle: React.CSSProperties = {
-  border: "1px solid rgba(154, 132, 255, 0.75)",
-  boxShadow: "0 0 0 1px rgba(154, 132, 255, 0.25), 0 10px 22px rgba(95, 110, 255, 0.22)",
-  background: "linear-gradient(160deg, rgba(32, 26, 58, 0.95), rgba(14, 20, 42, 0.95))"
-};
-
-const songLengthRadioStyle: React.CSSProperties = {
-  position: "absolute",
-  opacity: 0,
-  width: 0,
-  height: 0,
-  margin: 0
-};
-
-const songLengthCardTitleRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "baseline",
-  justifyContent: "space-between",
-  gap: "8px",
-  flexWrap: "wrap"
-};
-
-const songLengthCardLabelStyle: React.CSSProperties = {
-  color: "#f0f4ff",
-  fontWeight: 700,
-  fontSize: "0.86rem"
-};
-
-const songLengthCardHintStyle: React.CSSProperties = {
-  color: "#9eb6ff",
-  fontSize: "0.76rem",
-  fontWeight: 600,
-  whiteSpace: "nowrap"
-};
-
-const songLengthCardDescStyle: React.CSSProperties = {
-  color: "#9aa8cf",
-  fontSize: "0.74rem",
-  lineHeight: 1.45
 };
 
 const fieldGridStyle: React.CSSProperties = {

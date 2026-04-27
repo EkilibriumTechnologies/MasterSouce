@@ -10,18 +10,35 @@ const EDM_MASTERED_SRC = "/audio/Mercaba Center Earth After.wav";
 const REGGAETON_ORIGINAL_SRC = "/audio/Vamo Alla Before.wav";
 const REGGAETON_MASTERED_SRC = "/audio/Vamo Alla After.wav";
 
-const HIPHOP_ORIGINAL_SRC = "/audio/Jucy Mama Juice Before.wav";
+const HIPHOP_ORIGINAL_SRC = "/audio/Jucy Mama Juice before.wav";
 const HIPHOP_MASTERED_SRC = "/audio/Jucy Mama Juice After.wav";
 
 /**
  * Bump this whenever the underlying demo assets change but filenames stay the same.
  * This avoids stale browser/CDN caches serving the old full-length WAVs.
  */
-const STATIC_DEMO_AUDIO_ASSET_REV = "20260428a";
+const STATIC_DEMO_AUDIO_ASSET_REV = "20260428c";
+
+/** Encode each path segment so filenames with spaces (e.g. /public/audio/...) load reliably in <audio src>. */
+function encodePathSegments(pathWithOptionalQuery: string): string {
+  const qIndex = pathWithOptionalQuery.indexOf("?");
+  const path = qIndex >= 0 ? pathWithOptionalQuery.slice(0, qIndex) : pathWithOptionalQuery;
+  const query = qIndex >= 0 ? pathWithOptionalQuery.slice(qIndex) : "";
+  if (!path.startsWith("/")) return pathWithOptionalQuery;
+  const encoded =
+    "/" +
+    path
+      .slice(1)
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+  return encoded + query;
+}
 
 function withAssetRev(src: string): string {
-  const joiner = src.includes("?") ? "&" : "?";
-  return `${src}${joiner}v=${encodeURIComponent(STATIC_DEMO_AUDIO_ASSET_REV)}`;
+  const base = encodePathSegments(src);
+  const joiner = base.includes("?") ? "&" : "?";
+  return `${base}${joiner}v=${encodeURIComponent(STATIC_DEMO_AUDIO_ASSET_REV)}`;
 }
 
 /**
@@ -59,9 +76,23 @@ type StaticBeforeAfterPairProps = {
   masteredSrc: string;
   /** Small label above the two cards (optional) */
   pairEyebrow?: string;
+  originalTitle?: string;
+  masteredTitle?: string;
+  originalSubtitle?: string;
+  masteredSubtitle?: string;
 };
 
-function StaticBeforeAfterPair({ pairId, badgeLabel, originalSrc, masteredSrc, pairEyebrow }: StaticBeforeAfterPairProps) {
+function StaticBeforeAfterPair({
+  pairId,
+  badgeLabel,
+  originalSrc,
+  masteredSrc,
+  pairEyebrow,
+  originalTitle = "Original",
+  masteredTitle = "Mastered",
+  originalSubtitle = "Unmastered track",
+  masteredSubtitle = "After MasterSauce"
+}: StaticBeforeAfterPairProps) {
   const originalRef = useRef<HTMLAudioElement>(null);
   const masteredRef = useRef<HTMLAudioElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -248,10 +279,10 @@ function StaticBeforeAfterPair({ pairId, badgeLabel, originalSrc, masteredSrc, p
           }}
         >
           <div style={labelRowStyle}>
-            <p style={labelStyle}>Original</p>
+            <p style={labelStyle}>{originalTitle}</p>
             <span style={badgeStyle}>{badgeLabel}</span>
           </div>
-          <p style={labelSubStyle}>Unmastered track</p>
+          <p style={labelSubStyle}>{originalSubtitle}</p>
           <p style={dynamicHintStyle(activeSource === "original")}>{hintOriginal}</p>
           <div
             style={{
@@ -336,10 +367,10 @@ function StaticBeforeAfterPair({ pairId, badgeLabel, originalSrc, masteredSrc, p
           }}
         >
           <div style={labelRowStyle}>
-            <p style={masteredLabelStyle}>Mastered</p>
+            <p style={masteredLabelStyle}>{masteredTitle}</p>
             <span style={badgeStyle}>{badgeLabel}</span>
           </div>
-          <p style={labelSubStyle}>After MasterSauce</p>
+          <p style={labelSubStyle}>{masteredSubtitle}</p>
           <p style={dynamicHintStyle(activeSource === "mastered")}>{hintMastered}</p>
           <div
             style={{
@@ -417,7 +448,44 @@ function StaticBeforeAfterPair({ pairId, badgeLabel, originalSrc, masteredSrc, p
   );
 }
 
-export function StaticBeforeAfterDemo() {
+export type StaticBeforeAfterArticleSingleProps = {
+  pairId: string;
+  sectionTitle: string;
+  sectionSubtitle: string;
+  badgeLabel: string;
+  originalSrc: string;
+  masteredSrc: string;
+  originalTitle?: string;
+  masteredTitle?: string;
+  originalSubtitle?: string;
+  masteredSubtitle?: string;
+};
+
+export type StaticBeforeAfterDemoProps = {
+  /** One pair + custom headings (e.g. learn article). Omit for homepage triple demo. */
+  articleSingle?: StaticBeforeAfterArticleSingleProps;
+};
+
+export function StaticBeforeAfterDemo({ articleSingle }: StaticBeforeAfterDemoProps = {}) {
+  if (articleSingle) {
+    return (
+      <section style={articleEmbedPanelStyle}>
+        <h3 style={headingStyle}>{articleSingle.sectionTitle}</h3>
+        <p style={mutedText}>{articleSingle.sectionSubtitle}</p>
+        <StaticBeforeAfterPair
+          pairId={articleSingle.pairId}
+          badgeLabel={articleSingle.badgeLabel}
+          originalSrc={articleSingle.originalSrc}
+          masteredSrc={articleSingle.masteredSrc}
+          originalTitle={articleSingle.originalTitle}
+          masteredTitle={articleSingle.masteredTitle}
+          originalSubtitle={articleSingle.originalSubtitle}
+          masteredSubtitle={articleSingle.masteredSubtitle}
+        />
+      </section>
+    );
+  }
+
   return (
     <section style={panelStyle}>
       <h3 style={headingStyle}>Hear the difference</h3>
@@ -464,7 +532,8 @@ function dynamicHintStyle(active: boolean): CSSProperties {
 
 const pairWrapStyle: React.CSSProperties = {
   display: "grid",
-  gap: "10px"
+  gap: "10px",
+  minWidth: 0
 };
 
 const pairEyebrowStyle: React.CSSProperties = {
@@ -485,6 +554,17 @@ const panelStyle: React.CSSProperties = {
   display: "grid",
   gap: "18px"
 };
+
+const articleEmbedPanelStyle: CSSProperties = {
+  ...panelStyle,
+  minWidth: 0,
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  isolation: "isolate",
+  position: "relative"
+};
+
 const headingStyle: React.CSSProperties = {
   color: "#f1f5ff",
   margin: "0 0 8px 0",
@@ -502,15 +582,19 @@ const mutedText: React.CSSProperties = {
 const gridStyle: React.CSSProperties = {
   display: "grid",
   gap: "12px",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))"
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  alignItems: "start",
+  minWidth: 0
 };
 const cardStyle: React.CSSProperties = {
+  position: "relative",
   borderRadius: "16px",
   border: "1px solid rgba(131, 145, 197, 0.26)",
   background: "rgba(10, 15, 28, 0.62)",
   padding: "14px"
 };
 const masteredCardStyle: React.CSSProperties = {
+  position: "relative",
   borderRadius: "16px",
   border: "1px solid rgba(151, 116, 255, 0.4)",
   background: "linear-gradient(160deg, rgba(74, 42, 153, 0.22), rgba(10, 15, 28, 0.62))",
@@ -565,8 +649,14 @@ const spectrumShellActiveMasteredStyle: React.CSSProperties = {
 const cardTransitionStyle: React.CSSProperties = {
   transition: "border-color 240ms ease, box-shadow 280ms ease, background 260ms ease, transform 240ms ease"
 };
-const cardActiveRingOriginalStyle: React.CSSProperties = { boxShadow: "0 14px 36px rgba(52, 68, 115, 0.32)", transform: "translateY(-1px)" };
-const cardActiveRingMasteredStyle: React.CSSProperties = { boxShadow: "0 16px 42px rgba(88, 64, 168, 0.4)", transform: "translateY(-1px)" };
+const cardActiveRingOriginalStyle: React.CSSProperties = {
+  boxShadow: "0 14px 36px rgba(52, 68, 115, 0.32)",
+  transform: "translate3d(0, -1px, 0)"
+};
+const cardActiveRingMasteredStyle: React.CSSProperties = {
+  boxShadow: "0 16px 42px rgba(88, 64, 168, 0.4)",
+  transform: "translate3d(0, -1px, 0)"
+};
 const playButtonStyle: React.CSSProperties = {
   marginTop: "10px",
   width: "100%",
@@ -587,7 +677,7 @@ const masteredPlayButtonStyle: React.CSSProperties = {
 const masteredPlayButtonActiveStyle: React.CSSProperties = {
   ...masteredPlayButtonStyle,
   boxShadow: "inset 0 0 0 1px rgba(173, 151, 255, 0.52), 0 10px 24px rgba(94, 90, 201, 0.38)",
-  transform: "translateY(-1px)"
+  transform: "translate3d(0, -1px, 0)"
 };
 const timerRowStyle: React.CSSProperties = {
   marginTop: "8px",

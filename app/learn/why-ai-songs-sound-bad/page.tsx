@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { StaticBeforeAfterDemo } from "@/components/StaticBeforeAfterDemo";
 import { FaqSection } from "@/components/learn/faq-section";
 import { ArticleSchema } from "@/components/seo/article-schema";
 import { FAQSchema, type FaqItem } from "@/components/seo/faq-schema";
@@ -199,6 +200,21 @@ export default function WhyAiSongsSoundBadPage() {
             You mainly need a mastering step designed to help the song sound finished. If you want to do that in one place,
             start with the <Link href="/#master" style={inlineLinkStyle}>MasterSauce mastering flow</Link>.
           </p>
+
+          <StaticBeforeAfterDemo
+            articleSingle={{
+              pairId: "learn-why-ai-songs-suno-hiphop",
+              sectionTitle: "Hear the difference on a real Suno track",
+              sectionSubtitle: "Hip-Hop track generated in Suno — before and after MasterSauce. Free to try.",
+              badgeLabel: "Hip-Hop",
+              originalSrc: "/audio/Jucy Mama Juice before.wav",
+              masteredSrc: "/audio/Jucy Mama Juice After.wav",
+              originalTitle: "Original",
+              masteredTitle: "Mastered",
+              originalSubtitle: "Unmastered Suno track",
+              masteredSubtitle: "After MasterSauce"
+            }}
+          />
 
           <h2 style={h2Style}>What to Listen for in the Before and After</h2>
           <p style={pStyle}>When comparing the original and mastered versions, pay attention to:</p>
