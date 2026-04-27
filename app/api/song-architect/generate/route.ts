@@ -7,10 +7,12 @@ import { recordSongArchitectGenerationEvent } from "@/lib/song-architect/entitle
 import { normalizeSongArchitectOutput } from "@/lib/song-architect/normalize-output";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
 import { resolveSongArchitectInput } from "@/lib/song-architect/resolve-input";
+import { getSongLengthBlueprint, parseSongArchitectSongLength } from "@/lib/song-architect/song-length";
 import { resolveSongArchitectVerifiedContext } from "@/lib/song-architect/access";
 import type { SongArchitectInput, SongArchitectResolvedInput } from "@/lib/song-architect/types";
 
-const MAX_RESPONSE_TOKENS = 2200;
+const MAX_OUTPUT_TOKENS_HARD_CAP = 8192;
+const MAX_OUTPUT_TOKENS_FLOOR = 1800;
 const MAX_TIMEOUT_MS = 90000;
 const DEFAULT_TIMEOUT_MS = 45000;
 const SONG_ARCHITECT_DEBUG = process.env.SONG_ARCHITECT_DEBUG === "1";
@@ -18,6 +20,7 @@ const DEFAULT_REASONING_EFFORT = "low";
 
 const SongArchitectInputSchema = z.object({
   preset: z.string().trim().min(1).max(60).optional(),
+  songLength: z.enum(["short", "standard", "extended", "full"]).optional(),
   genre: z.string().trim().min(1).max(40).optional(),
   theme: z.string().trim().min(1).max(160).optional(),
   angle: z.string().trim().min(1).max(160).optional(),
@@ -64,7 +67,7 @@ const OPENAI_RESPONSE_SCHEMA = {
     lyricsSections: {
       type: "array",
       minItems: 1,
-      maxItems: 20,
+      maxItems: 24,
       items: {
         type: "object",
         additionalProperties: false,
@@ -73,7 +76,7 @@ const OPENAI_RESPONSE_SCHEMA = {
           section: { type: "string", minLength: 1, maxLength: 80 },
           lines: {
             type: "array",
-            maxItems: 24,
+            maxItems: 36,
             items: { type: "string", minLength: 1, maxLength: 240 }
           }
         }
@@ -89,7 +92,7 @@ const OPENAI_RESPONSE_SCHEMA = {
       maxItems: 6,
       items: { type: "string", minLength: 1, maxLength: 180 }
     },
-    exportPrompt: { type: "string", minLength: 1, maxLength: 9000 }
+    exportPrompt: { type: "string", minLength: 1, maxLength: 14000 }
   }
 } as const;
 
@@ -134,6 +137,13 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
   const reasoningEffort = process.env.OPENAI_SONG_ARCHITECT_REASONING_EFFORT?.trim() || DEFAULT_REASONING_EFFORT;
 
   const { resolved, presetUsed } = resolveSongArchitectInput(input);
+  const firstAttemptMaxOutputTokens = Math.min(
+    MAX_OUTPUT_TOKENS_HARD_CAP,
+    Math.max(
+      MAX_OUTPUT_TOKENS_FLOOR,
+      getSongLengthBlueprint(parseSongArchitectSongLength(input.songLength)).openAiMaxOutputTokensFirstAttempt
+    )
+  );
   async function callOpenAI(args: {
     attempt: number;
     timeoutMs: number;
@@ -288,7 +298,7 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
     const outputText = await callOpenAI({
       attempt: 1,
       timeoutMs,
-      maxOutputTokens: MAX_RESPONSE_TOKENS,
+      maxOutputTokens: firstAttemptMaxOutputTokens,
       reasoningEffort
     });
     return { outputText, model, presetUsed, resolvedInput: resolved };
@@ -299,7 +309,7 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
       const retryOutputText = await callOpenAI({
         attempt: 2,
         timeoutMs: Math.min(Math.round(timeoutMs * 1.5), MAX_TIMEOUT_MS),
-        maxOutputTokens: Math.min(4200, Math.max(2800, Math.round(MAX_RESPONSE_TOKENS * 1.5))),
+        maxOutputTokens: Math.min(6500, Math.max(3200, Math.round(firstAttemptMaxOutputTokens * 1.55))),
         reasoningEffort: DEFAULT_REASONING_EFFORT
       });
       return { outputText: retryOutputText, model, presetUsed, resolvedInput: resolved };
@@ -379,6 +389,7 @@ export async function POST(request: NextRequest) {
 
     const inputPayload: SongArchitectInput = {
       preset: parsed.data.preset,
+      songLength: parsed.data.songLength,
       genre: parsed.data.genre,
       theme: parsed.data.theme,
       angle: parsed.data.angle,

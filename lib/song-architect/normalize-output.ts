@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { buildExportPrompt } from "@/lib/song-architect/prompts";
+import { getSongLengthBlueprint } from "@/lib/song-architect/song-length";
 import type {
   SongArchitectDiagnostics,
   SongArchitectOutput,
@@ -20,14 +21,14 @@ const SongArchitectModelOutputSchema = z.object({
     .array(
       z.object({
         section: z.string().min(1).max(80),
-        lines: z.array(z.string().min(1).max(240)).max(24)
+        lines: z.array(z.string().min(1).max(240)).max(36)
       })
     )
     .min(1)
-    .max(20),
+    .max(24),
   performanceNotes: z.array(z.string().min(1).max(220)).max(10).default([]),
   altHooks: z.array(z.string().min(1).max(180)).max(6).default([]),
-  exportPrompt: z.string().min(1).max(9000).optional()
+  exportPrompt: z.string().min(1).max(14000).optional()
 });
 
 function clampScore(value: number): number {
@@ -150,11 +151,13 @@ function buildDefaultDiagnostics(): SongArchitectDiagnostics {
 
 function buildStyleBlock(input?: SongArchitectResolvedInput): string {
   if (!input) return "modern vocal, concise lines, dynamic lift";
+  const runtimeLabel = getSongLengthBlueprint(input.songLength).runtimeLabel;
   return [
     input.genre,
     `${input.emotion} mood`,
     input.vocalStyle,
     `${input.lineDensity} lines`,
+    `${runtimeLabel} song form`,
     input.energyCurve
   ]
     .map((part) => part.trim())
@@ -216,7 +219,11 @@ function assembleLyricsFromSections(sections: Array<{ section: string; lines: st
   return blocks.join("\n").trim();
 }
 
-function toRecoveryOutput(parsedJson: Record<string, unknown>, fallbackStyleBlock: string): Omit<SongArchitectOutput, "meta"> | null {
+function toRecoveryOutput(
+  parsedJson: Record<string, unknown>,
+  fallbackStyleBlock: string,
+  resolvedInput?: SongArchitectResolvedInput
+): Omit<SongArchitectOutput, "meta"> | null {
   const source = parsedJson;
   const conceptSource = (source.concept ?? {}) as Record<string, unknown>;
   const diagnosticsSource = (source.diagnostics ?? {}) as Record<string, unknown>;
@@ -283,7 +290,15 @@ function toRecoveryOutput(parsedJson: Record<string, unknown>, fallbackStyleBloc
     lyrics,
     performanceNotes,
     altHooks,
-    exportPrompt: typeof source.exportPrompt === "string" && source.exportPrompt.trim() ? source.exportPrompt : buildExportPrompt({ concept, lyrics }),
+    exportPrompt:
+      typeof source.exportPrompt === "string" && source.exportPrompt.trim()
+        ? source.exportPrompt
+        : buildExportPrompt(
+            { concept, lyrics },
+            resolvedInput?.songLength
+              ? { runtimeLabel: getSongLengthBlueprint(resolvedInput.songLength).runtimeLabel }
+              : undefined
+          ),
     diagnostics
   };
 }
@@ -305,7 +320,7 @@ export function normalizeSongArchitectOutput(args: {
   const validated = SongArchitectModelOutputSchema.safeParse(parsed.value);
 
   if (!validated.success) {
-    const recovered = toRecoveryOutput(parsed.value, fallbackStyleBlock);
+    const recovered = toRecoveryOutput(parsed.value, fallbackStyleBlock, args.resolvedInput);
     if (!recovered) {
       throw new Error("Song Architect model output did not match expected schema.");
     }
@@ -318,7 +333,8 @@ export function normalizeSongArchitectOutput(args: {
       meta: {
         ...(args.presetUsed ? { presetUsed: args.presetUsed } : {}),
         model: args.model,
-        generatedAt: args.generatedAt
+        generatedAt: args.generatedAt,
+        ...(args.resolvedInput?.songLength ? { songLength: args.resolvedInput.songLength } : {})
       }
     };
   }
@@ -334,7 +350,14 @@ export function normalizeSongArchitectOutput(args: {
     concept: validated.data.concept,
     lyrics
   };
-  const exportPrompt = validated.data.exportPrompt?.trim() || buildExportPrompt(outputForExport);
+  const exportPrompt =
+    validated.data.exportPrompt?.trim() ||
+    buildExportPrompt(
+      outputForExport,
+      args.resolvedInput?.songLength
+        ? { runtimeLabel: getSongLengthBlueprint(args.resolvedInput.songLength).runtimeLabel }
+        : undefined
+    );
   args.log?.("normalize_success", {
     parseStrategy: parsed.strategy,
     usedRecovery: false
@@ -351,7 +374,8 @@ export function normalizeSongArchitectOutput(args: {
     meta: {
       ...(args.presetUsed ? { presetUsed: args.presetUsed } : {}),
       model: args.model,
-      generatedAt: args.generatedAt
+      generatedAt: args.generatedAt,
+      ...(args.resolvedInput?.songLength ? { songLength: args.resolvedInput.songLength } : {})
     }
   };
 }

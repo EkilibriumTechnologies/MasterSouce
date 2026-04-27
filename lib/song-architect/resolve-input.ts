@@ -1,7 +1,9 @@
 import { getSongArchitectPresetById } from "@/lib/song-architect/presets";
+import { parseSongArchitectSongLength } from "@/lib/song-architect/song-length";
 import type { SongArchitectInput, SongArchitectResolvedInput } from "@/lib/song-architect/types";
 
 const DEFAULT_RESOLVED_INPUT: SongArchitectResolvedInput = {
+  songLength: "standard",
   genre: "pop",
   theme: "self-reinvention after a hard season",
   angle: "from self-doubt to decisive momentum",
@@ -44,6 +46,7 @@ export function resolveSongArchitectInput(input: SongArchitectInput): {
     ...DEFAULT_RESOLVED_INPUT,
     ...(preset?.defaults ?? {}),
     ...(input.preset ? { preset: input.preset } : {}),
+    songLength: parseSongArchitectSongLength(input.songLength),
     ...(sanitizeText(input.genre, 40) ? { genre: sanitizeText(input.genre, 40)! } : {}),
     ...(sanitizeText(input.theme, 160) ? { theme: sanitizeText(input.theme, 160)! } : {}),
     ...(sanitizeText(input.angle, 160) ? { angle: sanitizeText(input.angle, 160)! } : {}),

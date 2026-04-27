@@ -1,8 +1,10 @@
 import { CORE_SONGWRITING_RULES } from "@/lib/song-architect/rules";
+import { buildSongLengthPromptSection } from "@/lib/song-architect/song-length";
 import type { SongArchitectOutput, SongArchitectResolvedInput } from "@/lib/song-architect/types";
 
 export function buildSystemPrompt(input: SongArchitectResolvedInput): string {
   const rules = CORE_SONGWRITING_RULES.map((rule, idx) => `${idx + 1}. ${rule}`).join("\n");
+  const durationBlock = buildSongLengthPromptSection(input.songLength);
 
   return `You are MasterSauce Song Architect, an elite songwriting blueprint engine for modern AI music creators.
 Generate structured, premium songwriting blueprints optimized for AI music workflows.
@@ -10,11 +12,16 @@ Generate structured, premium songwriting blueprints optimized for AI music workf
 Core songwriting rules:
 ${rules}
 
+When the song length tier below conflicts with a core rule above, follow the length tier for runtime, word count, section count, and chorus depth.
+
+Song length tier (authoritative for quantity and architecture):
+${durationBlock}
+
 Preset and genre behavior:
 - Genre: ${input.genre}
 - Line density: ${input.lineDensity}
 - Vocal style: ${input.vocalStyle}
-- Structure target: ${input.structure}
+- Structure target (baseline; expand or adapt per length tier as needed): ${input.structure}
 - Energy curve target: ${input.energyCurve}
 - Language: ${input.language}
 
@@ -29,9 +36,8 @@ Formatting contract:
 - lyricsSections must be an array of objects with keys: section, lines.
 - section must be a short non-empty string.
 - lines must be arrays of plain lyric strings only.
-- Keep output concise and structurally clean.
-- Keep section count reasonable.
-- Keep lines concise.
+- Keep output structurally clean and commercially credible for the selected length tier.
+- Keep lines concise per section; earn word count through section count and returns, not rambling lines.
 - If unsure, prefer shorter output over malformed output.
 - Output must be parseable JSON.`;
 }
@@ -47,14 +53,17 @@ export function buildUserPrompt(input: SongArchitectResolvedInput): string {
   );
 }
 
-export function buildExportPrompt(output: Pick<SongArchitectOutput, "concept" | "lyrics">): string {
-  return [
+export function buildExportPrompt(
+  output: Pick<SongArchitectOutput, "concept" | "lyrics">,
+  options?: { runtimeLabel?: string }
+): string {
+  const head = [
+    options?.runtimeLabel ? `Target runtime: ${options.runtimeLabel}` : null,
     `Structure: ${output.concept.structure}`,
     `Theme: ${output.concept.theme}`,
     `Emotion: ${output.concept.emotion}`,
-    `Hook identity: ${output.concept.hookIdentity}`,
-    "",
-    "Lyrics blueprint:",
-    output.lyrics
-  ].join("\n");
+    `Hook identity: ${output.concept.hookIdentity}`
+  ].filter(Boolean) as string[];
+
+  return [...head, "", "Lyrics blueprint:", output.lyrics].join("\n");
 }

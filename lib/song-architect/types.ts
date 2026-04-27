@@ -1,5 +1,8 @@
+export type SongArchitectSongLength = "short" | "standard" | "extended" | "full";
+
 export type SongArchitectInput = {
   preset?: string;
+  songLength?: SongArchitectSongLength;
   genre?: string;
   theme?: string;
   angle?: string;
@@ -18,6 +21,7 @@ export type SongArchitectInput = {
 
 export type SongArchitectResolvedInput = {
   preset?: string;
+  songLength: SongArchitectSongLength;
   genre: string;
   theme: string;
   angle: string;
@@ -87,5 +91,6 @@ export type SongArchitectOutput = {
     presetUsed?: string;
     model: string;
     generatedAt: string;
+    songLength?: SongArchitectSongLength;
   };
 };
