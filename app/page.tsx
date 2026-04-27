@@ -7,6 +7,7 @@ import { PricingSection } from "@/components/pricing-section";
 import { JsonLdClient } from "@/components/seo/JsonLdClient";
 import { UploadForm } from "@/components/upload-form";
 import { TestimonialsSection } from "@/components/testimonials-section";
+import { StaticBeforeAfterDemo } from "@/components/StaticBeforeAfterDemo";
 import { getHomeProductMetrics } from "@/lib/product-metrics";
 import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
 import { MobileMasterBanner } from "@/components/mobile-master-banner";
@@ -200,6 +201,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           a clean path from mix to master — without rebuilding a signal chain every time.
         </p>
       </section>
+
+      <StaticBeforeAfterDemo />
 
       <MobileMasterBanner />
       <UploadForm />
