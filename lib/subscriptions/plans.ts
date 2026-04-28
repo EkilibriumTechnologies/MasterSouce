@@ -6,7 +6,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     name: "Free",
     monthlyPriceUsd: 0,
     monthlyMastersLimit: 2,
-    songArchitectGenerationsPerMonth: 1,
+    songArchitectGenerationsPerMonth: 3,
     quality: "16bit",
     stems: false,
     priority: false,

@@ -24,6 +24,7 @@ import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
+import { trackAbEvent } from "@/lib/analytics/ab-comparison";
 
 /** Owner panel: session token for owner bypass checks on GET /api/download. */
 function resolveOwnerSessionToken(ownerTestingPanel: boolean): string {
@@ -947,6 +948,11 @@ export function UploadForm() {
             masteredSubLabel={
               adaptiveModeActive ? "Shaped from your written notes" : "Balanced for streaming playback"
             }
+            analyticsContext={{
+              jobId: result.jobId,
+              fileId: result.download.fileId,
+              planId: result.quota?.planId
+            }}
             afterCompare={
               <div
                 style={{
@@ -964,6 +970,8 @@ export function UploadForm() {
                   <div style={finalMasterExportDownloadWrapStyle}>
                     <button
                       type="button"
+                      data-analytics-id="ab-download"
+                      data-analytics-version="mastered"
                       disabled={finalMasterExportDownloading}
                       aria-busy={finalMasterExportDownloading}
                       aria-describedby={finalMasterExportDownloading ? "final-master-export-status" : undefined}
@@ -981,6 +989,12 @@ export function UploadForm() {
                       }}
                       onClick={() => {
                         if (finalMasterExportDownloading) return;
+                        trackAbEvent("ab_download_clicked", {
+                          version: "mastered",
+                          job_id: result.jobId,
+                          file_id: result.download.fileId,
+                          plan_id: result.quota?.planId
+                        });
                         setFinalMasterExportInlineError(null);
                         setFinalMasterExportDownloading(true);
                         void downloadFinalMasterWithOptionalBypass(

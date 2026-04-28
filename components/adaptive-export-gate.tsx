@@ -10,6 +10,7 @@ import {
 import { buildAdaptiveCheckoutReturnTo } from "@/lib/billing/adaptive-pricing-link";
 import type { PendingAdaptiveExportV1 } from "@/lib/billing/pending-adaptive-export";
 import { savePendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
+import { trackAbEvent } from "@/lib/analytics/ab-comparison";
 
 type ExportAccessPayload = {
   entitled?: boolean;
@@ -247,9 +248,18 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
           {info ? <p style={infoStyle}>{info}</p> : null}
           <button
             type="button"
+            data-analytics-id="ab-upgrade"
+            data-analytics-version="mastered"
             disabled={busy}
             style={buttonStyle}
-            onClick={() => void handleContinueToCheckout()}
+            onClick={() => {
+              trackAbEvent("ab_upgrade_clicked", {
+                version: "mastered",
+                job_id: jobId,
+                file_id: fileId
+              });
+              void handleContinueToCheckout();
+            }}
           >
             {checkoutLoading ? "Starting checkout…" : "Continue to checkout for adaptive access"}
           </button>

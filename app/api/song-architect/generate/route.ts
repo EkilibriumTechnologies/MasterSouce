@@ -495,7 +495,7 @@ export async function POST(request: NextRequest) {
           ok: false,
           code: "song_architect_quota_reached",
           message: isFree
-            ? "You’ve used your free Song Architect blueprint for this month."
+            ? "You’ve used your 3 free Song Architect blueprints for this month."
             : "You’ve used all Song Architect blueprints for this month.",
           usage: trustedAccess.usage
         },

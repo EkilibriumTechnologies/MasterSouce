@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { CompareSpectrum } from "@/components/audio-compare-spectrum";
+import { trackAbEvent, type AbVersion } from "@/lib/analytics/ab-comparison";
 
 type AudioCompareProps = {
   originalPreviewUrl: string;
@@ -13,6 +14,13 @@ type AudioCompareProps = {
   masteredSubLabel?: string;
   /** Rendered after the two comparison cards (players), before the section footnote — e.g. primary export CTA. */
   afterCompare?: ReactNode;
+  analyticsContext?: {
+    trackId?: string;
+    jobId?: string;
+    fileId?: string;
+    sessionId?: string;
+    planId?: string;
+  };
 };
 
 function dynamicHintStyle(active: boolean): CSSProperties {
@@ -36,7 +44,8 @@ export function AudioCompare({
   originalSubLabel = "Your uploaded track",
   masteredLabel = "Mastered",
   masteredSubLabel = "Balanced for streaming playback",
-  afterCompare
+  afterCompare,
+  analyticsContext
 }: AudioCompareProps) {
   const originalRef = useRef<HTMLAudioElement>(null);
   const masteredRef = useRef<HTMLAudioElement>(null);
@@ -51,6 +60,10 @@ export function AudioCompare({
   const [currentTime, setCurrentTime] = useState(0);
   const [originalDuration, setOriginalDuration] = useState(0);
   const [masteredDuration, setMasteredDuration] = useState(0);
+  const progressMilestonesRef = useRef<Record<AbVersion, Set<number>>>({
+    original: new Set<number>(),
+    mastered: new Set<number>()
+  });
 
   useEffect(() => {
     originalRef.current?.pause();
@@ -61,6 +74,8 @@ export function AudioCompare({
     setCurrentTime(0);
     setOriginalDuration(0);
     setMasteredDuration(0);
+    progressMilestonesRef.current.original.clear();
+    progressMilestonesRef.current.mastered.clear();
   }, [originalPreviewUrl, masteredPreviewUrl]);
 
   useLayoutEffect(() => {
@@ -178,6 +193,7 @@ export function AudioCompare({
     setCurrentTime(nextTime);
     setActiveSource(target);
     activeSourceRef.current = target;
+    trackAbEvent("ab_seek", baseAnalyticsParams(target, nextTime, targetDuration));
   }
 
   function seekWithSlider(event: ChangeEvent<HTMLInputElement>, target: "original" | "mastered") {
@@ -185,7 +201,37 @@ export function AudioCompare({
     seekByRatio(Math.max(0, Math.min(1, ratio)), target);
   }
 
+  function baseAnalyticsParams(version: AbVersion, position: number, duration: number) {
+    const percent = duration > 0 ? (position / duration) * 100 : 0;
+    return {
+      version,
+      track_id: analyticsContext?.trackId,
+      job_id: analyticsContext?.jobId,
+      file_id: analyticsContext?.fileId,
+      session_id: analyticsContext?.sessionId,
+      plan_id: analyticsContext?.planId,
+      playback_position_seconds: Number(position.toFixed(2)),
+      playback_percent: Number(Math.max(0, Math.min(100, percent)).toFixed(1))
+    };
+  }
+
+  function trackProgressMilestones(version: AbVersion, position: number, duration: number) {
+    if (duration <= 0) return;
+    const currentPercent = (position / duration) * 100;
+    const milestones = [25, 50, 75, 100] as const;
+    milestones.forEach((milestone) => {
+      if (currentPercent < milestone) return;
+      if (progressMilestonesRef.current[version].has(milestone)) return;
+      progressMilestonesRef.current[version].add(milestone);
+      trackAbEvent(version === "original" ? "ab_original_progress" : "ab_mastered_progress", {
+        ...baseAnalyticsParams(version, position, duration),
+        playback_percent: milestone
+      });
+    });
+  }
+
   async function playSource(target: "original" | "mastered") {
+    const previousSource = activeSourceRef.current;
     const nextAudio = getAudio(target);
     const otherAudio = getAudio(target === "original" ? "mastered" : "original");
     if (!nextAudio) return;
@@ -210,6 +256,11 @@ export function AudioCompare({
     try {
       await nextAudio.play();
       setIsPlaying(true);
+      const params = baseAnalyticsParams(target, nextAudio.currentTime || currentTime, getDuration(target));
+      trackAbEvent(target === "original" ? "ab_original_play" : "ab_mastered_play", params);
+      if (previousSource !== target) {
+        trackAbEvent(target === "mastered" ? "ab_switch_to_mastered" : "ab_switch_to_original", params);
+      }
     } catch {
       setIsPlaying(false);
     }
@@ -217,8 +268,15 @@ export function AudioCompare({
 
   function pauseActive() {
     const activeAudio = getAudio(activeSource);
+    const version = activeSource;
+    const pausedPosition = activeAudio?.currentTime ?? currentTime;
+    const duration = getDuration(version);
     activeAudio?.pause();
     setIsPlaying(false);
+    trackAbEvent(
+      version === "original" ? "ab_original_pause" : "ab_mastered_pause",
+      baseAnalyticsParams(version, pausedPosition, duration)
+    );
   }
 
   const hintOriginal = "Your mix as uploaded";
@@ -264,7 +322,10 @@ export function AudioCompare({
             onLoadedMetadata={(event) => setOriginalDuration(event.currentTarget.duration || 0)}
             onTimeUpdate={(event) => {
               if (activeSourceRef.current !== "original") return;
-              setCurrentTime(event.currentTarget.currentTime || 0);
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              setCurrentTime(position);
+              trackProgressMilestones("original", position, duration);
             }}
             onEnded={() => {
               if (activeSourceRef.current !== "original") return;
@@ -275,6 +336,8 @@ export function AudioCompare({
           />
           <button
             type="button"
+            data-analytics-id="ab-original-play"
+            data-analytics-version="original"
             style={
               activeSource === "original"
                 ? originalIsPlaying
@@ -288,6 +351,9 @@ export function AudioCompare({
               if (activeSource === "original" && isPlaying) {
                 pauseActive();
                 return;
+              }
+              if (activeSource !== "original") {
+                trackAbEvent("ab_toggle_clicked", baseAnalyticsParams("original", currentTime, sharedDuration));
               }
               void playSource("original");
             }}
@@ -319,6 +385,8 @@ export function AudioCompare({
           </div>
         </div>
         <div
+          data-analytics-id="ab-mastered-play"
+          data-analytics-version="mastered"
           style={{
             ...(activeSource === "mastered" ? masteredCardStyle : cardStyle),
             ...cardTransitionStyle,
@@ -349,7 +417,10 @@ export function AudioCompare({
             onLoadedMetadata={(event) => setMasteredDuration(event.currentTarget.duration || 0)}
             onTimeUpdate={(event) => {
               if (activeSourceRef.current !== "mastered") return;
-              setCurrentTime(event.currentTarget.currentTime || 0);
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              setCurrentTime(position);
+              trackProgressMilestones("mastered", position, duration);
             }}
             onEnded={() => {
               if (activeSourceRef.current !== "mastered") return;
@@ -360,6 +431,8 @@ export function AudioCompare({
           />
           <button
             type="button"
+            data-analytics-id="ab-toggle"
+            data-analytics-version={activeSource === "original" ? "mastered" : "original"}
             style={
               activeSource === "mastered"
                 ? masteredIsPlaying
@@ -369,6 +442,7 @@ export function AudioCompare({
             }
             onClick={() => {
               const nextSource = activeSource === "original" ? "mastered" : "original";
+              trackAbEvent("ab_toggle_clicked", baseAnalyticsParams(nextSource, currentTime, sharedDuration));
               void playSource(nextSource);
             }}
           >

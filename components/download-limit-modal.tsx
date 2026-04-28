@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { PlanId } from "@/lib/subscriptions/types";
+import { trackAbEvent } from "@/lib/analytics/ab-comparison";
 
 type DownloadLimitModalProps = {
   open: boolean;
@@ -19,6 +20,10 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        trackAbEvent("ab_comparison_closed", {
+          version: "mastered",
+          plan_id: planId ?? undefined
+        });
         onClose();
       }
     };
@@ -30,7 +35,18 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
   if (!open) return null;
 
   return (
-    <div style={backdropStyle} onClick={onClose}>
+    <div
+      style={backdropStyle}
+      data-analytics-id="ab-comparison-close"
+      data-analytics-version="mastered"
+      onClick={() => {
+        trackAbEvent("ab_comparison_closed", {
+          version: "mastered",
+          plan_id: planId ?? undefined
+        });
+        onClose();
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -39,7 +55,20 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
         style={panelStyle}
         onClick={(event) => event.stopPropagation()}
       >
-        <button type="button" style={closeStyle} onClick={onClose} aria-label="Close dialog">
+        <button
+          type="button"
+          style={closeStyle}
+          data-analytics-id="ab-comparison-close"
+          data-analytics-version="mastered"
+          onClick={() => {
+            trackAbEvent("ab_comparison_closed", {
+              version: "mastered",
+              plan_id: planId ?? undefined
+            });
+            onClose();
+          }}
+          aria-label="Close dialog"
+        >
           ×
         </button>
         <p id="download-limit-title" style={titleStyle}>
@@ -51,7 +80,20 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
             : "You've used your available masters for this period. Upgrade or add a credit pack to keep exporting finals."}
         </p>
         <div style={actionsStyle}>
-          <button ref={viewPlansRef} type="button" style={primaryStyle} onClick={onViewPlans}>
+          <button
+            ref={viewPlansRef}
+            type="button"
+            style={primaryStyle}
+            data-analytics-id="ab-upgrade"
+            data-analytics-version="mastered"
+            onClick={() => {
+              trackAbEvent("ab_upgrade_clicked", {
+                version: "mastered",
+                plan_id: planId ?? undefined
+              });
+              onViewPlans();
+            }}
+          >
             View plans
           </button>
           <button type="button" style={secondaryStyle} onClick={onClose}>

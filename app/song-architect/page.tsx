@@ -676,7 +676,7 @@ export default function SongArchitectPage() {
           </label>
 
           {selectedPreset ? <p style={presetHintStyle}>{selectedPreset.description}</p> : null}
-          <p style={freeTierNoticeStyle}>1 free blueprint per month — no card required. Email confirmed at export.</p>
+          <p style={freeTierNoticeStyle}>3 free blueprints per month — no card required. Email confirmed at export.</p>
           <button type="submit" style={primaryButtonStyle} disabled={isGenerating}>
             {isGenerating ? "Generating..." : "Generate Blueprint"}
           </button>
