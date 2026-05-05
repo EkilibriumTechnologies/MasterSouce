@@ -4,9 +4,10 @@ import { spawn } from "node:child_process";
 import { analyzeTrack, type TrackAnalysis } from "@/lib/audio/analyze-track";
 import { getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
 import { getPreviewStartSeconds, getSafePreviewDurationSeconds } from "@/lib/audio/preview-segment";
-import { requestAdaptiveDecisionFromOpenAI } from "@/lib/openai/adaptive-mastering";
+import type { AdaptiveDecision } from "@/lib/openai/adaptive-mastering";
+import { tryRequestAdaptiveDecisionWithTimeoutRetry } from "@/lib/openai/adaptive-mastering";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
-import { GENRE_PRESETS, type LoudnessMode } from "@/lib/genre-presets";
+import { GENRE_PRESETS, getLoudnessModeLufsTarget, getLoudnessModeTruePeak, type LoudnessMode } from "@/lib/genre-presets";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
 import type { PlanQuality } from "@/lib/subscriptions/types";
 
@@ -36,7 +37,7 @@ export type AdaptiveInstructionSettings = {
 };
 
 export type AdaptiveInstructionSummary = {
-  source: "ai";
+  source: "ai" | "heuristic";
   rationale: string;
   settings: AdaptiveInstructionSettings;
 };
@@ -55,6 +56,9 @@ export type AdaptiveMasteringResult = {
     correctivePasses: number;
     warnings: string[];
   };
+  adaptiveAiFallback?: boolean;
+  adaptiveAiFallbackReason?: "timeout";
+  adaptiveAiFallbackMessage?: string;
 };
 
 function resolveCodecForQuality(quality: PlanQuality): "pcm_s16le" | "pcm_s24le" | "pcm_f32le" {
@@ -163,18 +167,7 @@ function mapTransientEmphasis(value: "low" | "medium" | "high"): AdaptiveInstruc
   return "balanced";
 }
 
-async function generateAdaptiveInstructions(
-  baseline: TrackAnalysis,
-  genre: keyof typeof GENRE_PRESETS | undefined,
-  loudnessMode: LoudnessMode | undefined,
-  userIntent: string | undefined
-): Promise<AdaptiveInstructionSummary> {
-  const decision = await requestAdaptiveDecisionFromOpenAI({
-    analysis: baseline,
-    genre,
-    loudnessMode,
-    userIntent
-  });
+function mapAiDecisionToInstructionSummary(decision: AdaptiveDecision, baseline: TrackAnalysis): AdaptiveInstructionSummary {
   const highBand = mapHighEqActionToDb(decision.eq_high_action);
   const isHarshTrack = baseline.notes.some((note) => note.includes("reduce potential harshness"));
   const subtlePresenceLiftDb = decision.eq_high_action === "add_presence" && !isHarshTrack ? 0.3 : 0;
@@ -198,6 +191,120 @@ async function generateAdaptiveInstructions(
       transientHandling: mapTransientEmphasis(decision.transient_emphasis),
       vocalPresenceEmphasis: clamp(decision.vocal_presence_focus ? 1 + compStyleBonus : compStyleBonus, -1.5, 2)
     }
+  };
+}
+
+/** Standard MasterSauce profile derived from genre + loudness when Adaptive AI is unavailable. */
+function buildHeuristicAdaptiveInstructionSummary(
+  baseline: TrackAnalysis,
+  genre: keyof typeof GENRE_PRESETS | undefined,
+  loudnessMode: LoudnessMode | undefined
+): AdaptiveInstructionSummary {
+  const presetKey: keyof typeof GENRE_PRESETS =
+    genre !== undefined && Object.prototype.hasOwnProperty.call(GENRE_PRESETS, genre) ? genre : "pop";
+  const preset = GENRE_PRESETS[presetKey];
+  const mode: LoudnessMode = loudnessMode ?? "balanced";
+
+  const targetLufs = clamp(getLoudnessModeLufsTarget(preset, mode), -14, -8.8);
+  const limiterCeilingDb = clamp(getLoudnessModeTruePeak(preset, mode), -2, -0.1);
+
+  const ratio = preset.compression.ratio;
+  const compressionIntensity: AdaptiveInstructionSettings["compressionIntensity"] =
+    ratio >= 3.4 ? "strong" : ratio >= 2.1 ? "medium" : "light";
+
+  const attack = preset.compression.attack;
+  const transientHandling: AdaptiveInstructionSettings["transientHandling"] =
+    attack <= 12 ? "tight" : attack >= 45 ? "preserve" : "balanced";
+
+  let lowEnd = 0;
+  let lowMid = 0;
+  let presence = 0;
+  let air = 0;
+  let nLe = 0;
+  let nLm = 0;
+  let nPr = 0;
+  let nAr = 0;
+
+  for (const band of preset.eq) {
+    if (band.type === "highpass") continue;
+    const f = band.freq;
+    const g = band.gain;
+    if (f < 180) {
+      lowEnd += g;
+      nLe += 1;
+    } else if (f < 900) {
+      lowMid += g;
+      nLm += 1;
+    } else if (f < 7000) {
+      presence += g;
+      nPr += 1;
+    } else {
+      air += g;
+      nAr += 1;
+    }
+  }
+
+  const avg = (sum: number, n: number) => (n > 0 ? sum / n : 0);
+
+  const eqDirection = {
+    lowEnd: clamp(avg(lowEnd, nLe), -2.2, 2.2),
+    lowMid: clamp(avg(lowMid, nLm), -2.2, 2.2),
+    presence: clamp(avg(presence, nPr), -2.2, 2.2),
+    air: clamp(avg(air, nAr), -2.2, 2.2)
+  };
+
+  if (baseline.notes.some((n) => n.includes("reduce potential harshness"))) {
+    eqDirection.presence = clamp(eqDirection.presence - 0.4, -2.2, 2.2);
+  }
+  if (baseline.alreadyLimited) {
+    eqDirection.lowEnd = clamp(eqDirection.lowEnd - 0.2, -2.2, 2.2);
+  }
+
+  return {
+    source: "heuristic",
+    rationale:
+      "Applied the standard MasterSauce genre and loudness profile because Adaptive AI was unavailable.",
+    settings: {
+      eqDirection,
+      compressionIntensity,
+      saturationAmount: clamp(preset.saturation ? 0.35 : 0, 0, 1),
+      stereoWidth: clamp(1.02, 0.9, 1.2),
+      targetLufs,
+      limiterCeilingDb,
+      transientHandling,
+      vocalPresenceEmphasis: clamp(0.35, -1.5, 2)
+    }
+  };
+}
+
+async function generateAdaptiveInstructions(
+  baseline: TrackAnalysis,
+  genre: keyof typeof GENRE_PRESETS | undefined,
+  loudnessMode: LoudnessMode | undefined,
+  userIntent: string | undefined
+): Promise<{
+  instructionSummary: AdaptiveInstructionSummary;
+  adaptiveAiFallback?: boolean;
+  adaptiveAiFallbackReason?: "timeout";
+  adaptiveAiFallbackMessage?: string;
+}> {
+  const tryResult = await tryRequestAdaptiveDecisionWithTimeoutRetry({
+    analysis: baseline,
+    genre,
+    loudnessMode,
+    userIntent
+  });
+
+  if (tryResult.ok) {
+    return { instructionSummary: mapAiDecisionToInstructionSummary(tryResult.decision, baseline) };
+  }
+
+  return {
+    instructionSummary: buildHeuristicAdaptiveInstructionSummary(baseline, genre, loudnessMode),
+    adaptiveAiFallback: true,
+    adaptiveAiFallbackReason: "timeout",
+    adaptiveAiFallbackMessage:
+      "Adaptive AI took too long, so we used the standard MasterSauce mastering chain."
   };
 }
 
@@ -230,12 +337,13 @@ function buildAdaptiveFilterChain(settings: AdaptiveInstructionSettings): string
 export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringRequest): Promise<AdaptiveMasteringResult> {
   await fs.mkdir(getTempRoot(), { recursive: true });
   const baselineAnalysis = await analyzeTrack(request.inputPath);
-  const instructionSummary = await generateAdaptiveInstructions(
+  const generated = await generateAdaptiveInstructions(
     baselineAnalysis,
     request.genre,
     request.loudnessMode,
     request.userIntent
   );
+  const { instructionSummary, adaptiveAiFallback, adaptiveAiFallbackReason, adaptiveAiFallbackMessage } = generated;
   const outputCodec = resolveCodecForQuality(request.outputQuality);
 
   const adaptiveMasteredPath = path.join(getTempRoot(), `${makeId(`adaptive_${request.jobId}`)}.wav`);
@@ -411,6 +519,13 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     validation: {
       correctivePasses,
       warnings
-    }
+    },
+    ...(adaptiveAiFallback === true
+      ? {
+          adaptiveAiFallback: true as const,
+          adaptiveAiFallbackReason,
+          adaptiveAiFallbackMessage
+        }
+      : {})
   };
 }

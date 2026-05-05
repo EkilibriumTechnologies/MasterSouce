@@ -6,7 +6,11 @@ import { toPublicMetrics } from "@/lib/audio/public-analysis";
 import { runAdaptiveMasteringPipeline } from "@/lib/audio/adaptive-mastering-pipeline";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
-import { AdaptiveOpenAIError } from "@/lib/openai/adaptive-mastering";
+import {
+  AdaptiveOpenAIError,
+  getAdaptiveOpenAiTimeoutDiagnostics,
+  isAdaptiveMasteringOpenAiFatalError
+} from "@/lib/openai/adaptive-mastering";
 import { createJobId } from "@/lib/jobs/job-id";
 import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord } from "@/lib/storage/temp-files";
 import { incrementProductMetric } from "@/lib/product-metrics";
@@ -81,10 +85,14 @@ export async function POST(request: NextRequest) {
       standardJobId: parsed.data.standardMasterJobId,
       adaptiveJobId: jobId
     });
-    // TEMP: safe preflight before adaptive OpenAI path (no secrets, no audio payloads).
+    // Safe preflight before adaptive OpenAI path (no secrets, no audio payloads).
+    const timeoutDiag = getAdaptiveOpenAiTimeoutDiagnostics();
     console.info("[master-ai] adaptive_openai_preflight", {
       OPENAI_ADAPTIVE_MODEL: process.env.OPENAI_ADAPTIVE_MODEL ?? null,
       OPENAI_ADAPTIVE_TIMEOUT_MS: process.env.OPENAI_ADAPTIVE_TIMEOUT_MS ?? null,
+      rawEnvTimeoutMs: timeoutDiag.rawEnvTimeoutMs,
+      resolvedTimeoutMs: timeoutDiag.resolvedTimeoutMs,
+      resolvedModel: timeoutDiag.model,
       openaiApiKeyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
       nodeEnv: process.env.NODE_ENV
     });
@@ -165,7 +173,16 @@ export async function POST(request: NextRequest) {
           }
         : null,
       adaptiveSettings: adaptive.instructionSummary,
-      validation: adaptive.validation
+      validation: adaptive.validation,
+      ...(adaptive.adaptiveAiFallback === true &&
+      adaptive.adaptiveAiFallbackReason &&
+      adaptive.adaptiveAiFallbackMessage
+        ? {
+            adaptiveAiFallback: true as const,
+            adaptiveAiFallbackReason: adaptive.adaptiveAiFallbackReason,
+            adaptiveAiFallbackMessage: adaptive.adaptiveAiFallbackMessage
+          }
+        : {})
     };
 
     console.log("[master-ai] adaptive_preview:completed", {
@@ -193,18 +210,46 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     if (error instanceof AdaptiveOpenAIError) {
+      const diag = getAdaptiveOpenAiTimeoutDiagnostics();
+      console.error("[master-ai] adaptive_openai_error", {
+        errorCode: error.code,
+        model: error.debug?.model ?? diag.model,
+        timeoutMs: error.debug?.timeoutMs ?? diag.resolvedTimeoutMs,
+        rawEnvTimeoutMs: diag.rawEnvTimeoutMs,
+        resolvedTimeoutMs: diag.resolvedTimeoutMs,
+        hasOpenAIApiKey: error.debug?.hasOpenAIApiKey ?? Boolean(process.env.OPENAI_API_KEY?.trim()),
+        openAiHttpStatus: error.debug?.openAiHttpStatus ?? null
+      });
       if (process.env.NODE_ENV !== "production") {
         console.error("[MASTER_AI_DEBUG] adaptive_ai_unavailable", {
           adaptiveOpenAIErrorCode: error.code,
           model: error.debug?.model ?? null,
           hasOpenAIApiKey: error.debug?.hasOpenAIApiKey ?? Boolean(process.env.OPENAI_API_KEY?.trim()),
-          timeoutMs: error.debug?.timeoutMs ?? Number(process.env.OPENAI_ADAPTIVE_TIMEOUT_MS ?? "12000"),
+          timeoutMs: error.debug?.timeoutMs ?? diag.resolvedTimeoutMs,
           requestBody: error.debug?.requestBody ?? null,
           openAiHttpStatus: error.debug?.openAiHttpStatus ?? null,
           openAiErrorPayload: error.debug?.openAiErrorPayload ?? null
         });
-        // Temporary local-only marker to quickly classify 503 root cause.
         console.error("[MASTER_AI_DEBUG] adaptive_503_failure_classification", error.code);
+      }
+      if (error.code === "timeout") {
+        console.error("[master-ai] Unexpected AdaptiveOpenAI timeout at route boundary (should be handled in pipeline).");
+        return NextResponse.json(
+          {
+            error: "adaptive_mastering_unexpected",
+            message: "Adaptive preview failed unexpectedly. Please retry."
+          },
+          { status: 500 }
+        );
+      }
+      if (!isAdaptiveMasteringOpenAiFatalError(error)) {
+        return NextResponse.json(
+          {
+            error: "adaptive_mastering_unexpected",
+            message: "Adaptive preview failed unexpectedly. Please retry."
+          },
+          { status: 500 }
+        );
       }
       return NextResponse.json(
         {

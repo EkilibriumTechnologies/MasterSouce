@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { TrackAnalysis } from "@/lib/audio/analyze-track";
 import type { LoudnessMode } from "@/lib/genre-presets";
 
+export const ADAPTIVE_OPENAI_TIMEOUT_MAX_MS = 20000;
+
 export const ADAPTIVE_MASTERING_SYSTEM_PROMPT = `You are the Adaptive AI Mastering decision engine for a production audio pipeline.
 You do not process audio directly. You only return strict machine-readable mastering instructions.
 
@@ -49,7 +51,7 @@ const AdaptiveDecisionSchema = z.object({
 
 export type AdaptiveDecision = z.infer<typeof AdaptiveDecisionSchema>;
 
-type AdaptiveDecisionInput = {
+export type AdaptiveDecisionInput = {
   analysis: TrackAnalysis;
   genre?: string;
   loudnessMode?: LoudnessMode;
@@ -169,17 +171,75 @@ function toSafeRedactedRequestBody(input: AdaptiveDecisionInput, model: string, 
   };
 }
 
-export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionInput): Promise<AdaptiveDecision> {
-  const model = process.env.OPENAI_ADAPTIVE_MODEL?.trim() || "gpt-5-mini";
-  const timeoutMs = Number(process.env.OPENAI_ADAPTIVE_TIMEOUT_MS ?? "12000");
-  const safeTimeoutMs = Number.isFinite(timeoutMs) ? timeoutMs : 12000;
+/** Model id uses the letter "o" in `4o` (gpt-4o-mini), never `40`. */
+export function getAdaptiveOpenAiModel(): string {
+  return process.env.OPENAI_ADAPTIVE_MODEL?.trim() || "gpt-4o-mini";
+}
+
+export function getAdaptiveOpenAiTimeoutDiagnostics(): {
+  model: string;
+  rawEnvTimeoutMs: number | null;
+  resolvedTimeoutMs: number;
+} {
+  const model = getAdaptiveOpenAiModel();
+  const rawStr = process.env.OPENAI_ADAPTIVE_TIMEOUT_MS?.trim();
+  if (!rawStr) {
+    return { model, rawEnvTimeoutMs: null, resolvedTimeoutMs: Math.min(12000, ADAPTIVE_OPENAI_TIMEOUT_MAX_MS) };
+  }
+  const parsed = Number(rawStr);
+  const rawEnvTimeoutMs = Number.isFinite(parsed) ? parsed : null;
+  const baseMs = rawEnvTimeoutMs ?? 12000;
+  const resolvedTimeoutMs = Math.min(baseMs, ADAPTIVE_OPENAI_TIMEOUT_MAX_MS);
+  return { model, rawEnvTimeoutMs, resolvedTimeoutMs };
+}
+
+export function isAdaptiveMasteringOpenAiFatalError(error: AdaptiveOpenAIError): boolean {
+  if (error.code === "timeout") {
+    return false;
+  }
+  if (error.code === "missing_api_key" || error.code === "invalid_schema" || error.code === "empty_output") {
+    return true;
+  }
+  if (error.code !== "http_error") {
+    return true;
+  }
+  const status = error.debug?.openAiHttpStatus;
+  if (status === 401 || status === 403 || status === 429 || status === 404) {
+    return true;
+  }
+  if (status === 400) {
+    const p = (error.debug?.openAiErrorPayload ?? "").toLowerCase();
+    if (
+      p.includes("invalid_api_key") ||
+      p.includes("incorrect api key") ||
+      p.includes("invalid api key") ||
+      p.includes("insufficient_quota") ||
+      p.includes("quota") ||
+      (p.includes("model") && (p.includes("not found") || p.includes("does not exist") || p.includes("unknown model")))
+    ) {
+      return true;
+    }
+  }
+  return true;
+}
+
+type SingleAttemptMeta = {
+  model: string;
+  resolvedTimeoutMs: number;
+};
+
+async function requestAdaptiveDecisionFromOpenAISingleAttempt(
+  input: AdaptiveDecisionInput,
+  meta: SingleAttemptMeta
+): Promise<AdaptiveDecision> {
+  const { model, resolvedTimeoutMs } = meta;
   const reasoningEffort = process.env.OPENAI_ADAPTIVE_REASONING_EFFORT?.trim();
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new AdaptiveOpenAIError("missing_api_key", "OPENAI_API_KEY is not configured.", {
       model,
       hasOpenAIApiKey: false,
-      timeoutMs: safeTimeoutMs,
+      timeoutMs: resolvedTimeoutMs,
       requestBody: null,
       openAiHttpStatus: null,
       openAiErrorPayload: null
@@ -190,7 +250,7 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
   const safeDebugRequestBody = toSafeRedactedRequestBody(input, model, reasoningEffort);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), safeTimeoutMs);
+  const timer = setTimeout(() => controller.abort(), resolvedTimeoutMs);
 
   try {
     const body: Record<string, unknown> = {
@@ -234,7 +294,7 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
       throw new AdaptiveOpenAIError("http_error", `OpenAI Responses API error (${res.status}): ${errText.slice(0, 500)}`, {
         model,
         hasOpenAIApiKey,
-        timeoutMs: safeTimeoutMs,
+        timeoutMs: resolvedTimeoutMs,
         requestBody: safeDebugRequestBody,
         openAiHttpStatus: res.status,
         openAiErrorPayload: errText || null
@@ -271,7 +331,7 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
       throw new AdaptiveOpenAIError("empty_output", "OpenAI returned no structured output text.", {
         model,
         hasOpenAIApiKey,
-        timeoutMs: safeTimeoutMs,
+        timeoutMs: resolvedTimeoutMs,
         requestBody: safeDebugRequestBody,
         openAiHttpStatus: res.status,
         openAiErrorPayload: null
@@ -285,7 +345,7 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
       throw new AdaptiveOpenAIError("invalid_schema", "OpenAI structured output was not valid JSON.", {
         model,
         hasOpenAIApiKey,
-        timeoutMs: safeTimeoutMs,
+        timeoutMs: resolvedTimeoutMs,
         requestBody: safeDebugRequestBody,
         openAiHttpStatus: res.status,
         openAiErrorPayload: outputText
@@ -297,7 +357,7 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
       throw new AdaptiveOpenAIError("invalid_schema", "OpenAI structured output did not match adaptive schema.", {
         model,
         hasOpenAIApiKey,
-        timeoutMs: safeTimeoutMs,
+        timeoutMs: resolvedTimeoutMs,
         requestBody: safeDebugRequestBody,
         openAiHttpStatus: res.status,
         openAiErrorPayload: outputText
@@ -310,10 +370,10 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
       throw error;
     }
     if (error instanceof Error && error.name === "AbortError") {
-      throw new AdaptiveOpenAIError("timeout", `OpenAI adaptive decision timed out after ${safeTimeoutMs}ms.`, {
+      throw new AdaptiveOpenAIError("timeout", `OpenAI adaptive decision timed out after ${resolvedTimeoutMs}ms.`, {
         model,
         hasOpenAIApiKey,
-        timeoutMs: safeTimeoutMs,
+        timeoutMs: resolvedTimeoutMs,
         requestBody: safeDebugRequestBody,
         openAiHttpStatus: null,
         openAiErrorPayload: null
@@ -322,7 +382,7 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
     throw new AdaptiveOpenAIError("http_error", error instanceof Error ? error.message : "Unknown OpenAI error.", {
       model,
       hasOpenAIApiKey,
-      timeoutMs: safeTimeoutMs,
+      timeoutMs: resolvedTimeoutMs,
       requestBody: safeDebugRequestBody,
       openAiHttpStatus: null,
       openAiErrorPayload: null
@@ -330,4 +390,64 @@ export async function requestAdaptiveDecisionFromOpenAI(input: AdaptiveDecisionI
   } finally {
     clearTimeout(timer);
   }
+}
+
+export type TryAdaptiveOpenAiDecisionResult =
+  | { ok: true; decision: AdaptiveDecision }
+  | { ok: false; reason: "timeout" };
+
+/**
+ * Up to two attempts on OpenAI timeout only; other failures throw {@link AdaptiveOpenAIError}.
+ * Timeout is clamped to {@link ADAPTIVE_OPENAI_TIMEOUT_MAX_MS}; logs raw vs resolved timeout once.
+ */
+export async function tryRequestAdaptiveDecisionWithTimeoutRetry(input: AdaptiveDecisionInput): Promise<TryAdaptiveOpenAiDecisionResult> {
+  const { model, rawEnvTimeoutMs, resolvedTimeoutMs } = getAdaptiveOpenAiTimeoutDiagnostics();
+  console.info("[adaptive-openai] timeout_config", { rawEnvTimeoutMs, resolvedTimeoutMs, model });
+
+  for (let retryAttempt = 0; retryAttempt < 2; retryAttempt += 1) {
+    const startedAt = Date.now();
+    try {
+      const decision = await requestAdaptiveDecisionFromOpenAISingleAttempt(input, {
+        model,
+        resolvedTimeoutMs
+      });
+      const elapsedMs = Date.now() - startedAt;
+      console.info("[adaptive-openai] attempt_ok", {
+        model,
+        timeoutMs: resolvedTimeoutMs,
+        retryAttempt,
+        elapsedMs,
+        fallbackUsed: false,
+        errorCode: null
+      });
+      return { ok: true, decision };
+    } catch (err) {
+      const elapsedMs = Date.now() - startedAt;
+      if (err instanceof AdaptiveOpenAIError && err.code === "timeout") {
+        console.warn("[adaptive-openai] attempt_timeout", {
+          model,
+          timeoutMs: resolvedTimeoutMs,
+          retryAttempt,
+          elapsedMs,
+          fallbackUsed: false,
+          errorCode: "timeout"
+        });
+        if (retryAttempt >= 1) {
+          console.warn("[adaptive-openai] timeout_fallback_selected", {
+            model,
+            timeoutMs: resolvedTimeoutMs,
+            retryAttempt,
+            elapsedMs,
+            fallbackUsed: true,
+            errorCode: "timeout"
+          });
+          return { ok: false, reason: "timeout" };
+        }
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  return { ok: false, reason: "timeout" };
 }

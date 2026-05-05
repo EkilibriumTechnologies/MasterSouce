@@ -174,6 +174,8 @@ export function UploadForm() {
   const [adaptiveIntent, setAdaptiveIntent] = useState("");
   const [adaptiveProcessing, setAdaptiveProcessing] = useState(false);
   const [adaptiveModeActive, setAdaptiveModeActive] = useState(false);
+  /** Non-blocking info when adaptive preview used heuristic fallback (e.g. AI timeout). */
+  const [adaptiveAiNotice, setAdaptiveAiNotice] = useState<string | null>(null);
   const [lastStandardResult, setLastStandardResult] = useState<MasterResponse | null>(null);
   const [confirmedContinueWithStandard, setConfirmedContinueWithStandard] = useState(false);
   const [ownerTestingPanel, setOwnerTestingPanel] = useState(false);
@@ -358,6 +360,7 @@ export function UploadForm() {
     setShowAdaptivePlaceholder(false);
     setAdaptiveIntent("");
     setAdaptiveModeActive(false);
+    setAdaptiveAiNotice(null);
     setLastStandardResult(null);
     setConfirmedContinueWithStandard(false);
     setResult(null);
@@ -420,8 +423,9 @@ export function UploadForm() {
       const masterPayload = payload as MasterResponse;
       setResult(masterPayload);
       setLastStandardResult(masterPayload);
-      setAdaptiveModeActive(false);
-      setStatus("Recommended master is ready — A/B below, then add email only when you export.");
+    setAdaptiveModeActive(false);
+    setAdaptiveAiNotice(null);
+    setStatus("Recommended master is ready — A/B below, then add email only when you export.");
       return masterPayload;
     } catch (err) {
       const isLocalhost =
@@ -453,6 +457,7 @@ export function UploadForm() {
     });
     setAdaptiveProcessing(true);
     setError(null);
+    setAdaptiveAiNotice(null);
     setStatus("Preparing your recommended baseline for adaptive…");
 
     try {
@@ -509,6 +514,11 @@ export function UploadForm() {
       setResult(mergedResult);
       setDownloadUrl(null);
       setAdaptiveModeActive(true);
+      if (adaptive.adaptiveAiFallback === true && typeof adaptive.adaptiveAiFallbackMessage === "string") {
+        setAdaptiveAiNotice(adaptive.adaptiveAiFallbackMessage);
+      } else {
+        setAdaptiveAiNotice(null);
+      }
       console.log("[ADAPTIVE_UI] adaptive preview completed", { jobId: adaptive.jobId });
       setStatus("Adaptive preview ready — compare below, then export when you are happy.");
     } catch (err) {
@@ -577,6 +587,7 @@ export function UploadForm() {
       setPreMasterDebug(parsed.debug ?? null);
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
+      setAdaptiveAiNotice(null);
       setLastStandardResult(null);
       setStatus("Analysis complete — run the recommended master or open adaptive customization.");
     } catch (err) {
@@ -893,6 +904,24 @@ export function UploadForm() {
 
       {error ? (
         <p style={isDownloadQuotaExceededMessage(error) ? quotaExhaustedMessageStyle : errorStyle}>{error}</p>
+      ) : null}
+
+      {adaptiveAiNotice ? (
+        <p
+          role="status"
+          style={{
+            margin: "10px 0 0",
+            padding: "12px 14px",
+            borderRadius: "10px",
+            background: "rgba(126, 184, 218, 0.12)",
+            border: "1px solid rgba(126, 184, 218, 0.35)",
+            color: "#c8e6f5",
+            fontSize: "0.88rem",
+            lineHeight: 1.5
+          }}
+        >
+          {adaptiveAiNotice}
+        </p>
       ) : null}
 
       {result ? (

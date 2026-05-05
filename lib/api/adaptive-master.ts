@@ -46,4 +46,7 @@ export type MasterAiResponse = {
     correctivePasses: number;
     warnings: string[];
   };
+  adaptiveAiFallback?: boolean;
+  adaptiveAiFallbackReason?: "timeout";
+  adaptiveAiFallbackMessage?: string;
 };
