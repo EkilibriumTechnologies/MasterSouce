@@ -2,17 +2,19 @@
 
 import { useEffect, useRef } from "react";
 import type { PlanId } from "@/lib/subscriptions/types";
-import { trackAbEvent } from "@/lib/analytics/ab-comparison";
+import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
+import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
 
 type DownloadLimitModalProps = {
   open: boolean;
   /** When known, copy distinguishes Free (2/month) from paid plan exhaustion. */
   planId?: PlanId | null;
+  analyticsContext?: MasteringAnalyticsContext;
   onClose: () => void;
   onViewPlans: () => void;
 };
 
-export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: DownloadLimitModalProps) {
+export function DownloadLimitModal({ open, planId, analyticsContext, onClose, onViewPlans }: DownloadLimitModalProps) {
   const viewPlansRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -21,6 +23,7 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
       if (event.key === "Escape") {
         event.preventDefault();
         trackAbEvent("ab_comparison_closed", {
+          ...analyticsContext,
           version: "mastered",
           plan_id: planId ?? undefined
         });
@@ -41,6 +44,7 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
       data-analytics-version="mastered"
       onClick={() => {
         trackAbEvent("ab_comparison_closed", {
+          ...analyticsContext,
           version: "mastered",
           plan_id: planId ?? undefined
         });
@@ -62,6 +66,7 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
           data-analytics-version="mastered"
           onClick={() => {
             trackAbEvent("ab_comparison_closed", {
+              ...analyticsContext,
               version: "mastered",
               plan_id: planId ?? undefined
             });
@@ -88,8 +93,16 @@ export function DownloadLimitModal({ open, planId, onClose, onViewPlans }: Downl
             data-analytics-version="mastered"
             onClick={() => {
               trackAbEvent("ab_upgrade_clicked", {
+                ...analyticsContext,
                 version: "mastered",
                 plan_id: planId ?? undefined
+              });
+              trackEvent("upgrade_clicked", {
+                ...analyticsContext,
+                version: "mastered",
+                plan_id: planId ?? undefined,
+                source_component: "ab_comparison",
+                page_path: window.location.pathname
               });
               onViewPlans();
             }}

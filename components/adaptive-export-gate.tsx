@@ -10,7 +10,8 @@ import {
 import { buildAdaptiveCheckoutReturnTo } from "@/lib/billing/adaptive-pricing-link";
 import type { PendingAdaptiveExportV1 } from "@/lib/billing/pending-adaptive-export";
 import { savePendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
-import { trackAbEvent } from "@/lib/analytics/ab-comparison";
+import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
+import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
 
 type ExportAccessPayload = {
   entitled?: boolean;
@@ -31,6 +32,7 @@ type AdaptiveExportGateProps = {
   fileId: string;
   pendingCheckoutSnapshot: PendingAdaptiveExportV1;
   onUnlocked: (downloadUrl: string) => void;
+  analyticsContext?: MasteringAnalyticsContext;
 };
 
 function clearStoredAdaptiveCheckoutSession(): void {
@@ -42,7 +44,13 @@ function clearStoredAdaptiveCheckoutSession(): void {
   }
 }
 
-export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onUnlocked }: AdaptiveExportGateProps) {
+export function AdaptiveExportGate({
+  jobId,
+  fileId,
+  pendingCheckoutSnapshot,
+  onUnlocked,
+  analyticsContext
+}: AdaptiveExportGateProps) {
   const [email, setEmail] = useState(() => {
     if (typeof window === "undefined") return "";
     return sessionStorage.getItem(MASTERSOUCE_BILLING_EMAIL_KEY)?.trim() ?? "";
@@ -254,9 +262,26 @@ export function AdaptiveExportGate({ jobId, fileId, pendingCheckoutSnapshot, onU
             style={buttonStyle}
             onClick={() => {
               trackAbEvent("ab_upgrade_clicked", {
+                ...analyticsContext,
                 version: "mastered",
                 job_id: jobId,
                 file_id: fileId
+              });
+              trackEvent("upgrade_clicked", {
+                ...analyticsContext,
+                version: "mastered",
+                job_id: jobId,
+                file_id: fileId,
+                source_component: "ab_comparison",
+                page_path: window.location.pathname
+              });
+              trackEvent("checkout_started", {
+                ...analyticsContext,
+                version: "mastered",
+                job_id: jobId,
+                file_id: fileId,
+                source_component: "ab_comparison",
+                page_path: window.location.pathname
               });
               void handleContinueToCheckout();
             }}

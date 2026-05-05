@@ -24,7 +24,9 @@ import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
-import { trackAbEvent } from "@/lib/analytics/ab-comparison";
+import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
+import { buildMasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
+import { getLoudnessModeLufsTarget } from "@/lib/genre-presets";
 
 /** Owner panel: session token for owner bypass checks on GET /api/download. */
 function resolveOwnerSessionToken(ownerTestingPanel: boolean): string {
@@ -315,6 +317,21 @@ export function UploadForm() {
   }, [ownerSessionToken, ownerTestingPanel]);
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
+  const selectedGenrePreset = GENRE_PRESETS[genre];
+  const targetLufs = selectedGenrePreset ? getLoudnessModeLufsTarget(selectedGenrePreset, loudness) : null;
+  const masteringAnalyticsContext = useMemo(
+    () =>
+      buildMasteringAnalyticsContext({
+        genreKey: genre,
+        genrePresetLabel: selectedGenrePreset?.label,
+        loudnessMode: loudness,
+        masteringMode: adaptiveModeActive ? "prompt_master" : "preset_master",
+        selectedPreset: selectedGenrePreset?.label,
+        selectedStyle: adaptiveModeActive ? "adaptive_prompt" : "mastersauce_recommendations",
+        targetLufs
+      }),
+    [adaptiveModeActive, genre, loudness, selectedGenrePreset, targetLufs]
+  );
 
   const DOWNLOAD_LIMIT_MESSAGE = "No masters remaining. Upgrade or get 5 more for $4.";
 
@@ -949,6 +966,13 @@ export function UploadForm() {
               adaptiveModeActive ? "Shaped from your written notes" : "Balanced for streaming playback"
             }
             analyticsContext={{
+              genre: masteringAnalyticsContext.genre,
+              genrePreset: masteringAnalyticsContext.genre_preset,
+              loudnessMode: masteringAnalyticsContext.loudness_mode,
+              masteringMode: masteringAnalyticsContext.mastering_mode,
+              selectedPreset: masteringAnalyticsContext.selected_preset,
+              selectedStyle: masteringAnalyticsContext.selected_style,
+              targetLufs: masteringAnalyticsContext.target_lufs,
               jobId: result.jobId,
               fileId: result.download.fileId,
               planId: result.quota?.planId
@@ -990,10 +1014,20 @@ export function UploadForm() {
                       onClick={() => {
                         if (finalMasterExportDownloading) return;
                         trackAbEvent("ab_download_clicked", {
+                          ...masteringAnalyticsContext,
                           version: "mastered",
                           job_id: result.jobId,
                           file_id: result.download.fileId,
                           plan_id: result.quota?.planId
+                        });
+                        trackEvent("download_started", {
+                          ...masteringAnalyticsContext,
+                          version: "mastered",
+                          job_id: result.jobId,
+                          file_id: result.download.fileId,
+                          plan_id: result.quota?.planId,
+                          source_component: "ab_comparison",
+                          page_path: window.location.pathname
                         });
                         setFinalMasterExportInlineError(null);
                         setFinalMasterExportDownloading(true);
@@ -1002,6 +1036,15 @@ export function UploadForm() {
                           resolveOwnerSessionToken(ownerTestingPanel)
                         )
                           .then(() => {
+                            trackEvent("download_completed", {
+                              ...masteringAnalyticsContext,
+                              version: "mastered",
+                              job_id: result.jobId,
+                              file_id: result.download.fileId,
+                              plan_id: result.quota?.planId,
+                              source_component: "ab_comparison",
+                              page_path: window.location.pathname
+                            });
                             setFinalMasterExportDownloading(false);
                             setFinalMasterExportInlineError(null);
                           })
@@ -1056,6 +1099,7 @@ export function UploadForm() {
               <AdaptiveExportGate
                 jobId={result.jobId}
                 fileId={result.download.fileId}
+                analyticsContext={masteringAnalyticsContext}
                 pendingCheckoutSnapshot={{
                   v: 1,
                   jobId: result.jobId,
@@ -1078,6 +1122,7 @@ export function UploadForm() {
       <DownloadLimitModal
         open={downloadLimitModalOpen}
         planId={downloadLimitPlanId}
+        analyticsContext={masteringAnalyticsContext}
         onClose={() => {
           setDownloadLimitModalOpen(false);
           setDownloadLimitPlanId(null);

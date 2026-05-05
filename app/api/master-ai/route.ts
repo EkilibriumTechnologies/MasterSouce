@@ -81,6 +81,13 @@ export async function POST(request: NextRequest) {
       standardJobId: parsed.data.standardMasterJobId,
       adaptiveJobId: jobId
     });
+    // TEMP: safe preflight before adaptive OpenAI path (no secrets, no audio payloads).
+    console.info("[master-ai] adaptive_openai_preflight", {
+      OPENAI_ADAPTIVE_MODEL: process.env.OPENAI_ADAPTIVE_MODEL ?? null,
+      OPENAI_ADAPTIVE_TIMEOUT_MS: process.env.OPENAI_ADAPTIVE_TIMEOUT_MS ?? null,
+      openaiApiKeyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+      nodeEnv: process.env.NODE_ENV
+    });
     const adaptive = await runAdaptiveMasteringPipeline({
       inputPath: standardRecord.filePath,
       jobId,

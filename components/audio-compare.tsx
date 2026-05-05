@@ -15,10 +15,15 @@ type AudioCompareProps = {
   /** Rendered after the two comparison cards (players), before the section footnote — e.g. primary export CTA. */
   afterCompare?: ReactNode;
   analyticsContext?: {
-    trackId?: string;
+    genre?: string;
+    genrePreset?: string;
+    loudnessMode?: string;
+    masteringMode?: string;
+    selectedPreset?: string;
+    selectedStyle?: string;
+    targetLufs?: number | null;
     jobId?: string;
     fileId?: string;
-    sessionId?: string;
     planId?: string;
   };
 };
@@ -193,7 +198,6 @@ export function AudioCompare({
     setCurrentTime(nextTime);
     setActiveSource(target);
     activeSourceRef.current = target;
-    trackAbEvent("ab_seek", baseAnalyticsParams(target, nextTime, targetDuration));
   }
 
   function seekWithSlider(event: ChangeEvent<HTMLInputElement>, target: "original" | "mastered") {
@@ -204,11 +208,16 @@ export function AudioCompare({
   function baseAnalyticsParams(version: AbVersion, position: number, duration: number) {
     const percent = duration > 0 ? (position / duration) * 100 : 0;
     return {
+      genre: analyticsContext?.genre,
+      genre_preset: analyticsContext?.genrePreset,
+      loudness_mode: analyticsContext?.loudnessMode,
+      mastering_mode: analyticsContext?.masteringMode,
+      selected_preset: analyticsContext?.selectedPreset,
+      selected_style: analyticsContext?.selectedStyle,
+      target_lufs: analyticsContext?.targetLufs ?? null,
       version,
-      track_id: analyticsContext?.trackId,
       job_id: analyticsContext?.jobId,
       file_id: analyticsContext?.fileId,
-      session_id: analyticsContext?.sessionId,
       plan_id: analyticsContext?.planId,
       playback_position_seconds: Number(position.toFixed(2)),
       playback_percent: Number(Math.max(0, Math.min(100, percent)).toFixed(1))
@@ -256,9 +265,8 @@ export function AudioCompare({
     try {
       await nextAudio.play();
       setIsPlaying(true);
-      const params = baseAnalyticsParams(target, nextAudio.currentTime || currentTime, getDuration(target));
-      trackAbEvent(target === "original" ? "ab_original_play" : "ab_mastered_play", params);
       if (previousSource !== target) {
+        const params = baseAnalyticsParams(target, nextAudio.currentTime || currentTime, getDuration(target));
         trackAbEvent(target === "mastered" ? "ab_switch_to_mastered" : "ab_switch_to_original", params);
       }
     } catch {
@@ -268,15 +276,8 @@ export function AudioCompare({
 
   function pauseActive() {
     const activeAudio = getAudio(activeSource);
-    const version = activeSource;
-    const pausedPosition = activeAudio?.currentTime ?? currentTime;
-    const duration = getDuration(version);
     activeAudio?.pause();
     setIsPlaying(false);
-    trackAbEvent(
-      version === "original" ? "ab_original_pause" : "ab_mastered_pause",
-      baseAnalyticsParams(version, pausedPosition, duration)
-    );
   }
 
   const hintOriginal = "Your mix as uploaded";
@@ -320,6 +321,26 @@ export function AudioCompare({
             style={hiddenAudioStyle}
             src={originalPreviewUrl}
             onLoadedMetadata={(event) => setOriginalDuration(event.currentTarget.duration || 0)}
+            onPlay={(event) => {
+              if (activeSourceRef.current !== "original") return;
+              setIsPlaying(true);
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              trackAbEvent("ab_original_play", baseAnalyticsParams("original", position, duration));
+            }}
+            onPause={(event) => {
+              if (activeSourceRef.current !== "original") return;
+              setIsPlaying(false);
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              trackAbEvent("ab_original_pause", baseAnalyticsParams("original", position, duration));
+            }}
+            onSeeked={(event) => {
+              if (activeSourceRef.current !== "original") return;
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              trackAbEvent("ab_seek", baseAnalyticsParams("original", position, duration));
+            }}
             onTimeUpdate={(event) => {
               if (activeSourceRef.current !== "original") return;
               const position = event.currentTarget.currentTime || 0;
@@ -329,6 +350,9 @@ export function AudioCompare({
             }}
             onEnded={() => {
               if (activeSourceRef.current !== "original") return;
+              const duration = originalRef.current?.duration || originalDuration;
+              trackProgressMilestones("original", duration, duration);
+              trackAbEvent("ab_original_pause", baseAnalyticsParams("original", duration, duration));
               setIsPlaying(false);
               setCurrentTime(0);
               syncTimeToBoth(0);
@@ -415,6 +439,26 @@ export function AudioCompare({
             style={hiddenAudioStyle}
             src={masteredPreviewUrl}
             onLoadedMetadata={(event) => setMasteredDuration(event.currentTarget.duration || 0)}
+            onPlay={(event) => {
+              if (activeSourceRef.current !== "mastered") return;
+              setIsPlaying(true);
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              trackAbEvent("ab_mastered_play", baseAnalyticsParams("mastered", position, duration));
+            }}
+            onPause={(event) => {
+              if (activeSourceRef.current !== "mastered") return;
+              setIsPlaying(false);
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              trackAbEvent("ab_mastered_pause", baseAnalyticsParams("mastered", position, duration));
+            }}
+            onSeeked={(event) => {
+              if (activeSourceRef.current !== "mastered") return;
+              const position = event.currentTarget.currentTime || 0;
+              const duration = event.currentTarget.duration || 0;
+              trackAbEvent("ab_seek", baseAnalyticsParams("mastered", position, duration));
+            }}
             onTimeUpdate={(event) => {
               if (activeSourceRef.current !== "mastered") return;
               const position = event.currentTarget.currentTime || 0;
@@ -424,6 +468,9 @@ export function AudioCompare({
             }}
             onEnded={() => {
               if (activeSourceRef.current !== "mastered") return;
+              const duration = masteredRef.current?.duration || masteredDuration;
+              trackProgressMilestones("mastered", duration, duration);
+              trackAbEvent("ab_mastered_pause", baseAnalyticsParams("mastered", duration, duration));
               setIsPlaying(false);
               setCurrentTime(0);
               syncTimeToBoth(0);
