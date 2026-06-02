@@ -1,4 +1,5 @@
 import type { PlanId } from "@/lib/subscriptions/types";
+import { isAdaptiveBillingAllowlisted } from "./adaptive-billing-allowlist";
 import { reconcileAdaptiveEntitlementFromStripeByEmail } from "./adaptive-stripe-fallback";
 import { normalizeBillingEmail } from "./email";
 import { getAdaptiveEntitlementByEmail } from "./store";
@@ -67,6 +68,19 @@ export async function resolveAdaptiveEntitlementForEmail(
       planId: "free",
       subscriptionStatus: null,
       entitlementActive: null,
+      stripeEmailSyncAttempted,
+      stripeEmailSyncRecovered
+    };
+  }
+
+  if (isAdaptiveBillingAllowlisted(normalized)) {
+    logAdaptiveEntitlement("resolve_allowlist", { normalizedEmail: normalized });
+    return {
+      entitled: true,
+      reason: "billing_allowlist",
+      planId: "creator_monthly",
+      subscriptionStatus: null,
+      entitlementActive: true,
       stripeEmailSyncAttempted,
       stripeEmailSyncRecovered
     };

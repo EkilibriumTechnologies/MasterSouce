@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { PlanId } from "@/lib/subscriptions/types";
+import { isAdaptiveBillingAllowlisted } from "./adaptive-billing-allowlist";
 import { ADAPTIVE_ENTITLEMENT } from "./constants";
 import { normalizeBillingEmail } from "./email";
 
@@ -302,6 +303,7 @@ export async function getAdaptiveEntitlementByEmail(normalizedEmail: string): Pr
 export async function userHasAdaptiveAccessByEmail(email: string): Promise<boolean> {
   const normalized = normalizeBillingEmail(email);
   if (!normalized) return false;
+  if (isAdaptiveBillingAllowlisted(normalized)) return true;
   const ent = await getAdaptiveEntitlementByEmail(normalized);
   return Boolean(ent?.isActive);
 }

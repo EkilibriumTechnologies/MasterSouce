@@ -12,8 +12,10 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { isAdaptiveBillingAllowlisted } from "@/lib/billing/adaptive-billing-allowlist";
 import { resolveAdaptiveEntitlementForEmail } from "@/lib/billing/adaptive-resolve";
 import { isAdaptiveDevBypassEnabled } from "@/lib/billing/adaptive-dev-bypass";
+import { MASTERSOUCE_BILLING_EMAIL_HEADER } from "@/lib/billing/client-key";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { reconcileCheckoutSessionForAdaptiveRecheck } from "@/lib/billing/reconcile-from-checkout-session";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
@@ -59,27 +61,16 @@ function buildAdaptiveDownloadUrl(fileId: string): string {
   return `/api/download?fileId=${fileId}&as=adaptive-master.wav&dl=1`;
 }
 
+function resolveBillingEmailRateLimitHint(request: NextRequest): string | null {
+  const headerRaw = request.headers.get(MASTERSOUCE_BILLING_EMAIL_HEADER)?.trim() ?? "";
+  return headerRaw ? normalizeBillingEmail(headerRaw) : null;
+}
+
 export async function POST(request: NextRequest) {
   const sessionPrep = prepareSessionForRequest(request);
   const isDevBypass = process.env.NODE_ENV !== "production" && isAdaptiveDevBypassEnabled();
   const clientIp = getClientIp(request);
-  const emailSubmitRate = consumeRateLimit({
-    bucket: "adaptive_export_email_submit_ip",
-    key: clientIp,
-    limit: 5,
-    windowMs: RATE_WINDOW_MS
-  });
-  if (!emailSubmitRate.allowed) {
-    logAbuseGuard("rate_limited", {
-      endpoint: "/api/adaptive/export-access",
-      bucket: "adaptive_export_email_submit_ip",
-      ipHash: hashIdentifier(clientIp),
-      retryAfterSec: emailSubmitRate.retryAfterSec
-    });
-    const res = tooManyAttemptsResponse(emailSubmitRate.retryAfterSec);
-    attachSessionCookieIfNeeded(res, sessionPrep);
-    return res;
-  }
+  const billingEmailRateLimitHint = resolveBillingEmailRateLimitHint(request);
 
   let body: unknown;
   try {
@@ -193,23 +184,47 @@ export async function POST(request: NextRequest) {
     return res;
   }
   const emailNorm = emailValidation.normalizedEmail;
-  const emailScopedRate = consumeRateLimit({
-    bucket: "adaptive_export_email_submit_pair",
-    key: `${clientIp}:${emailNorm}`,
-    limit: 10,
-    windowMs: RATE_WINDOW_MS
-  });
-  if (!emailScopedRate.allowed) {
-    logAbuseGuard("rate_limited", {
-      endpoint: "/api/adaptive/export-access",
-      bucket: "adaptive_export_email_submit_pair",
-      ipHash: hashIdentifier(clientIp),
-      emailMasked: maskEmail(emailNorm),
-      retryAfterSec: emailScopedRate.retryAfterSec
+  const rateLimitExempt =
+    isAdaptiveBillingAllowlisted(emailNorm) ||
+    (billingEmailRateLimitHint ? isAdaptiveBillingAllowlisted(billingEmailRateLimitHint) : false);
+
+  if (!rateLimitExempt) {
+    const emailSubmitRate = consumeRateLimit({
+      bucket: "adaptive_export_email_submit_ip",
+      key: clientIp,
+      limit: 5,
+      windowMs: RATE_WINDOW_MS
     });
-    const res = tooManyAttemptsResponse(emailScopedRate.retryAfterSec);
-    attachSessionCookieIfNeeded(res, sessionPrep);
-    return res;
+    if (!emailSubmitRate.allowed) {
+      logAbuseGuard("rate_limited", {
+        endpoint: "/api/adaptive/export-access",
+        bucket: "adaptive_export_email_submit_ip",
+        ipHash: hashIdentifier(clientIp),
+        retryAfterSec: emailSubmitRate.retryAfterSec
+      });
+      const res = tooManyAttemptsResponse(emailSubmitRate.retryAfterSec);
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+
+    const emailScopedRate = consumeRateLimit({
+      bucket: "adaptive_export_email_submit_pair",
+      key: `${clientIp}:${emailNorm}`,
+      limit: 10,
+      windowMs: RATE_WINDOW_MS
+    });
+    if (!emailScopedRate.allowed) {
+      logAbuseGuard("rate_limited", {
+        endpoint: "/api/adaptive/export-access",
+        bucket: "adaptive_export_email_submit_pair",
+        ipHash: hashIdentifier(clientIp),
+        emailMasked: maskEmail(emailNorm),
+        retryAfterSec: emailScopedRate.retryAfterSec
+      });
+      const res = tooManyAttemptsResponse(emailScopedRate.retryAfterSec);
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
   }
 
   const recheckRequested = parsed.data.recheck === true;

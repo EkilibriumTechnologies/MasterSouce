@@ -5,6 +5,7 @@ import { getGaClientId } from "@/lib/analytics/gtag";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import {
   MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY,
+  MASTERSOUCE_BILLING_EMAIL_HEADER,
   MASTERSOUCE_BILLING_EMAIL_KEY
 } from "@/lib/billing/client-key";
 import { buildAdaptiveCheckoutReturnTo } from "@/lib/billing/adaptive-pricing-link";
@@ -44,6 +45,14 @@ function clearStoredAdaptiveCheckoutSession(): void {
   }
 }
 
+function adaptiveExportAccessHeaders(billingEmail: string): HeadersInit {
+  const trimmed = billingEmail.trim().toLowerCase();
+  return {
+    "Content-Type": "application/json",
+    ...(trimmed ? { [MASTERSOUCE_BILLING_EMAIL_HEADER]: trimmed } : {})
+  };
+}
+
 export function AdaptiveExportGate({
   jobId,
   fileId,
@@ -77,7 +86,7 @@ export function AdaptiveExportGate({
       console.log("[ADAPTIVE_UI] export gate: entitlement request");
       const response = await fetch("/api/adaptive/export-access", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: adaptiveExportAccessHeaders(trimmed),
         body: JSON.stringify({ email: trimmed, jobId, fileId })
       });
       const payload = (await readResponsePayload(response)) as ExportAccessPayload | null;
@@ -123,7 +132,7 @@ export function AdaptiveExportGate({
       console.log("[ADAPTIVE_UI] export gate: manual re-check access");
       const response = await fetch("/api/adaptive/export-access", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: adaptiveExportAccessHeaders(trimmed),
         body: JSON.stringify({
           email: trimmed,
           jobId,
@@ -187,7 +196,7 @@ export function AdaptiveExportGate({
         console.log("[ADAPTIVE_UI] checkout skipped: already entitled");
         const verify = await fetch("/api/adaptive/export-access", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: adaptiveExportAccessHeaders(trimmed),
           body: JSON.stringify({ email: trimmed, jobId, fileId })
         });
         const v = (await readResponsePayload(verify)) as ExportAccessPayload | null;
