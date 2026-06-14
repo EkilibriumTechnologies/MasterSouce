@@ -122,6 +122,21 @@ export function resolveEncodeOutputQuality(
   });
 }
 
+/**
+ * Final delivery output quality on unlock/download (email is always known).
+ * Applies the internal QA email override without changing billing entitlements.
+ */
+export function resolveDeliveryOutputQuality(
+  entitlementQuality: PlanQuality,
+  normalizedEmail: string,
+  audit?: { planIdBeforeOverride?: string; emailSource?: EntitlementEmailSource }
+): PlanQuality {
+  return applyAdminQualityOverride(normalizedEmail, entitlementQuality, {
+    emailSource: audit?.emailSource ?? "verified_cookie",
+    planIdBeforeOverride: audit?.planIdBeforeOverride
+  });
+}
+
 export function logWavExportEntitlementResolution(params: {
   endpoint: "/api/master" | "/api/master-ai";
   jobId: string;

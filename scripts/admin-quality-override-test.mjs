@@ -60,7 +60,7 @@ function runSourceInvariantTests() {
 
   const resolver = read("lib/subscriptions/resolve-entitlement-billing-context.ts");
   assertIncludes(resolver, "resolveEncodeOutputQuality", "encode output resolver exported");
-  assertIncludes(resolver, "applyAdminQualityOverride", "resolver applies admin override");
+  assertIncludes(resolver, "resolveDeliveryOutputQuality", "delivery output resolver exported");
 
   const masterRoute = read("app/api/master/route.ts");
   assertIncludes(masterRoute, "resolveEncodeOutputQuality", "master route uses encode resolver");
@@ -81,6 +81,10 @@ function runSourceInvariantTests() {
     "master-ai route: encode quality before adaptive pipeline"
   );
   assertExcludes(masterAiRoute, "resolveMasteringOutputQuality(", "master-ai route must not bypass encode resolver");
+
+  const finalize = read("lib/audio/wav-export-finalize.ts");
+  assertIncludes(finalize, "resolveDeliveryOutputQuality", "finalize uses delivery quality resolver");
+  assertIncludes(finalize, "adminForceFloatDelivery", "finalize can upgrade admin QA to float");
 
   const entitlements = read("lib/subscriptions/entitlements.ts");
   assertExcludes(entitlements, "admin-quality-override", "entitlements must not apply admin encode override");

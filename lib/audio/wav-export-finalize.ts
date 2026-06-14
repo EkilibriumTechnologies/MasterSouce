@@ -12,7 +12,14 @@ import {
 } from "@/lib/audio/wav-export-codec";
 import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
-import type { EntitlementEmailSource } from "@/lib/subscriptions/resolve-entitlement-billing-context";
+import {
+  ADMIN_QUALITY_OVERRIDE_EMAIL,
+  ADMIN_QUALITY_OVERRIDE_QUALITY
+} from "@/lib/subscriptions/admin-quality-override";
+import {
+  resolveDeliveryOutputQuality,
+  type EntitlementEmailSource
+} from "@/lib/subscriptions/resolve-entitlement-billing-context";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
 import type { UserProfile } from "@/lib/users/user-profile";
 
@@ -79,7 +86,11 @@ export async function finalizeMasteredWavDelivery(params: {
   const entitlements = await getEntitlementsForUser(params.user, {
     normalizedEmail: params.normalizedEmail
   });
-  const targetCodec = resolveCodecForQuality(entitlements.quality);
+  const deliveryQuality = resolveDeliveryOutputQuality(entitlements.quality, params.normalizedEmail, {
+    planIdBeforeOverride: entitlements.planId,
+    emailSource: params.emailSource
+  });
+  const targetCodec = resolveCodecForQuality(deliveryQuality);
   const probe = await probeAudioStream(params.sourcePath);
   const sourceCodec = probe.codec_name;
 
@@ -88,7 +99,14 @@ export async function finalizeMasteredWavDelivery(params: {
     return { outputCodec: targetCodec, finalized: false, sourceCodec };
   }
 
-  if (sourceCodec !== "pcm_f32le") {
+  const adminForceFloatDelivery =
+    params.normalizedEmail === ADMIN_QUALITY_OVERRIDE_EMAIL &&
+    deliveryQuality === ADMIN_QUALITY_OVERRIDE_QUALITY;
+  const mayTranscodeToTarget =
+    sourceCodec === "pcm_f32le" ||
+    (adminForceFloatDelivery && (sourceCodec === "pcm_s24le" || sourceCodec === "pcm_s16le"));
+
+  if (!mayTranscodeToTarget) {
     console.warn(
       JSON.stringify({
         scope: "wav_export_finalize",
@@ -98,6 +116,8 @@ export async function finalizeMasteredWavDelivery(params: {
         sourceCodec,
         targetCodec,
         planId: entitlements.planId,
+        deliveryQuality,
+        adminForceFloatDelivery,
         normalizedEmailPresent: Boolean(params.normalizedEmail)
       })
     );
@@ -122,7 +142,8 @@ export async function finalizeMasteredWavDelivery(params: {
       sourceCodec,
       outputCodec: targetCodec,
       planId: entitlements.planId,
-      outputQuality: entitlements.quality
+      outputQuality: deliveryQuality,
+      adminForceFloatDelivery
     })
   );
 

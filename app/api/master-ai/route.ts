@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
       normalizedEmail: billingResolution.normalizedEmail,
       emailSource: billingResolution.emailSource,
       planId: entitlements.planId,
-      outputQuality: entitlements.quality,
-      outputCodec: billingResolution.emailSource === "none" ? deliveryCodec : outputCodec
+      outputQuality,
+      outputCodec
     });
     console.log("[master-ai] adaptive_preview:start", {
       standardJobId: parsed.data.standardMasterJobId,

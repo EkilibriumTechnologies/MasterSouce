@@ -183,8 +183,8 @@ export async function POST(request: NextRequest) {
       normalizedEmail: billingResolution.normalizedEmail,
       emailSource: billingResolution.emailSource,
       planId: entitlements.planId,
-      outputQuality: entitlements.quality,
-      outputCodec: billingResolution.emailSource === "none" ? deliveryCodec : outputCodec
+      outputQuality,
+      outputCodec
     });
     if (billingResolution.emailSource === "none") {
       console.log("[MASTER_DEBUG] wav:deferred_delivery_codec", {
