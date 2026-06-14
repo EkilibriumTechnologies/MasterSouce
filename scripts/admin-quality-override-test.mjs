@@ -53,7 +53,9 @@ function runCodecTests() {
 function runSourceInvariantTests() {
   const override = read("lib/subscriptions/admin-quality-override.ts");
   assertIncludes(override, 'export const ADMIN_QUALITY_OVERRIDE_EMAIL = "llarod01@gmail.com";', "hardcoded admin email");
-  assertIncludes(override, 'event: "admin_quality_override"', "structured admin override log");
+  assertIncludes(override, 'event: "admin_quality_override_attempt"', "structured admin override attempt log");
+  assertIncludes(override, 'event: "admin_quality_override_applied"', "structured admin override applied log");
+  assertIncludes(override, 'event: "admin_quality_override_skipped"', "structured admin override skipped log");
   assertIncludes(override, "maskNormalizedEmailForLog", "masked email in log");
 
   const resolver = read("lib/subscriptions/resolve-entitlement-billing-context.ts");

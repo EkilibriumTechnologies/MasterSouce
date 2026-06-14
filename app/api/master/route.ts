@@ -171,7 +171,8 @@ export async function POST(request: NextRequest) {
     const outputQuality = resolveEncodeOutputQuality(
       entitlements.quality,
       billingResolution.emailSource,
-      billingResolution.normalizedEmail
+      billingResolution.normalizedEmail,
+      { planIdBeforeOverride: entitlements.planId, billingEmailHint }
     );
     const outputCodec = resolveCodecForQuality(outputQuality);
     const deliveryCodec = resolveCodecForQuality(entitlements.quality);

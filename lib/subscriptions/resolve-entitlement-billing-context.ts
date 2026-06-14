@@ -111,10 +111,15 @@ export function resolveMasteringOutputQuality(
 export function resolveEncodeOutputQuality(
   entitlementQuality: PlanQuality,
   emailSource: EntitlementEmailSource,
-  normalizedEmail: string | null
+  normalizedEmail: string | null,
+  audit?: { planIdBeforeOverride?: string; billingEmailHint?: string | null }
 ): PlanQuality {
   const base = resolveMasteringOutputQuality(entitlementQuality, emailSource);
-  return applyAdminQualityOverride(normalizedEmail, base);
+  return applyAdminQualityOverride(normalizedEmail, base, {
+    emailSource,
+    planIdBeforeOverride: audit?.planIdBeforeOverride,
+    billingEmailHint: audit?.billingEmailHint
+  });
 }
 
 export function logWavExportEntitlementResolution(params: {
