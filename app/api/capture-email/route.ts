@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
+import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
 import { upsertMasterJobUnlock } from "@/lib/downloads/master-job-unlocks";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import {
@@ -290,6 +291,7 @@ export async function POST(request: NextRequest) {
           warning: "Local dev fallback: unlock persisted in-memory because Supabase unlock upsert failed.",
           downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
         });
+        attachTrustedEmailAccessState(res, email);
         attachSessionCookieIfNeeded(res, sessionPrep);
         return res;
       }
@@ -340,6 +342,7 @@ export async function POST(request: NextRequest) {
         warning: "Unlock succeeded in local dev, but email persistence failed.",
         downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
       });
+      attachTrustedEmailAccessState(res, email);
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -350,6 +353,7 @@ export async function POST(request: NextRequest) {
       code: "OK",
       downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
     });
+    attachTrustedEmailAccessState(res, email);
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   } catch (error) {

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
+import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 
 type EmailCaptureFormProps = {
   jobId: string;
@@ -38,6 +39,11 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
       const downloadUrl = typeof payload?.downloadUrl === "string" ? payload.downloadUrl : null;
       if (!downloadUrl) {
         throw new Error("Unlock response was empty or invalid.");
+      }
+      try {
+        sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, normalizedEmail);
+      } catch {
+        /* ignore quota errors */
       }
       onUnlocked(downloadUrl);
     } catch (err) {

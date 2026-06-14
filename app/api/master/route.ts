@@ -13,6 +13,11 @@ import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, getTempRoot, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
+import {
+  logWavExportEntitlementResolution,
+  resolveEntitlementBillingContext
+} from "@/lib/subscriptions/resolve-entitlement-billing-context";
+import { resolveCodecForQuality } from "@/lib/audio/wav-export-codec";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
 import { createJobId } from "@/lib/jobs/job-id";
@@ -74,11 +79,18 @@ export async function POST(request: NextRequest) {
 
     const sessionPrep = prepareSessionForRequest(request);
     const user = buildApiUser(request, sessionPrep.sessionId);
-    console.log("[MASTER_DEBUG] user:context", { hasEmail: Boolean(user.email) });
+    const billingResolution = resolveEntitlementBillingContext(request, user);
+    console.log("[MASTER_DEBUG] user:context", {
+      hasUserEmail: Boolean(user.email),
+      hasBillingEmail: Boolean(billingResolution.normalizedEmail),
+      emailSource: billingResolution.emailSource
+    });
 
-    const entitlements = await getEntitlementsForUser(user);
+    const entitlements = await getEntitlementsForUser(user, billingResolution.billingContext);
     console.log("[MASTER_DEBUG] branch:entitlements_snapshot", {
       planId: entitlements.planId,
+      outputQuality: entitlements.quality,
+      emailSource: billingResolution.emailSource,
       canMaster: entitlements.canMaster,
       mastersQuotaKnown: entitlements.mastersUsedThisPeriod !== null,
       mastersUsedThisPeriod: entitlements.mastersUsedThisPeriod,
@@ -151,6 +163,17 @@ export async function POST(request: NextRequest) {
 
     const normalizedExt = ext === "wav" || file.type.includes("wav") ? "wav" : "mp3";
     const jobId = createJobId("job");
+    const outputCodec = resolveCodecForQuality(entitlements.quality);
+    logWavExportEntitlementResolution({
+      endpoint: "/api/master",
+      jobId,
+      userId: user.id,
+      normalizedEmail: billingResolution.normalizedEmail,
+      emailSource: billingResolution.emailSource,
+      planId: entitlements.planId,
+      outputQuality: entitlements.quality,
+      outputCodec
+    });
 
     console.log("[MASTER_DEBUG] temp:write:before", {
       tempRoot: getTempRoot(),
@@ -281,7 +304,7 @@ export async function POST(request: NextRequest) {
       masteredPreviewId: masteredPreviewRecord.id
     });
 
-    const nextEntitlements = await getEntitlementsForUser(user);
+    const nextEntitlements = await getEntitlementsForUser(user, billingResolution.billingContext);
 
     const originalMetrics = toPublicMetrics(result.originalAnalysis);
     const masteredMetrics = result.masteredAnalysis ? toPublicMetrics(result.masteredAnalysis) : null;

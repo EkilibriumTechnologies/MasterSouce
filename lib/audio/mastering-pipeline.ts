@@ -12,6 +12,9 @@ import {
   LOUDNESS_MODES,
   LoudnessMode
 } from "@/lib/genre-presets";
+import { validateExportedWav } from "@/lib/audio/wav-export-validation";
+import { resolveCodecForQuality, WAV_EXPORT_CHANNELS, WAV_EXPORT_SAMPLE_RATE } from "@/lib/audio/wav-export-codec";
+import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
 import { PlanQuality } from "@/lib/subscriptions/types";
 
@@ -35,12 +38,6 @@ export type MasteringResult = {
   outputMime: string;
   outputCodec: "pcm_s16le" | "pcm_s24le" | "pcm_f32le";
 };
-
-function resolveCodecForQuality(quality: PlanQuality): "pcm_s16le" | "pcm_s24le" | "pcm_f32le" {
-  if (quality === "24bit") return "pcm_s24le";
-  if (quality === "32bit_float") return "pcm_f32le";
-  return "pcm_s16le";
-}
 
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -198,6 +195,7 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
   const masteringFilter = buildMasteringFilterChain(preset, originalAnalysis, request.loudnessMode);
   const outputCodec = resolveCodecForQuality(request.outputQuality);
 
+  // Final mux only: PCM codec/bit depth is chosen here; DSP chain above is unchanged.
   await runFfmpeg([
     "-y",
     "-hide_banner",
@@ -208,11 +206,15 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
     "-c:a",
     outputCodec,
     "-ar",
-    "44100",
+    String(WAV_EXPORT_SAMPLE_RATE),
     "-ac",
-    "2",
+    String(WAV_EXPORT_CHANNELS),
     masteredPath
   ]);
+
+  // Export-only verification — does not alter mastering decisions or loudness.
+  await validateExportedWav(masteredPath, { codec: outputCodec });
+  await markJobExportCodecVerified(request.jobId, outputCodec);
 
   // 30s preview snippets for fast before/after checks.
   const previewStartSeconds = getPreviewStartSeconds(originalAnalysis.durationSec);

@@ -17,6 +17,7 @@ import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { buildAdaptivePricingLink } from "@/lib/billing/adaptive-pricing-link";
 import {
   MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY,
+  MASTERSOUCE_BILLING_EMAIL_HEADER,
   MASTERSOUCE_BILLING_EMAIL_KEY
 } from "@/lib/billing/client-key";
 import { clearPendingAdaptiveExport, loadPendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
@@ -99,6 +100,12 @@ function debugAdaptive(message: string, meta?: Record<string, unknown>) {
 function readStoredBillingEmail(): string {
   if (typeof window === "undefined") return "";
   return sessionStorage.getItem(MASTERSOUCE_BILLING_EMAIL_KEY)?.trim() ?? "";
+}
+
+function masteringBillingHeaders(): HeadersInit {
+  const billingEmail = readStoredBillingEmail();
+  if (!billingEmail) return {};
+  return { [MASTERSOUCE_BILLING_EMAIL_HEADER]: billingEmail.trim().toLowerCase() };
 }
 
 function delay(ms: number): Promise<void> {
@@ -408,7 +415,12 @@ export function UploadForm() {
       formData.append("genre", genre);
       formData.append("loudnessMode", loudness);
 
-      const response = await fetch("/api/master", { method: "POST", body: formData });
+      const response = await fetch("/api/master", {
+        method: "POST",
+        credentials: "include",
+        headers: masteringBillingHeaders(),
+        body: formData
+      });
 
       setStatus("Building your recommended master and previews…");
       const payload = await readResponsePayload(response);
@@ -472,7 +484,11 @@ export function UploadForm() {
       setStatus("Shaping your adaptive preview (free)…");
       const response = await fetch("/api/master-ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...masteringBillingHeaders()
+        },
         body: JSON.stringify({
           standardMasterFileId: standard.download.fileId,
           standardMasterJobId: standard.jobId,

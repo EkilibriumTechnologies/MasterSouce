@@ -61,6 +61,38 @@ function run() {
     "download: unconfirmed email access gate before entitlement consumption checks"
   );
 
+  const masteringPipeline = read("lib/audio/mastering-pipeline.ts");
+  assertBefore(
+    masteringPipeline,
+    "await validateExportedWav(masteredPath, { codec: outputCodec });",
+    "// 30s preview snippets for fast before/after checks.",
+    "mastering-pipeline: export-only WAV validation before preview generation"
+  );
+
+  const adaptivePipeline = read("lib/audio/adaptive-mastering-pipeline.ts");
+  assertBefore(
+    adaptivePipeline,
+    "await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });",
+    "let adaptiveAnalysis: TrackAnalysis | null = null;",
+    "adaptive-mastering-pipeline: export-only WAV validation after initial render"
+  );
+
+  const masterRoute = read("app/api/master/route.ts");
+  assertBefore(
+    masterRoute,
+    "getEntitlementsForUser(user, billingResolution.billingContext)",
+    "result = await runMasteringPipeline({",
+    "master route: entitlements with billing context before WAV encode"
+  );
+
+  const masterAiRoute = read("app/api/master-ai/route.ts");
+  assertBefore(
+    masterAiRoute,
+    "getEntitlementsForUser(user, billingResolution.billingContext)",
+    "await runAdaptiveMasteringPipeline({",
+    "master-ai route: entitlements with billing context before adaptive WAV encode"
+  );
+
   console.log("anti-abuse invariants passed");
 }
 

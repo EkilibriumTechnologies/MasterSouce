@@ -8,6 +8,9 @@ import type { AdaptiveDecision } from "@/lib/openai/adaptive-mastering";
 import { tryRequestAdaptiveDecisionWithTimeoutRetry } from "@/lib/openai/adaptive-mastering";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
 import { GENRE_PRESETS, getLoudnessModeLufsTarget, getLoudnessModeTruePeak, type LoudnessMode } from "@/lib/genre-presets";
+import { validateExportedWav } from "@/lib/audio/wav-export-validation";
+import { resolveCodecForQuality, WAV_EXPORT_CHANNELS, WAV_EXPORT_SAMPLE_RATE } from "@/lib/audio/wav-export-codec";
+import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
 import type { PlanQuality } from "@/lib/subscriptions/types";
 
@@ -61,12 +64,6 @@ export type AdaptiveMasteringResult = {
   adaptiveAiFallbackMessage?: string;
 };
 
-function resolveCodecForQuality(quality: PlanQuality): "pcm_s16le" | "pcm_s24le" | "pcm_f32le" {
-  if (quality === "24bit") return "pcm_s24le";
-  if (quality === "32bit_float") return "pcm_f32le";
-  return "pcm_s16le";
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -113,11 +110,12 @@ async function applyCorrectiveGainPass(params: {
     "-c:a",
     params.outputCodec,
     "-ar",
-    "44100",
+    String(WAV_EXPORT_SAMPLE_RATE),
     "-ac",
-    "2",
+    String(WAV_EXPORT_CHANNELS),
     tempPassPath
   ]);
+  await validateExportedWav(tempPassPath, { codec: params.outputCodec });
   await fs.copyFile(tempPassPath, params.sourcePath);
   await fs.unlink(tempPassPath).catch(() => undefined);
 }
@@ -368,11 +366,14 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     "-c:a",
     outputCodec,
     "-ar",
-    "44100",
+    String(WAV_EXPORT_SAMPLE_RATE),
     "-ac",
-    "2",
+    String(WAV_EXPORT_CHANNELS),
     adaptiveMasteredPath
   ]);
+
+  // Export-only verification — corrective passes preserve the same PCM codec.
+  await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });
 
   let adaptiveAnalysis: TrackAnalysis | null = null;
   try {
@@ -505,6 +506,9 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
       adaptivePreviewPath
     ])
   ]);
+
+  await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });
+  await markJobExportCodecVerified(request.jobId, outputCodec);
 
   return {
     baselineAnalysis,
