@@ -17,7 +17,8 @@ import { incrementProductMetric } from "@/lib/product-metrics";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import {
   logWavExportEntitlementResolution,
-  resolveEntitlementBillingContext
+  resolveEntitlementBillingContext,
+  resolveEncodeOutputQuality
 } from "@/lib/subscriptions/resolve-entitlement-billing-context";
 import { resolveCodecForQuality } from "@/lib/audio/wav-export-codec";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
@@ -53,7 +54,6 @@ export async function POST(request: NextRequest) {
     }
 
     const user = buildApiUser(request, sessionPrep.sessionId);
-    const billingResolution = resolveEntitlementBillingContext(request, user);
 
     let body: unknown;
     try {
@@ -71,6 +71,12 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
+    const billingEmailHint =
+      body && typeof body === "object" && "billingEmail" in body && typeof (body as { billingEmail?: unknown }).billingEmail === "string"
+        ? (body as { billingEmail: string }).billingEmail
+        : undefined;
+    const billingResolution = resolveEntitlementBillingContext(request, user, { billingEmailHint });
+
     const entitlements = await getEntitlementsForUser(user, billingResolution.billingContext);
 
     await cleanupExpiredTempFiles();
@@ -87,7 +93,13 @@ export async function POST(request: NextRequest) {
     }
 
     const jobId = createJobId("adaptive");
-    const outputCodec = resolveCodecForQuality(entitlements.quality);
+    const outputQuality = resolveEncodeOutputQuality(
+      entitlements.quality,
+      billingResolution.emailSource,
+      billingResolution.normalizedEmail
+    );
+    const outputCodec = resolveCodecForQuality(outputQuality);
+    const deliveryCodec = resolveCodecForQuality(entitlements.quality);
     logWavExportEntitlementResolution({
       endpoint: "/api/master-ai",
       jobId,
@@ -96,7 +108,7 @@ export async function POST(request: NextRequest) {
       emailSource: billingResolution.emailSource,
       planId: entitlements.planId,
       outputQuality: entitlements.quality,
-      outputCodec
+      outputCodec: billingResolution.emailSource === "none" ? deliveryCodec : outputCodec
     });
     console.log("[master-ai] adaptive_preview:start", {
       standardJobId: parsed.data.standardMasterJobId,
@@ -119,7 +131,7 @@ export async function POST(request: NextRequest) {
       genre: parsed.data.preset,
       loudnessMode: parsed.data.loudnessMode,
       userIntent: parsed.data.user_intent,
-      outputQuality: entitlements.quality
+      outputQuality
     });
 
     const adaptiveMasterRecord = await registerExistingFile({

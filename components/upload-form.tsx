@@ -203,6 +203,26 @@ export function UploadForm() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (readStoredBillingEmail()) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/billing/session-email", { credentials: "include" });
+        const payload = await readResponsePayload(res);
+        const normalizedEmail =
+          payload && typeof payload === "object" && typeof (payload as { normalizedEmail?: unknown }).normalizedEmail === "string"
+            ? (payload as { normalizedEmail: string }).normalizedEmail
+            : null;
+        if (normalizedEmail) {
+          sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, normalizedEmail);
+        }
+      } catch {
+        /* ignore hydration errors */
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("owner") !== "1") return;
     setOwnerTestingPanel(true);
@@ -414,6 +434,10 @@ export function UploadForm() {
       formData.append("audio", file);
       formData.append("genre", genre);
       formData.append("loudnessMode", loudness);
+      const billingEmail = readStoredBillingEmail();
+      if (billingEmail) {
+        formData.append("billingEmail", billingEmail.trim().toLowerCase());
+      }
 
       const response = await fetch("/api/master", {
         method: "POST",
@@ -494,7 +518,10 @@ export function UploadForm() {
           standardMasterJobId: standard.jobId,
           preset: genre,
           loudnessMode: loudness,
-          user_intent: adaptiveIntent.trim() || undefined
+          user_intent: adaptiveIntent.trim() || undefined,
+          ...(readStoredBillingEmail()
+            ? { billingEmail: readStoredBillingEmail().trim().toLowerCase() }
+            : {})
         })
       });
       const payload = await readResponsePayload(response);

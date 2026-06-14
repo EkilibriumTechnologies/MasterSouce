@@ -9,6 +9,7 @@ import {
   getBillingSubscriptionByEmail,
   getCreditPackBalance
 } from "@/lib/subscriptions/billing-store";
+import { resolveMasterWavExportPlanOverride } from "@/lib/subscriptions/master-wav-export-allowlist";
 import { UserProfile } from "@/lib/users/user-profile";
 
 export const FREE_MASTERS_PER_MONTH = 2;
@@ -47,6 +48,13 @@ export async function getEntitlementsForUser(
       billingPeriodEndIso = subscription.currentPeriodEnd;
     }
   }
+
+  const masterWavExportPlanOverride =
+    emailForBilling != null ? resolveMasterWavExportPlanOverride(emailForBilling) : null;
+  if (masterWavExportPlanOverride) {
+    activePlanId = masterWavExportPlanOverride;
+  }
+
   const plan = PLAN_DEFINITIONS[activePlanId];
   const monthlyCap = plan.id === "free" ? Math.min(plan.monthlyMastersLimit, FREE_MASTERS_PER_MONTH) : plan.monthlyMastersLimit;
   const monthKey = getCurrentMonthKeyUtc();
@@ -96,6 +104,8 @@ export async function getEntitlementsForUser(
     entitlementReason = "supabase_not_configured_local_usage";
   } else if (!emailForBilling) {
     entitlementReason = "no_billing_email_context";
+  } else if (masterWavExportPlanOverride) {
+    entitlementReason = "master_wav_export_allowlist";
   } else if (!billingSubscriptionHit) {
     entitlementReason =
       "no_active_trialing_subscription_in_db_or_period_ended_or_status_excluded_or_malformed_plan_row";

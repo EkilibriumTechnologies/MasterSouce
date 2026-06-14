@@ -53,9 +53,9 @@ function runRouteInvariantTests() {
   );
   assertBefore(
     masterRoute,
-    "outputQuality: entitlements.quality",
+    "resolveEncodeOutputQuality(",
     "result = await runMasteringPipeline({",
-    "master route: outputQuality from entitlements before pipeline"
+    "master route: encode output quality before pipeline"
   );
 
   const masterAiRoute = read("app/api/master-ai/route.ts");
@@ -74,9 +74,9 @@ function runRouteInvariantTests() {
   );
   assertBefore(
     masterAiRoute,
-    "outputQuality: entitlements.quality",
+    "resolveEncodeOutputQuality(",
     "await runAdaptiveMasteringPipeline({",
-    "master-ai route: outputQuality from entitlements before adaptive pipeline"
+    "master-ai route: encode output quality before adaptive pipeline"
   );
 
   const downloadRoute = read("app/api/download/route.ts");

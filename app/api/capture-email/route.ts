@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
+import { finalizeMasteredWavDelivery } from "@/lib/audio/wav-export-finalize";
+import { buildApiUser } from "@/lib/identity/api-user";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
 import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
 import { upsertMasterJobUnlock } from "@/lib/downloads/master-job-unlocks";
@@ -35,6 +37,49 @@ const EMAIL_VALIDATION_MESSAGES = {
   suspicious_local_part: "Please use your regular email address."
 } as const;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
+
+async function finalizeUnlockWavOrThrow(params: {
+  request: NextRequest;
+  sessionId: string;
+  requestId: string;
+  jobId: string;
+  sourcePath: string;
+  normalizedEmail: string;
+}): Promise<void> {
+  const finalizeUser = buildApiUser(params.request, params.sessionId);
+  const finalizeResult = await finalizeMasteredWavDelivery({
+    jobId: params.jobId,
+    sourcePath: params.sourcePath,
+    normalizedEmail: params.normalizedEmail,
+    endpoint: "/api/capture-email",
+    user: finalizeUser,
+    emailSource: "verified_cookie"
+  });
+  console.log("[capture-email] wav:finalized", {
+    requestId: params.requestId,
+    jobId: params.jobId,
+    ...finalizeResult
+  });
+}
+
+function wavFinalizeFailedResponse(sessionPrep: ReturnType<typeof prepareSessionForRequest>, requestId: string, jobId: string, finalizeErr: unknown) {
+  const detail = finalizeErr instanceof Error ? finalizeErr.message : String(finalizeErr);
+  console.error("[capture-email] wav:finalize_failed", {
+    requestId,
+    jobId,
+    detail,
+    stack: finalizeErr instanceof Error ? finalizeErr.stack : undefined
+  });
+  const res = NextResponse.json(
+    {
+      error: "Unable to prepare your master for download. Please try again.",
+      code: "WAV_DELIVERY_FINALIZE_FAILED"
+    },
+    { status: 500 }
+  );
+  attachSessionCookieIfNeeded(res, sessionPrep);
+  return res;
+}
 
 /**
  * GET does not capture email. Browsers get HTML; clients requesting JSON still get JSON.
@@ -285,6 +330,18 @@ export async function POST(request: NextRequest) {
       });
       if (isLocalDev) {
         markJobDownloadUnlocked(parsed.data.jobId);
+        try {
+          await finalizeUnlockWavOrThrow({
+            request,
+            sessionId: sessionPrep.sessionId,
+            requestId,
+            jobId: parsed.data.jobId,
+            sourcePath: hintedRecord.filePath,
+            normalizedEmail: email
+          });
+        } catch (finalizeErr) {
+          return wavFinalizeFailedResponse(sessionPrep, requestId, parsed.data.jobId, finalizeErr);
+        }
         const res = NextResponse.json({
           ok: true,
           code: "OK_UNLOCKED_LOCAL_DB_FAILED",
@@ -336,6 +393,18 @@ export async function POST(request: NextRequest) {
         attachSessionCookieIfNeeded(res, sessionPrep);
         return res;
       }
+      try {
+        await finalizeUnlockWavOrThrow({
+          request,
+          sessionId: sessionPrep.sessionId,
+          requestId,
+          jobId: parsed.data.jobId,
+          sourcePath: hintedRecord.filePath,
+          normalizedEmail: email
+        });
+      } catch (finalizeErr) {
+        return wavFinalizeFailedResponse(sessionPrep, requestId, parsed.data.jobId, finalizeErr);
+      }
       const res = NextResponse.json({
         ok: true,
         code: "OK_UNLOCKED_LOCAL_EMAIL_FAILED",
@@ -348,6 +417,20 @@ export async function POST(request: NextRequest) {
     }
 
     markJobDownloadUnlocked(parsed.data.jobId);
+
+    try {
+      await finalizeUnlockWavOrThrow({
+        request,
+        sessionId: sessionPrep.sessionId,
+        requestId,
+        jobId: parsed.data.jobId,
+        sourcePath: hintedRecord.filePath,
+        normalizedEmail: email
+      });
+    } catch (finalizeErr) {
+      return wavFinalizeFailedResponse(sessionPrep, requestId, parsed.data.jobId, finalizeErr);
+    }
+
     const res = NextResponse.json({
       ok: true,
       code: "OK",

@@ -27,6 +27,7 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
     try {
       const response = await fetch("/api/capture-email", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: normalizedEmail, jobId, fileId })
       });

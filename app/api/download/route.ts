@@ -8,6 +8,8 @@ import { recordMasteredDownloadAttempt } from "@/lib/downloads/record-mastered-d
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
+import { finalizeMasteredWavDelivery } from "@/lib/audio/wav-export-finalize";
+import { probeAudioStream } from "@/lib/audio/media-probe";
 import { incrementProductMetric } from "@/lib/product-metrics";
 import { warnIfUnlockEmailDiffersFromStripeCustomerEmail } from "@/lib/billing/unlock-vs-stripe-customer-email";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
@@ -250,9 +252,35 @@ export async function GET(request: NextRequest) {
     }
 
     const fileStats = await stat(record.filePath);
+
+    if (isMasteredAsset && forceDownload && masteredUnlock) {
+      try {
+        const probe = await probeAudioStream(record.filePath);
+        if (probe.codec_name === "pcm_f32le") {
+          await finalizeMasteredWavDelivery({
+            jobId: record.jobId,
+            sourcePath: record.filePath,
+            normalizedEmail: masteredUnlock.normalizedEmail,
+            endpoint: "/api/master",
+            user,
+            emailSource: "verified_cookie"
+          });
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Unknown error";
+        console.error("[api/download] wav delivery finalize fallback failed", {
+          jobId: record.jobId,
+          fileId: record.id,
+          detail
+        });
+        return NextResponse.json({ error: "Unable to prepare your master for download." }, { status: 500 });
+      }
+    }
+
+    const refreshedStats = await stat(record.filePath);
     const headers: Record<string, string> = {
       "Content-Type": record.mime,
-      "Content-Length": String(fileStats.size),
+      "Content-Length": String(refreshedStats.size),
       "Cache-Control": "no-store",
       "Content-Disposition": `${forceDownload ? "attachment" : "inline"}; filename="${filename}"`,
       "Accept-Ranges": "bytes"
@@ -299,7 +327,7 @@ export async function GET(request: NextRequest) {
     }
 
     const maxBuffered = 60 * 1024 * 1024;
-    if (fileStats.size <= maxBuffered) {
+    if (refreshedStats.size <= maxBuffered) {
       const buffer = await readFile(record.filePath);
       const res = new NextResponse(new Uint8Array(buffer), { headers });
       attachSessionCookieIfNeeded(res, sessionPrep);

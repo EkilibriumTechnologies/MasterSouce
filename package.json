@@ -11,6 +11,7 @@
     "test:anti-abuse": "node scripts/anti-abuse-invariants.mjs",
     "test:wav-export": "node scripts/wav-export-format-test.mjs",
     "test:wav-entitlement": "node scripts/wav-export-entitlement-invariants.mjs",
+    "test:admin-quality-override": "node scripts/admin-quality-override-test.mjs",
     "inspect:wav": "node scripts/inspect-wav-format.mjs"
   },
   "dependencies": {
