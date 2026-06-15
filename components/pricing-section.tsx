@@ -27,13 +27,13 @@ const PLAN_COPY: Record<
 > = {
   free: {
     positioning: "Hear the master before you spend — no card on file.",
-    features: (plan) => [
-      `${plan.monthlyMastersLimit} full WAV exports / month`,
-      "Unlimited A/B previews (never counted)",
-      "All 7 genre presets",
+    features: () => [
+      "Unlimited MP3 downloads",
+      "1 free WAV download",
       "WAV 16-bit",
+      "All 7 genre presets",
       "No watermark",
-      formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
+      formatSongArchitectBlueprintFeature(PLAN_DEFINITIONS.free.songArchitectGenerationsPerMonth)
     ],
     ctaLabel: "Start free",
     ctaHint: "No card on file. Upgrade from checkout when you need more finals or adaptive exports."
@@ -41,11 +41,12 @@ const PLAN_COPY: Record<
   creator_monthly: {
     positioning: "Weekly releases with room to iterate.",
     features: (plan) => [
-      `${plan.monthlyMastersLimit} full WAV exports / month`,
+      "Unlimited MP3 downloads",
+      `${plan.monthlyMastersLimit} WAV downloads / month`,
+      "WAV 24-bit",
       "Unlimited A/B previews (never counted)",
       "Adaptive customization + exports",
       "All 7 genre presets",
-      "WAV 24-bit",
       formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
     ],
     ctaLabel: "Choose Creator",
@@ -55,10 +56,11 @@ const PLAN_COPY: Record<
   pro_studio_monthly: {
     positioning: "Studios, small labels, or anyone mastering in batches.",
     features: (plan) => [
-      `${plan.monthlyMastersLimit} full WAV exports / month`,
+      "Unlimited MP3 downloads",
+      `${plan.monthlyMastersLimit} WAV downloads / month`,
+      "WAV 32-bit float",
       "Unlimited A/B previews (never counted)",
       "Adaptive customization + exports",
-      "WAV 32-bit float",
       "Priority processing",
       formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
     ],

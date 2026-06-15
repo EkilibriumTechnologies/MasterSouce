@@ -9,15 +9,21 @@ import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, findLatestRecordForJob, resolveTempRecord } from "@/lib/storage/temp-files";
 import { finalizeMasteredWavDelivery } from "@/lib/audio/wav-export-finalize";
+import { ensureMasteredMp3ForJob } from "@/lib/audio/mp3-master-export";
 import { probeAudioStream } from "@/lib/audio/media-probe";
 import { incrementProductMetric } from "@/lib/product-metrics";
 import { warnIfUnlockEmailDiffersFromStripeCustomerEmail } from "@/lib/billing/unlock-vs-stripe-customer-email";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
-import { FREE_MASTERS_PER_MONTH, consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
+import { consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
+import {
+  FREE_WAV_DOWNLOADS_PER_MONTH,
+  resolveFreePlanWavCap,
+  shouldEnforceWavDownloadQuota
+} from "@/lib/usage/download-quota-policy";
 import { tryConsumeLocalBillableDownload } from "@/lib/usage/local-download-usage";
 import { hasRecentBillableDownloadForJobFile } from "@/lib/usage/supabase-download-usage";
 
@@ -49,11 +55,15 @@ function resolveFinalDownloadRateIdentity(params: {
   return { key: "fallback:download-identity-unavailable", keyType: "fallback" };
 }
 
-function getFilenameParam(request: NextRequest): string {
-  const fallback = "audio-file.wav";
+function getFilenameParam(request: NextRequest, fallbackExt = "wav"): string {
+  const fallback = `audio-file.${fallbackExt}`;
   const raw = request.nextUrl.searchParams.get("as");
   if (!raw) return fallback;
   return raw.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function wantsMp3MasterFormat(request: NextRequest): boolean {
+  return request.nextUrl.searchParams.get("format") === "mp3";
 }
 
 function noMastersRemainingPayload(planId: PlanId) {
@@ -62,7 +72,7 @@ function noMastersRemainingPayload(planId: PlanId) {
     error: "no_masters_remaining" as const,
     upgrade_url: "/pricing",
     message: isFree
-      ? `You've used your ${FREE_MASTERS_PER_MONTH} free mastered exports for this month. Subscribe for a higher monthly allowance, or add a 5-master credit pack for $4.`
+      ? `You've used your ${FREE_WAV_DOWNLOADS_PER_MONTH} free WAV download for this month. Subscribe for more monthly WAV exports, or add a 5-master credit pack for $4.`
       : "No masters remaining. Upgrade or get 5 more for $4."
   };
 }
@@ -73,22 +83,112 @@ export async function GET(request: NextRequest) {
 
     const fileId = request.nextUrl.searchParams.get("fileId");
     const jobId = request.nextUrl.searchParams.get("jobId");
-    const filename = getFilenameParam(request);
+    const wantsMp3Master = wantsMp3MasterFormat(request);
+    const filename = getFilenameParam(request, wantsMp3Master ? "mp3" : "wav");
     const forceDownload = request.nextUrl.searchParams.get("dl") === "1";
 
-    const record =
-      (fileId ? await resolveTempRecord(fileId) : null) ??
-      (jobId ? await findLatestRecordForJob(jobId, "mastered") : null);
+    let record =
+      (fileId && !wantsMp3Master ? await resolveTempRecord(fileId) : null) ??
+      (jobId ? await findLatestRecordForJob(jobId, wantsMp3Master ? "mastered_mp3" : "mastered") : null);
+
+    if (wantsMp3Master && (!record || record.kind !== "mastered_mp3")) {
+      const wavRecord =
+        (fileId ? await resolveTempRecord(fileId) : null) ??
+        (jobId ? await findLatestRecordForJob(jobId, "mastered") : null);
+      if (!wavRecord || wavRecord.kind !== "mastered") {
+        return NextResponse.json({ error: "File not found or expired." }, { status: 404 });
+      }
+
+      const resolvedJobId = wavRecord.jobId;
+      const isAdaptiveMasterJob = resolvedJobId.startsWith("adaptive_");
+      let masteredUnlock: MasterJobUnlockRow | null = null;
+      if (isSupabaseConfigured()) {
+        try {
+          masteredUnlock = await getMasterJobUnlock(resolvedJobId);
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : "Unknown error";
+          console.error("[api/download] master_job_unlocks lookup failed", { jobId: resolvedJobId, detail });
+          return NextResponse.json({ error: "Download verification failed." }, { status: 500 });
+        }
+        if (!masteredUnlock || masteredUnlock.fileId !== wavRecord.id) {
+          if (isJobUnlocked(resolvedJobId)) {
+            masteredUnlock = null;
+          } else {
+            return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
+          }
+        }
+      } else if (!isJobUnlocked(resolvedJobId)) {
+        return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
+      }
+
+      const sessionPrep = prepareSessionForRequest(request);
+      const user = buildApiUser(request, sessionPrep.sessionId);
+
+      if (forceDownload && isSupabaseConfigured() && masteredUnlock) {
+        if (!masteredUnlock.emailVerifiedAt) {
+          const clientIp = getClientIp(request);
+          logAbuseGuard("unverified_master_download_blocked", {
+            endpoint: "/api/download",
+            jobId: resolvedJobId,
+            fileId: wavRecord.id,
+            ipHash: hashIdentifier(clientIp)
+          });
+          const res = NextResponse.json(
+            { error: "Please confirm email access before downloading your master." },
+            { status: 403 }
+          );
+          attachSessionCookieIfNeeded(res, sessionPrep);
+          return res;
+        }
+
+        try {
+          const probe = await probeAudioStream(wavRecord.filePath);
+          if (probe.codec_name === "pcm_f32le") {
+            await finalizeMasteredWavDelivery({
+              jobId: resolvedJobId,
+              sourcePath: wavRecord.filePath,
+              normalizedEmail: masteredUnlock.normalizedEmail,
+              endpoint: "/api/master",
+              user,
+              emailSource: "verified_cookie"
+            });
+          }
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : "Unknown error";
+          console.error("[api/download] wav finalize before mp3 export failed", {
+            jobId: resolvedJobId,
+            fileId: wavRecord.id,
+            detail
+          });
+          return NextResponse.json({ error: "Unable to prepare your master for download." }, { status: 500 });
+        }
+      }
+
+      try {
+        record = await ensureMasteredMp3ForJob({
+          jobId: resolvedJobId,
+          wavSourcePath: wavRecord.filePath
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Unknown error";
+        console.error("[api/download] mp3 master lazy export failed", {
+          jobId: resolvedJobId,
+          fileId: wavRecord.id,
+          detail
+        });
+        return NextResponse.json({ error: "Unable to prepare MP3 master for download." }, { status: 500 });
+      }
+    }
 
     if (!record) {
       return NextResponse.json({ error: "File not found or expired." }, { status: 404 });
     }
 
-    const isMasteredAsset = record.kind === "mastered";
+    const isMasteredWavAsset = record.kind === "mastered";
     /** Adaptive final WAV uses export-access + billing_entitlements; do not consume standard monthly / credit-pack quota. */
     const isAdaptiveMasterJob = record.jobId.startsWith("adaptive_");
     let masteredUnlock: MasterJobUnlockRow | null = null;
-    if (isMasteredAsset) {
+    if (isMasteredWavAsset || record.kind === "mastered_mp3") {
       if (isSupabaseConfigured()) {
         try {
           masteredUnlock = await getMasterJobUnlock(record.jobId);
@@ -97,7 +197,7 @@ export async function GET(request: NextRequest) {
           console.error("[api/download] master_job_unlocks lookup failed", { jobId: record.jobId, detail });
           return NextResponse.json({ error: "Download verification failed." }, { status: 500 });
         }
-        if (!masteredUnlock || masteredUnlock.fileId !== record.id) {
+        if (!masteredUnlock || (isMasteredWavAsset && masteredUnlock.fileId !== record.id)) {
           if (isJobUnlocked(record.jobId)) {
             masteredUnlock = null;
           } else {
@@ -119,10 +219,17 @@ export async function GET(request: NextRequest) {
     });
     const user = buildApiUser(request, sessionPrep.sessionId);
     const adminBypass = isMasterAdminBypassGranted(request);
-    const freePlanCap = Math.min(PLAN_DEFINITIONS.free.monthlyMastersLimit, FREE_MASTERS_PER_MONTH);
+    const freePlanCap = resolveFreePlanWavCap(PLAN_DEFINITIONS.free.monthlyMastersLimit);
+    const quotaRecord = { kind: record.kind, mime: record.mime };
+    const enforceWavQuota = shouldEnforceWavDownloadQuota({
+      record: quotaRecord,
+      forceDownload,
+      isAdaptiveMasterJob,
+      adminBypass
+    });
 
-    // Only explicit attachment downloads of the final master consume plan usage (not inline playback / previews).
-    if (isMasteredAsset && forceDownload) {
+    // Only explicit attachment downloads of the final mastered WAV consume plan usage (not MP3 previews or full MP3 masters).
+    if (isMasteredWavAsset && forceDownload) {
       const finalDownloadRate = consumeRateLimit({
         bucket: "master_final_download_ip",
         key: rateIdentity.key,
@@ -179,7 +286,7 @@ export async function GET(request: NextRequest) {
             record.id
           );
           const skipStandardQuota = isAdaptiveMasterJob;
-          if (!hasRecent && !adminBypass) {
+          if (!hasRecent && enforceWavQuota) {
             if (skipStandardQuota) {
               console.log("[api/download] adaptive final export: skip standard monthly/credit quota", {
                 jobId: record.jobId
@@ -235,7 +342,7 @@ export async function GET(request: NextRequest) {
           console.error("[api/download] download entitlement check failed", { jobId: record.jobId, detail });
           return NextResponse.json({ error: "Unable to verify download allowance." }, { status: 500 });
         }
-      } else if (isJobUnlocked(record.jobId) && !isAdaptiveMasterJob) {
+      } else if (isJobUnlocked(record.jobId) && enforceWavQuota) {
         const { allowed } = tryConsumeLocalBillableDownload(
           user.sessionId,
           record.jobId,
@@ -253,7 +360,7 @@ export async function GET(request: NextRequest) {
 
     const fileStats = await stat(record.filePath);
 
-    if (isMasteredAsset && forceDownload && masteredUnlock) {
+    if (isMasteredWavAsset && forceDownload && masteredUnlock) {
       try {
         const probe = await probeAudioStream(record.filePath);
         if (probe.codec_name === "pcm_f32le") {
@@ -286,7 +393,7 @@ export async function GET(request: NextRequest) {
       "Accept-Ranges": "bytes"
     };
 
-    if (isMasteredAsset && forceDownload && isSupabaseConfigured() && masteredUnlock) {
+    if (isMasteredWavAsset && forceDownload && isSupabaseConfigured() && masteredUnlock) {
       try {
         const recorded = await recordMasteredDownloadAttempt({
           normalizedEmail: masteredUnlock.normalizedEmail,
@@ -299,7 +406,7 @@ export async function GET(request: NextRequest) {
             dl: forceDownload ? 1 : 0
           }
         });
-        if (!adminBypass && recorded.countedUnique && !isAdaptiveMasterJob) {
+        if (!adminBypass && recorded.countedUnique && enforceWavQuota) {
           const currentEntitlements = await getEntitlementsForUser(user, {
             normalizedEmail: masteredUnlock.normalizedEmail
           });

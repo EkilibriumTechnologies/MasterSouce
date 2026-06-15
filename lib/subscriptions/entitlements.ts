@@ -2,6 +2,7 @@ import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { EntitlementSnapshot, PlanId } from "@/lib/subscriptions/types";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getCurrentMonthKeyUtc } from "@/lib/usage/month-key";
+import { FREE_WAV_DOWNLOADS_PER_MONTH, resolveFreePlanWavCap } from "@/lib/usage/download-quota-policy";
 import { getLocalBillableDownloadCount } from "@/lib/usage/local-download-usage";
 import { countBillableDownloadsForMonth } from "@/lib/usage/supabase-download-usage";
 import {
@@ -12,7 +13,8 @@ import {
 import { resolveMasterWavExportPlanOverride } from "@/lib/subscriptions/master-wav-export-allowlist";
 import { UserProfile } from "@/lib/users/user-profile";
 
-export const FREE_MASTERS_PER_MONTH = 2;
+/** @deprecated Use FREE_WAV_DOWNLOADS_PER_MONTH from download-quota-policy. */
+export const FREE_MASTERS_PER_MONTH = FREE_WAV_DOWNLOADS_PER_MONTH;
 
 // Service boundary for plan + usage resolution.
 
@@ -56,7 +58,8 @@ export async function getEntitlementsForUser(
   }
 
   const plan = PLAN_DEFINITIONS[activePlanId];
-  const monthlyCap = plan.id === "free" ? Math.min(plan.monthlyMastersLimit, FREE_MASTERS_PER_MONTH) : plan.monthlyMastersLimit;
+  const monthlyCap =
+    plan.id === "free" ? resolveFreePlanWavCap(plan.monthlyMastersLimit) : plan.monthlyMastersLimit;
   const monthKey = getCurrentMonthKeyUtc();
 
   let usedThisMonth: number | null;

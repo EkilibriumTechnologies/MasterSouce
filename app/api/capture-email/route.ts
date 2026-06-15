@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { finalizeMasteredWavDelivery } from "@/lib/audio/wav-export-finalize";
+import { buildMp3MasterDownloadUrl } from "@/lib/audio/mp3-master-export";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
 import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
@@ -37,6 +38,13 @@ const EMAIL_VALIDATION_MESSAGES = {
   suspicious_local_part: "Please use your regular email address."
 } as const;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
+
+function buildDownloadUrls(masteredFileId: string, jobId: string) {
+  return {
+    downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`,
+    mp3DownloadUrl: buildMp3MasterDownloadUrl({ fileId: masteredFileId, jobId })
+  };
+}
 
 async function finalizeUnlockWavOrThrow(params: {
   request: NextRequest;
@@ -346,7 +354,7 @@ export async function POST(request: NextRequest) {
           ok: true,
           code: "OK_UNLOCKED_LOCAL_DB_FAILED",
           warning: "Local dev fallback: unlock persisted in-memory because Supabase unlock upsert failed.",
-          downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
+          ...buildDownloadUrls(masteredFileId, parsed.data.jobId)
         });
         attachTrustedEmailAccessState(res, email);
         attachSessionCookieIfNeeded(res, sessionPrep);
@@ -409,7 +417,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         code: "OK_UNLOCKED_LOCAL_EMAIL_FAILED",
         warning: "Unlock succeeded in local dev, but email persistence failed.",
-        downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
+        ...buildDownloadUrls(masteredFileId, parsed.data.jobId)
       });
       attachTrustedEmailAccessState(res, email);
       attachSessionCookieIfNeeded(res, sessionPrep);
@@ -434,7 +442,7 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json({
       ok: true,
       code: "OK",
-      downloadUrl: `/api/download?fileId=${masteredFileId}&as=mastered.wav&dl=1`
+      ...buildDownloadUrls(masteredFileId, parsed.data.jobId)
     });
     attachTrustedEmailAccessState(res, email);
     attachSessionCookieIfNeeded(res, sessionPrep);

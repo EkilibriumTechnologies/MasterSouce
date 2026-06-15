@@ -25,7 +25,7 @@ export async function hasRecentBillableDownloadForJobFile(
   return data != null;
 }
 
-/** Billable downloads this calendar month (UTC): rows where the first fetch of a job+file counted toward quota. */
+/** Billable WAV exports this calendar month (UTC): rows where the first fetch of a job+file counted toward quota. */
 export async function countBillableDownloadsForMonth(
   normalizedEmail: string,
   monthKey: string,

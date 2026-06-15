@@ -30,7 +30,7 @@ export const HOME_FAQ_ITEMS: HomeFaqItem[] = [
   {
     question: "What's the difference between the free plan and paid?",
     answer:
-      "Free gives you 2 full WAV exports per month at 16-bit — enough to test the workflow. Creator ($9/mo) adds 15 exports, 24-bit WAV, and adaptive customization. Pro Studio ($24/mo) goes up to 60 exports and 32-bit float for batch work."
+      "Free gives you unlimited MP3 master downloads and 1 WAV download per month at 16-bit — enough to test the workflow. Creator ($9/mo) adds 15 WAV downloads/month, 24-bit WAV, and adaptive customization. Pro Studio ($24/mo) goes up to 60 WAV downloads/month and 32-bit float for batch work."
   },
   {
     question: "What is MasterSauce?",

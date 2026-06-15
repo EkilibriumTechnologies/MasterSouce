@@ -9,6 +9,7 @@ export type AbEventParams = {
   selected_style?: string;
   target_lufs?: number | null;
   version?: AbVersion;
+  format?: "mp3" | "wav";
   job_id?: string;
   file_id?: string;
   plan_id?: string;

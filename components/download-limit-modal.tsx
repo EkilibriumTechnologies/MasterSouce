@@ -7,7 +7,7 @@ import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-contex
 
 type DownloadLimitModalProps = {
   open: boolean;
-  /** When known, copy distinguishes Free (2/month) from paid plan exhaustion. */
+  /** When known, copy distinguishes Free (1 WAV) from paid plan exhaustion. */
   planId?: PlanId | null;
   analyticsContext?: MasteringAnalyticsContext;
   onClose: () => void;
@@ -81,7 +81,7 @@ export function DownloadLimitModal({ open, planId, analyticsContext, onClose, on
         </p>
         <p id="download-limit-description" style={bodyStyle}>
           {planId === "free"
-            ? "You've used all free mastered exports for this month. Subscribe for a higher monthly allowance, or add a 5-master credit pack to keep exporting finals."
+            ? "You've used your free WAV download for this month. Subscribe for more monthly WAV exports, or add a 5-master credit pack to keep exporting finals."
             : "You've used your available masters for this period. Upgrade or add a credit pack to keep exporting finals."}
         </p>
         <div style={actionsStyle}>

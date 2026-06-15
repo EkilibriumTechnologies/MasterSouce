@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 
-type TempKind = "upload" | "mastered" | "preview";
+type TempKind = "upload" | "mastered" | "mastered_mp3" | "preview";
 
 export type TempRecord = {
   id: string;

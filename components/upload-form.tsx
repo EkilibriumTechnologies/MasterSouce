@@ -45,6 +45,59 @@ function readFilenameFromContentDisposition(header: string | null): string {
   return "mastered.wav";
 }
 
+function buildMp3DownloadUrl(fileId: string, jobId: string): string {
+  const qs = new URLSearchParams({
+    fileId,
+    format: "mp3",
+    as: "mastered.mp3",
+    dl: "1",
+    jobId
+  });
+  return `/api/download?${qs.toString()}`;
+}
+
+function getPlanWavBitLabel(planId: PlanId | undefined): string {
+  switch (planId) {
+    case "creator_monthly":
+      return "24-bit";
+    case "pro_studio_monthly":
+      return "32-bit Float";
+    default:
+      return "16-bit";
+  }
+}
+
+function getMp3DownloadLabel(planId: PlanId | undefined): string {
+  return planId === "free" || !planId ? "Download MP3 (Free)" : "Download MP3";
+}
+
+function getWavDownloadLabel(params: {
+  planId: PlanId | undefined;
+  remainingWav: number | null | undefined;
+  adaptiveModeActive: boolean;
+}): string {
+  if (params.adaptiveModeActive) return "Download adaptive WAV";
+  const bitLabel = getPlanWavBitLabel(params.planId);
+  if (params.planId === "free" && (params.remainingWav ?? 0) > 0) {
+    const count = params.remainingWav ?? 1;
+    return `Download WAV ${bitLabel} (${count} free WAV available)`;
+  }
+  return `Download WAV ${bitLabel}`;
+}
+
+function getWavQuotaExhaustedCtaLabel(planId: PlanId | undefined): string {
+  return planId === "free" || !planId
+    ? "Upgrade to unlock more WAV downloads"
+    : "Get more WAV downloads";
+}
+
+function resolveExportPlanId(planId: string | undefined): PlanId {
+  if (planId === "creator_monthly" || planId === "pro_studio_monthly" || planId === "free") {
+    return planId;
+  }
+  return "free";
+}
+
 async function downloadFinalMasterWithOptionalBypass(downloadUrl: string, ownerToken: string): Promise<void> {
   const trimmedToken = ownerToken.trim();
   const headers: Record<string, string> = {};
@@ -173,7 +226,8 @@ export function UploadForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MasterResponse | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [wavDownloadUrl, setWavDownloadUrl] = useState<string | null>(null);
+  const [mp3DownloadUrl, setMp3DownloadUrl] = useState<string | null>(null);
   const [status, setStatus] = useState("Choose a file to begin.");
   const [preMasterAnalysis, setPreMasterAnalysis] = useState<PreMasterAnalysisResponse["analysis"] | null>(null);
   const [preMasterDebug, setPreMasterDebug] = useState<PreMasterAnalysisResponse["debug"] | null>(null);
@@ -191,15 +245,17 @@ export function UploadForm() {
   const [downloadLimitModalOpen, setDownloadLimitModalOpen] = useState(false);
   const [downloadLimitPlanId, setDownloadLimitPlanId] = useState<PlanId | null>(null);
   /** Tracks GET /api/download + blob until the browser save dialog is triggered (no server progress %). */
-  const [finalMasterExportDownloading, setFinalMasterExportDownloading] = useState(false);
+  const [wavExportDownloading, setWavExportDownloading] = useState(false);
+  const [mp3ExportDownloading, setMp3ExportDownloading] = useState(false);
   const [finalMasterExportInlineError, setFinalMasterExportInlineError] = useState<string | null>(null);
   const latestAnalysisRequestIdRef = useRef(0);
 
   useEffect(() => {
-    if (downloadUrl) return;
-    setFinalMasterExportDownloading(false);
+    if (wavDownloadUrl || mp3DownloadUrl) return;
+    setWavExportDownloading(false);
+    setMp3ExportDownloading(false);
     setFinalMasterExportInlineError(null);
-  }, [downloadUrl]);
+  }, [wavDownloadUrl, mp3DownloadUrl]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -318,7 +374,8 @@ export function UploadForm() {
               analysis: pending.analysis,
               quota: pending.quota
             });
-            setDownloadUrl(downloadUrl);
+            setWavDownloadUrl(downloadUrl);
+            setMp3DownloadUrl(buildMp3DownloadUrl(pending.fileId, pending.jobId));
             setStatus("Adaptive master export ready — download below.");
             return;
           }
@@ -345,6 +402,11 @@ export function UploadForm() {
     return ownerSessionToken.length > 0;
   }, [ownerSessionToken, ownerTestingPanel]);
 
+  const wavQuotaAvailable = useMemo(() => {
+    if (ownerOverrideArmed) return true;
+    return (result?.quota?.remainingMasters ?? 0) > 0;
+  }, [ownerOverrideArmed, result?.quota?.remainingMasters]);
+
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
   const selectedGenrePreset = GENRE_PRESETS[genre];
   const targetLufs = selectedGenrePreset ? getLoudnessModeLufsTarget(selectedGenrePreset, loudness) : null;
@@ -367,7 +429,7 @@ export function UploadForm() {
   function isDownloadQuotaExceededMessage(message: string | null): boolean {
     if (!message) return false;
     if (message === DOWNLOAD_LIMIT_MESSAGE) return true;
-    return /^You've used your \d+ free mastered exports for this month\./.test(message);
+    return /^You've used your \d+ free WAV download for this month\./.test(message);
   }
 
   function isLikelyNetworkError(err: unknown): boolean {
@@ -391,7 +453,8 @@ export function UploadForm() {
     setLastStandardResult(null);
     setConfirmedContinueWithStandard(false);
     setResult(null);
-    setDownloadUrl(null);
+    setWavDownloadUrl(null);
+    setMp3DownloadUrl(null);
     setStatus("Choose a file to begin.");
     if (!selected) {
       setFile(null);
@@ -421,7 +484,8 @@ export function UploadForm() {
     setError(null);
     setLoading(true);
     setResult(null);
-    setDownloadUrl(null);
+    setWavDownloadUrl(null);
+    setMp3DownloadUrl(null);
     if (!keepPostAnalysisUi) {
       setShowAdaptivePlaceholder(false);
       setAdaptiveIntent("");
@@ -555,7 +619,8 @@ export function UploadForm() {
           }
       };
       setResult(mergedResult);
-      setDownloadUrl(null);
+      setWavDownloadUrl(null);
+    setMp3DownloadUrl(null);
       setAdaptiveModeActive(true);
       if (adaptive.adaptiveAiFallback === true && typeof adaptive.adaptiveAiFallbackMessage === "string") {
         setAdaptiveAiNotice(adaptive.adaptiveAiFallbackMessage);
@@ -984,8 +1049,8 @@ export function UploadForm() {
                     <>
                       {result.quota.planId === "free" ? (
                         <>
-                          {result.quota.mastersUsedThisPeriod} of {result.quota.monthlyMastersLimit} free masters used
-                          this month. {result.quota.remainingMonthlyMasters} left
+                          {result.quota.mastersUsedThisPeriod} of {result.quota.monthlyMastersLimit} free WAV download
+                          used this month. {result.quota.remainingMonthlyMasters} left
                         </>
                       ) : (
                         <>
@@ -1008,8 +1073,8 @@ export function UploadForm() {
                     <>
                       {result.quota.planId === "free" ? (
                         <>
-                          You&apos;ve used your {PLAN_DEFINITIONS.free.monthlyMastersLimit} free masters for this month.
-                          Upgrade for more exports, or add a credit pack.
+                          You&apos;ve used your {PLAN_DEFINITIONS.free.monthlyMastersLimit} free WAV download for this
+                          month. Upgrade for more exports, or add a credit pack.
                         </>
                       ) : (
                         DOWNLOAD_LIMIT_MESSAGE
@@ -1022,8 +1087,8 @@ export function UploadForm() {
                 </p>
               ) : (
                 <p style={quotaUnknownLineStyle}>
-                  Monthly plans include a set number of full exports; credit packs add more. We only count each finished
-                  download — previews never touch your quota.
+                  Monthly plans include a set number of WAV exports; credit packs add more. MP3 previews never touch your
+                  quota — we only count each finished WAV download.
                 </p>
               )
             }
@@ -1062,101 +1127,215 @@ export function UploadForm() {
                 }}
               >
                 <PostMasterReleaseCallout />
-                {downloadUrl ? (
+                {(wavDownloadUrl || mp3DownloadUrl) ? (
                   <div style={finalMasterExportDownloadWrapStyle}>
-                    <button
-                      type="button"
-                      data-analytics-id="ab-download"
-                      data-analytics-version="mastered"
-                      disabled={finalMasterExportDownloading}
-                      aria-busy={finalMasterExportDownloading}
-                      aria-describedby={finalMasterExportDownloading ? "final-master-export-status" : undefined}
-                      aria-label={
-                        finalMasterExportDownloading
-                          ? "Preparing your master, please wait"
-                          : adaptiveModeActive
-                            ? "Download adaptive master file"
-                            : "Download final master file"
-                      }
-                      style={{
-                        ...exportMasterPrimaryCtaStyle,
-                        ...(finalMasterExportDownloading ? downloadStyleProcessing : null),
-                        gap: "10px"
-                      }}
-                      onClick={() => {
-                        if (finalMasterExportDownloading) return;
-                        trackAbEvent("ab_download_clicked", {
-                          ...masteringAnalyticsContext,
-                          version: "mastered",
-                          job_id: result.jobId,
-                          file_id: result.download.fileId,
-                          plan_id: result.quota?.planId
-                        });
-                        trackEvent("download_started", {
-                          ...masteringAnalyticsContext,
-                          version: "mastered",
-                          job_id: result.jobId,
-                          file_id: result.download.fileId,
-                          plan_id: result.quota?.planId,
-                          source_component: "ab_comparison",
-                          page_path: window.location.pathname
-                        });
-                        setFinalMasterExportInlineError(null);
-                        setFinalMasterExportDownloading(true);
-                        void downloadFinalMasterWithOptionalBypass(
-                          downloadUrl,
-                          resolveOwnerSessionToken(ownerTestingPanel)
-                        )
-                          .then(() => {
-                            trackEvent("download_completed", {
+                    {mp3DownloadUrl ? (
+                      <button
+                        type="button"
+                        data-analytics-id="ab-download"
+                        data-analytics-version="mp3"
+                        disabled={mp3ExportDownloading}
+                        aria-busy={mp3ExportDownloading}
+                        aria-label={
+                          mp3ExportDownloading
+                            ? "Preparing MP3 master, please wait"
+                            : getMp3DownloadLabel(resolveExportPlanId(result.quota?.planId))
+                        }
+                        style={{
+                          ...exportMasterPrimaryCtaStyle,
+                          ...(mp3ExportDownloading ? downloadStyleProcessing : null),
+                          gap: "10px",
+                          marginBottom: wavDownloadUrl ? "12px" : 0
+                        }}
+                        onClick={() => {
+                          if (mp3ExportDownloading || !mp3DownloadUrl) return;
+                          trackAbEvent("ab_download_clicked", {
+                            ...masteringAnalyticsContext,
+                            version: "mastered",
+                            format: "mp3",
+                            job_id: result.jobId,
+                            file_id: result.download.fileId,
+                            plan_id: result.quota?.planId
+                          });
+                          trackEvent("mp3_download_started", {
+                            ...masteringAnalyticsContext,
+                            format: "mp3",
+                            job_id: result.jobId,
+                            file_id: result.download.fileId,
+                            plan_id: result.quota?.planId,
+                            source_component: "ab_comparison",
+                            page_path: window.location.pathname
+                          });
+                          setFinalMasterExportInlineError(null);
+                          setMp3ExportDownloading(true);
+                          void downloadFinalMasterWithOptionalBypass(
+                            mp3DownloadUrl,
+                            resolveOwnerSessionToken(ownerTestingPanel)
+                          )
+                            .then(() => {
+                              trackEvent("mp3_download_completed", {
+                                ...masteringAnalyticsContext,
+                                format: "mp3",
+                                job_id: result.jobId,
+                                file_id: result.download.fileId,
+                                plan_id: result.quota?.planId,
+                                source_component: "ab_comparison",
+                                page_path: window.location.pathname
+                              });
+                              setMp3ExportDownloading(false);
+                            })
+                            .catch(() => {
+                              setMp3ExportDownloading(false);
+                              setFinalMasterExportInlineError("We couldn't prepare your MP3. Please try again.");
+                            });
+                        }}
+                      >
+                        {mp3ExportDownloading ? (
+                          <>
+                            <span className={finalMasterExportDownloadCss.spinner} aria-hidden />
+                            <span>Preparing MP3…</span>
+                          </>
+                        ) : (
+                          <>
+                            {getMp3DownloadLabel(resolveExportPlanId(result.quota?.planId))}
+                            {resolveExportPlanId(result.quota?.planId) === "free" ? (
+                              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 500, opacity: 0.85, marginTop: "2px" }}>
+                                Unlimited — does not use your WAV allowance
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </button>
+                    ) : null}
+                    {wavDownloadUrl && wavQuotaAvailable ? (
+                      <>
+                        <button
+                          type="button"
+                          data-analytics-id="ab-download"
+                          data-analytics-version="mastered"
+                          disabled={wavExportDownloading}
+                          aria-busy={wavExportDownloading}
+                          aria-describedby={wavExportDownloading ? "final-master-export-status" : undefined}
+                          aria-label={
+                            wavExportDownloading
+                              ? "Preparing your WAV master, please wait"
+                              : getWavDownloadLabel({
+                                  planId: resolveExportPlanId(result.quota?.planId),
+                                  remainingWav: result.quota?.remainingMasters,
+                                  adaptiveModeActive
+                                })
+                          }
+                          style={{
+                            ...exportMasterSecondaryCtaStyle,
+                            ...(wavExportDownloading ? downloadStyleProcessing : null),
+                            gap: "10px"
+                          }}
+                          onClick={() => {
+                            if (wavExportDownloading || !wavDownloadUrl) return;
+                            trackAbEvent("ab_download_clicked", {
                               ...masteringAnalyticsContext,
                               version: "mastered",
+                              format: "wav",
+                              job_id: result.jobId,
+                              file_id: result.download.fileId,
+                              plan_id: result.quota?.planId
+                            });
+                            trackEvent("wav_download_started", {
+                              ...masteringAnalyticsContext,
+                              format: "wav",
                               job_id: result.jobId,
                               file_id: result.download.fileId,
                               plan_id: result.quota?.planId,
                               source_component: "ab_comparison",
                               page_path: window.location.pathname
                             });
-                            setFinalMasterExportDownloading(false);
                             setFinalMasterExportInlineError(null);
-                          })
-                          .catch((e) => {
-                            setFinalMasterExportDownloading(false);
-                            if (e instanceof Error && e.name === "DownloadLimitExceededError") {
-                              setError(null);
-                              const pid = result?.quota?.planId;
-                              setDownloadLimitPlanId(pid === "creator_monthly" || pid === "pro_studio_monthly" ? pid : "free");
-                              setDownloadLimitModalOpen(true);
-                              return;
-                            }
-                            setFinalMasterExportInlineError(
-                              "We couldn't prepare your master. Please try again."
-                            );
-                          });
-                      }}
-                    >
-                      {finalMasterExportDownloading ? (
-                        <>
-                          <span className={finalMasterExportDownloadCss.spinner} aria-hidden />
-                          <span>Preparing your master…</span>
-                        </>
-                      ) : adaptiveModeActive ? (
-                        "Download adaptive master"
-                      ) : (
-                        "Download final master"
-                      )}
-                    </button>
-                    {finalMasterExportDownloading ? (
+                            setWavExportDownloading(true);
+                            void downloadFinalMasterWithOptionalBypass(
+                              wavDownloadUrl,
+                              resolveOwnerSessionToken(ownerTestingPanel)
+                            )
+                              .then(() => {
+                                trackEvent("wav_download_completed", {
+                                  ...masteringAnalyticsContext,
+                                  format: "wav",
+                                  job_id: result.jobId,
+                                  file_id: result.download.fileId,
+                                  plan_id: result.quota?.planId,
+                                  source_component: "ab_comparison",
+                                  page_path: window.location.pathname
+                                });
+                                setWavExportDownloading(false);
+                                setFinalMasterExportInlineError(null);
+                              })
+                              .catch((e) => {
+                                setWavExportDownloading(false);
+                                if (e instanceof Error && e.name === "DownloadLimitExceededError") {
+                                  setError(null);
+                                  const pid = result?.quota?.planId;
+                                  setDownloadLimitPlanId(
+                                    pid === "creator_monthly" || pid === "pro_studio_monthly" ? pid : "free"
+                                  );
+                                  setDownloadLimitModalOpen(true);
+                                  return;
+                                }
+                                setFinalMasterExportInlineError(
+                                  "We couldn't prepare your master. Please try again."
+                                );
+                              });
+                          }}
+                        >
+                          {wavExportDownloading ? (
+                            <>
+                              <span className={finalMasterExportDownloadCss.spinner} aria-hidden />
+                              <span>Preparing WAV…</span>
+                            </>
+                          ) : (
+                            getWavDownloadLabel({
+                              planId: resolveExportPlanId(result.quota?.planId),
+                              remainingWav: result.quota?.remainingMasters,
+                              adaptiveModeActive
+                            })
+                          )}
+                        </button>
+                        {!wavExportDownloading ? (
+                          <p style={finalMasterExportHelperStyle}>
+                            WAV is the highest-quality export and counts toward your monthly allowance.
+                          </p>
+                        ) : (
+                          <>
+                            <div className={finalMasterExportDownloadCss.progressTrack} aria-hidden>
+                              <div className={finalMasterExportDownloadCss.progressFill} />
+                            </div>
+                            <p id="final-master-export-status" style={finalMasterExportHelperStyle}>
+                              Your WAV master is being prepared. This can take a few seconds.
+                            </p>
+                          </>
+                        )}
+                      </>
+                    ) : wavDownloadUrl && !wavQuotaAvailable ? (
                       <>
-                        <div className={finalMasterExportDownloadCss.progressTrack} aria-hidden>
-                          <div className={finalMasterExportDownloadCss.progressFill} />
-                        </div>
-                        <p id="final-master-export-status" style={finalMasterExportHelperStyle}>
-                          Your master is being prepared. This can take a few seconds.
+                        <button
+                          type="button"
+                          style={exportMasterSecondaryCtaStyle}
+                          onClick={() => {
+                            const exportPlanId = resolveExportPlanId(result.quota?.planId);
+                            setDownloadLimitPlanId(
+                              exportPlanId === "creator_monthly" || exportPlanId === "pro_studio_monthly"
+                                ? exportPlanId
+                                : "free"
+                            );
+                            setDownloadLimitModalOpen(true);
+                          }}
+                        >
+                          {getWavQuotaExhaustedCtaLabel(resolveExportPlanId(result.quota?.planId))}
+                        </button>
+                        <p style={finalMasterExportHelperStyle}>
+                          MP3 downloads stay unlimited. WAV exports need an upgrade or credit pack.
                         </p>
                       </>
                     ) : null}
-                    {finalMasterExportInlineError && !finalMasterExportDownloading ? (
+                    {finalMasterExportInlineError && !wavExportDownloading && !mp3ExportDownloading ? (
                       <p role="alert" style={finalMasterExportInlineErrorStyle}>
                         {finalMasterExportInlineError}
                       </p>
@@ -1166,7 +1345,7 @@ export function UploadForm() {
               </div>
             }
           />
-          {!downloadUrl ? (
+          {!wavDownloadUrl && !mp3DownloadUrl ? (
             adaptiveModeActive ? (
               <AdaptiveExportGate
                 jobId={result.jobId}
@@ -1182,11 +1361,19 @@ export function UploadForm() {
                 }}
                 onUnlocked={(url) => {
                   console.log("[ADAPTIVE_UI] export unlocked from gate");
-                  setDownloadUrl(url);
+                  setWavDownloadUrl(url);
+                  setMp3DownloadUrl(buildMp3DownloadUrl(result.download.fileId, result.jobId));
                 }}
               />
             ) : (
-              <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={setDownloadUrl} />
+              <EmailCaptureForm
+                jobId={result.jobId}
+                fileId={result.download.fileId}
+                onUnlocked={({ wav, mp3 }) => {
+                  setWavDownloadUrl(wav);
+                  setMp3DownloadUrl(mp3);
+                }}
+              />
             )
           ) : null}
         </div>
@@ -1631,6 +1818,19 @@ const downloadStyle: React.CSSProperties = {
 };
 
 /** Primary export CTA under the A/B comparison — larger tap target and stronger presence than play/switch controls. */
+const exportMasterSecondaryCtaStyle: React.CSSProperties = {
+  ...downloadStyle,
+  width: "100%",
+  minHeight: "48px",
+  fontSize: "clamp(0.98rem, 3vw, 1.08rem)",
+  fontWeight: 700,
+  padding: "14px 20px",
+  borderRadius: "14px",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
+  border: "1px solid rgba(138, 163, 196, 0.35)",
+  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.06)"
+};
+
 const exportMasterPrimaryCtaStyle: React.CSSProperties = {
   ...downloadStyle,
   width: "100%",

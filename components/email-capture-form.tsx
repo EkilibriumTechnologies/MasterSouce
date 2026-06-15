@@ -7,7 +7,7 @@ import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 type EmailCaptureFormProps = {
   jobId: string;
   fileId: string;
-  onUnlocked: (downloadUrl: string) => void;
+  onUnlocked: (urls: { wav: string; mp3: string }) => void;
 };
 
 export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureFormProps) {
@@ -38,7 +38,8 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
         throw new Error(apiError ?? "Unable to unlock final master.");
       }
       const downloadUrl = typeof payload?.downloadUrl === "string" ? payload.downloadUrl : null;
-      if (!downloadUrl) {
+      const mp3DownloadUrl = typeof payload?.mp3DownloadUrl === "string" ? payload.mp3DownloadUrl : null;
+      if (!downloadUrl || !mp3DownloadUrl) {
         throw new Error("Unlock response was empty or invalid.");
       }
       try {
@@ -46,7 +47,7 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
       } catch {
         /* ignore quota errors */
       }
-      onUnlocked(downloadUrl);
+      onUnlocked({ wav: downloadUrl, mp3: mp3DownloadUrl });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to submit email.");
     } finally {
