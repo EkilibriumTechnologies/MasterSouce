@@ -50,14 +50,14 @@ function run() {
   const downloadRoute = read("app/api/download/route.ts");
   assertBefore(
     downloadRoute,
-    "if (isSupabaseConfigured() && masteredUnlock && !masteredUnlock.emailVerifiedAt)",
+    "if (masteredUnlock && !masteredUnlock.emailVerifiedAt)",
     "const recorded = await recordMasteredDownloadAttempt({",
     "download: unconfirmed email access gate before download event accounting"
   );
   assertBefore(
     downloadRoute,
-    "if (isSupabaseConfigured() && masteredUnlock && !masteredUnlock.emailVerifiedAt)",
-    "const entitlements = await getEntitlementsForUser(user, {",
+    "if (masteredUnlock && !masteredUnlock.emailVerifiedAt)",
+    "normalizedEmail: billingEmail",
     "download: unconfirmed email access gate before entitlement consumption checks"
   );
 

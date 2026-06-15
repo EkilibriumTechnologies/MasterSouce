@@ -34,3 +34,28 @@ export function shouldEnforceWavDownloadQuota(params: {
   if (!params.forceDownload) return false;
   return isBillableWavExport(params.record);
 }
+
+export type WavQuotaEnforcementBackend = "none" | "supabase" | "local";
+
+/**
+ * Supabase billing counts apply only when a persisted unlock row exists.
+ * In-memory unlock (local dev fallback) always uses the session counter even if Supabase is configured.
+ */
+export function resolveWavQuotaEnforcementBackend(params: {
+  enforceWavQuota: boolean;
+  isSupabaseConfigured: boolean;
+  billingEmail: string | null;
+  hasPersistedUnlock: boolean;
+  hasDownloadAccess: boolean;
+}): WavQuotaEnforcementBackend {
+  if (!params.enforceWavQuota) return "none";
+  if (
+    params.isSupabaseConfigured &&
+    Boolean(params.billingEmail) &&
+    params.hasPersistedUnlock
+  ) {
+    return "supabase";
+  }
+  if (params.hasDownloadAccess) return "local";
+  return "none";
+}

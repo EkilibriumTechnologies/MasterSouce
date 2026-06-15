@@ -404,7 +404,10 @@ export function UploadForm() {
 
   const wavQuotaAvailable = useMemo(() => {
     if (ownerOverrideArmed) return true;
-    return (result?.quota?.remainingMasters ?? 0) > 0;
+    const remaining = result?.quota?.remainingMasters;
+    // Unknown quota (pre-email master response) is not the same as exhausted.
+    if (remaining == null) return true;
+    return remaining > 0;
   }, [ownerOverrideArmed, result?.quota?.remainingMasters]);
 
   const acceptedTypes = useMemo(() => [".wav", ".mp3"], []);
@@ -1226,7 +1229,7 @@ export function UploadForm() {
                                 })
                           }
                           style={{
-                            ...exportMasterSecondaryCtaStyle,
+                            ...exportMasterWavEnabledCtaStyle,
                             ...(wavExportDownloading ? downloadStyleProcessing : null),
                             gap: "10px"
                           }}
@@ -1317,7 +1320,7 @@ export function UploadForm() {
                       <>
                         <button
                           type="button"
-                          style={exportMasterSecondaryCtaStyle}
+                          style={exportMasterWavLockedCtaStyle}
                           onClick={() => {
                             const exportPlanId = resolveExportPlanId(result.quota?.planId);
                             setDownloadLimitPlanId(
@@ -1829,6 +1832,23 @@ const exportMasterSecondaryCtaStyle: React.CSSProperties = {
   background: "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
   border: "1px solid rgba(138, 163, 196, 0.35)",
   boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.06)"
+};
+
+/** WAV export CTA when quota remains — secondary to MP3 but clearly interactive. */
+const exportMasterWavEnabledCtaStyle: React.CSSProperties = {
+  ...exportMasterSecondaryCtaStyle,
+  color: "#e8fff6",
+  background: "linear-gradient(180deg, rgba(45, 227, 157, 0.16) 0%, rgba(124, 229, 255, 0.08) 100%)",
+  border: "1px solid rgba(45, 227, 157, 0.5)",
+  boxShadow: "0 8px 24px rgba(24, 160, 118, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)"
+};
+
+/** WAV export CTA when monthly WAV quota is exhausted — opens upgrade modal. */
+const exportMasterWavLockedCtaStyle: React.CSSProperties = {
+  ...exportMasterSecondaryCtaStyle,
+  color: "#9eb0cc",
+  opacity: 0.78,
+  cursor: "pointer"
 };
 
 const exportMasterPrimaryCtaStyle: React.CSSProperties = {
