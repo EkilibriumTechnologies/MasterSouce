@@ -34,23 +34,3 @@ export function shouldEnforceWavDownloadQuota(params: {
   if (!params.forceDownload) return false;
   return isBillableWavExport(params.record);
 }
-
-export type WavQuotaEnforcementBackend = "none" | "supabase" | "local";
-
-/**
- * Email-based Supabase counts apply whenever billing email is known.
- * Session counter is only used when Supabase is off or billing email is missing at download time.
- */
-export function resolveWavQuotaEnforcementBackend(params: {
-  enforceWavQuota: boolean;
-  isSupabaseConfigured: boolean;
-  billingEmail: string | null;
-  hasDownloadAccess: boolean;
-}): WavQuotaEnforcementBackend {
-  if (!params.enforceWavQuota) return "none";
-  if (params.isSupabaseConfigured && Boolean(params.billingEmail)) {
-    return "supabase";
-  }
-  if (params.hasDownloadAccess) return "local";
-  return "none";
-}

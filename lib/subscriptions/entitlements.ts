@@ -81,10 +81,9 @@ export async function getEntitlementsForUser(
       remainingMonthly = Math.max(monthlyCap - used, 0);
       creditPackBalance = await getCreditPackBalance(emailForBilling);
     } else {
-      // Billing email unknown at encode time — do not treat missing usage as quota exhausted.
-      usedThisMonth = 0;
-      remainingMonthly = plan.id === "free" ? monthlyCap : null;
-      creditPackBalance = plan.id === "free" ? 0 : null;
+      usedThisMonth = null;
+      remainingMonthly = null;
+      creditPackBalance = null;
     }
   } else {
     const used = getLocalBillableDownloadCount(user.sessionId);

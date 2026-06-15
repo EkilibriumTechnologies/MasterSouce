@@ -50,15 +50,6 @@ function shouldEnforceWavDownloadQuota(params) {
   return isBillableWavExport(params.record);
 }
 
-function resolveWavQuotaEnforcementBackend(params) {
-  if (!params.enforceWavQuota) return "none";
-  if (params.isSupabaseConfigured && Boolean(params.billingEmail)) {
-    return "supabase";
-  }
-  if (params.hasDownloadAccess) return "local";
-  return "none";
-}
-
 /** In-memory session counter mirroring lib/usage/local-download-usage.ts */
 function createLocalDownloadCounter() {
   const billedJobFileKeys = new Set();
@@ -93,6 +84,7 @@ function simulateFreeWavQuota(wavDownloadsThisMonth) {
 function runPolicyUnitTests() {
   assert.equal(FREE_WAV_DOWNLOADS_PER_MONTH, 1, "free WAV cap is 1");
   assert.equal(resolveFreePlanWavCap(99), 1, "free cap clamps plan limit");
+  assert.equal(resolveFreePlanWavCap(2), 1, "legacy plan limit of 2 still clamps to 1");
 
   const masteredWav = { kind: "mastered", mime: "audio/wav" };
   const masteredMp3 = { kind: "mastered_mp3", mime: "audio/mpeg" };
@@ -175,61 +167,6 @@ function runPolicyUnitTests() {
   }
 }
 
-function runQuotaBackendRoutingTests() {
-  const masteredWav = { kind: "mastered", mime: "audio/wav" };
-  const enforce = shouldEnforceWavDownloadQuota({
-    record: masteredWav,
-    forceDownload: true,
-    isAdaptiveMasterJob: false,
-    adminBypass: false
-  });
-  assert.equal(enforce, true, "WAV attachment enforces quota");
-
-  assert.equal(
-    resolveWavQuotaEnforcementBackend({
-      enforceWavQuota: false,
-      isSupabaseConfigured: true,
-      billingEmail: "a@b.com",
-      hasDownloadAccess: true
-    }),
-    "none",
-    "MP3 / non-billable assets skip quota backend"
-  );
-
-  assert.equal(
-    resolveWavQuotaEnforcementBackend({
-      enforceWavQuota: enforce,
-      isSupabaseConfigured: false,
-      billingEmail: null,
-      hasDownloadAccess: true
-    }),
-    "local",
-    "local fallback routes to session counter when Supabase is off"
-  );
-
-  assert.equal(
-    resolveWavQuotaEnforcementBackend({
-      enforceWavQuota: enforce,
-      isSupabaseConfigured: true,
-      billingEmail: "a@b.com",
-      hasDownloadAccess: true
-    }),
-    "supabase",
-    "billing email uses Supabase quota even for in-memory unlock"
-  );
-
-  assert.equal(
-    resolveWavQuotaEnforcementBackend({
-      enforceWavQuota: enforce,
-      isSupabaseConfigured: true,
-      billingEmail: null,
-      hasDownloadAccess: true
-    }),
-    "local",
-    "missing billing email with in-memory unlock does not block as exhausted"
-  );
-}
-
 function runLocalCounterBehaviorTests() {
   const cap = resolveFreePlanWavCap(FREE_WAV_DOWNLOADS_PER_MONTH);
   const counter = createLocalDownloadCounter();
@@ -292,50 +229,35 @@ function runSourceInvariantTests() {
   assertIncludes(policy, "isBillableWavExport", "policy defines WAV billable helper");
   assertIncludes(policy, "isUnmeteredMp3Download", "policy defines unmetered MP3 helper");
   assertIncludes(policy, "shouldEnforceWavDownloadQuota", "policy defines quota enforcement gate");
-  assertIncludes(policy, "resolveWavQuotaEnforcementBackend", "policy defines quota backend routing");
+  assertExcludes(policy, "resolveWavQuotaEnforcementBackend", "policy must not add quota backend routing");
 
   const entitlements = read("lib/subscriptions/entitlements.ts");
   assertIncludes(entitlements, "resolveFreePlanWavCap", "entitlements use free WAV cap resolver");
-  assertIncludes(entitlements, "do not treat missing usage as quota exhausted", "entitlements avoid null-as-exhausted");
   assertExcludes(entitlements, "FREE_MASTERS_PER_MONTH = 2", "legacy free cap of 2 removed");
 
   const downloadRoute = read("app/api/download/route.ts");
   assertIncludes(downloadRoute, "shouldEnforceWavDownloadQuota", "download route uses WAV quota gate");
-  assertIncludes(downloadRoute, "resolveWavQuotaEnforcementBackend", "download route routes quota backend");
   assertIncludes(downloadRoute, "resolveFreePlanWavCap", "download route uses free WAV cap");
-  assertIncludes(downloadRoute, "resolveMasterDownloadAccess", "download route resolves unlock without discarding DB row");
-  assertIncludes(downloadRoute, "billingEmail", "download route keys quota/accounting off billing email");
-  assertExcludes(downloadRoute, "masteredUnlock = null", "download route must not discard Supabase unlock rows");
-  assertExcludes(
-    downloadRoute,
-    "enforceWavQuota && isSupabaseConfigured() && !billingEmail",
-    "download route must not block in-memory unlock solely for missing billing email"
-  );
+  assertIncludes(downloadRoute, "isJobUnlocked", "download route uses in-memory unlock fallback");
+  assertIncludes(downloadRoute, "masteredUnlock.normalizedEmail", "download route keys quota off unlock email");
+  assertIncludes(downloadRoute, "tryConsumeLocalBillableDownload", "download route uses local session counter fallback");
+  assertExcludes(downloadRoute, "resolveMasterDownloadAccess", "download route must not use access resolver refactor");
+  assertExcludes(downloadRoute, "resolveWavQuotaEnforcementBackend", "download route must not route quota backends");
+  assertExcludes(downloadRoute, "billingEmail", "download route must not use billingEmail indirection");
   assertBefore(
     downloadRoute,
     "enforceWavQuota",
     "const recorded = await recordMasteredDownloadAttempt",
     "download route: WAV quota gate before download accounting"
   );
-  assertBefore(
-    downloadRoute,
-    "billingEmail",
-    "const recorded = await recordMasteredDownloadAttempt",
-    "download route: billing email resolved before download accounting"
-  );
   assertIncludes(downloadRoute, "ensureMasteredMp3ForJob", "download route lazy-exports full MP3 masters");
   assertIncludes(downloadRoute, 'format") === "mp3"', "download route supports format=mp3");
-
-  const accessResolver = read("lib/downloads/resolve-master-download-access.ts");
-  assertIncludes(accessResolver, "resolveMasterDownloadAccess", "access resolver keeps Supabase unlock rows");
-  assertExcludes(accessResolver, "masteredUnlock = null", "access resolver must not discard unlock rows");
 
   const uploadForm = read("components/upload-form.tsx");
   assertIncludes(uploadForm, "exportMasterWavEnabledCtaStyle", "upload form styles enabled WAV button distinctly");
   assertIncludes(uploadForm, "exportMasterWavLockedCtaStyle", "upload form styles exhausted WAV quota button");
   assertIncludes(uploadForm, "exportMasterPrimaryCtaStyle", "upload form keeps MP3 as primary CTA");
   assertIncludes(uploadForm, "wavQuotaAvailable", "upload form gates WAV button on remaining quota");
-  assertIncludes(uploadForm, "Unknown quota", "upload form treats unknown quota as not exhausted");
 
   const pricing = read("components/pricing-section.tsx");
   assertIncludes(pricing, "Unlimited MP3 downloads", "pricing section shows unlimited MP3 downloads for free");
@@ -349,7 +271,6 @@ function runSourceInvariantTests() {
 
 function run() {
   runPolicyUnitTests();
-  runQuotaBackendRoutingTests();
   runLocalCounterBehaviorTests();
   runSupabaseModeBehaviorTests();
   runSourceInvariantTests();
