@@ -98,6 +98,21 @@ function resolveExportPlanId(planId: string | undefined): PlanId {
   return "free";
 }
 
+function applyWavQuotaConsumed(prev: MasterResponse | null): MasterResponse | null {
+  if (!prev?.quota) return prev;
+  const { quota } = prev;
+  if (quota.remainingMasters <= 0) return prev;
+  return {
+    ...prev,
+    quota: {
+      ...quota,
+      mastersUsedThisPeriod: quota.mastersUsedThisPeriod + 1,
+      remainingMonthlyMasters: Math.max(quota.remainingMonthlyMasters - 1, 0),
+      remainingMasters: Math.max(quota.remainingMasters - 1, 0)
+    }
+  };
+}
+
 async function downloadFinalMasterWithOptionalBypass(downloadUrl: string, ownerToken: string): Promise<void> {
   const trimmedToken = ownerToken.trim();
   const headers: Record<string, string> = {};
@@ -1268,6 +1283,7 @@ export function UploadForm() {
                                   source_component: "ab_comparison",
                                   page_path: window.location.pathname
                                 });
+                                setResult((prev) => applyWavQuotaConsumed(prev));
                                 setWavExportDownloading(false);
                                 setFinalMasterExportInlineError(null);
                               })

@@ -305,7 +305,6 @@ export async function GET(request: NextRequest) {
         enforceWavQuota,
         isSupabaseConfigured: isSupabaseConfigured(),
         billingEmail,
-        hasPersistedUnlock: Boolean(masteredUnlock),
         hasDownloadAccess: Boolean(downloadAccess)
       });
 

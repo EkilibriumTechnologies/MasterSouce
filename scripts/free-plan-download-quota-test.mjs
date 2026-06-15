@@ -52,11 +52,7 @@ function shouldEnforceWavDownloadQuota(params) {
 
 function resolveWavQuotaEnforcementBackend(params) {
   if (!params.enforceWavQuota) return "none";
-  if (
-    params.isSupabaseConfigured &&
-    Boolean(params.billingEmail) &&
-    params.hasPersistedUnlock
-  ) {
+  if (params.isSupabaseConfigured && Boolean(params.billingEmail)) {
     return "supabase";
   }
   if (params.hasDownloadAccess) return "local";
@@ -194,7 +190,6 @@ function runQuotaBackendRoutingTests() {
       enforceWavQuota: false,
       isSupabaseConfigured: true,
       billingEmail: "a@b.com",
-      hasPersistedUnlock: true,
       hasDownloadAccess: true
     }),
     "none",
@@ -206,7 +201,6 @@ function runQuotaBackendRoutingTests() {
       enforceWavQuota: enforce,
       isSupabaseConfigured: false,
       billingEmail: null,
-      hasPersistedUnlock: false,
       hasDownloadAccess: true
     }),
     "local",
@@ -218,23 +212,10 @@ function runQuotaBackendRoutingTests() {
       enforceWavQuota: enforce,
       isSupabaseConfigured: true,
       billingEmail: "a@b.com",
-      hasPersistedUnlock: false,
-      hasDownloadAccess: true
-    }),
-    "local",
-    "in-memory unlock uses local counter even when Supabase is configured"
-  );
-
-  assert.equal(
-    resolveWavQuotaEnforcementBackend({
-      enforceWavQuota: enforce,
-      isSupabaseConfigured: true,
-      billingEmail: "a@b.com",
-      hasPersistedUnlock: true,
       hasDownloadAccess: true
     }),
     "supabase",
-    "persisted unlock with billing email uses Supabase quota"
+    "billing email uses Supabase quota even for in-memory unlock"
   );
 
   assert.equal(
@@ -242,7 +223,6 @@ function runQuotaBackendRoutingTests() {
       enforceWavQuota: enforce,
       isSupabaseConfigured: true,
       billingEmail: null,
-      hasPersistedUnlock: false,
       hasDownloadAccess: true
     }),
     "local",
