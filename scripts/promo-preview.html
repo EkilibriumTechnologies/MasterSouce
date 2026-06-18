@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Father's Day Promo Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Work Sans", Inter, system-ui, sans-serif;
+      background: linear-gradient(145deg, #0f1831 0%, #0b1225 54%, #070f20 100%);
+      color: #eef2ff;
+      padding: 24px;
+    }
+    .section-label {
+      margin: 0 0 12px;
+      color: #8ea0d0;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .preview-block { margin-bottom: 48px; }
+
+    /* Banner */
+    .promo-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      max-width: 720px;
+      border: 1px solid rgba(255, 160, 90, 0.45);
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, rgba(58, 32, 18, 0.72), rgba(34, 24, 52, 0.78));
+      color: #f0e2d6;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      text-decoration: none;
+    }
+    .promo-banner strong { color: #ffd8b8; }
+    .promo-banner .code { color: #ffe4a8; font-weight: 800; }
+
+    /* Pricing card */
+    .pricing-wrap {
+      max-width: 900px;
+      background: linear-gradient(145deg, rgba(22, 29, 48, 0.94), rgba(12, 17, 30, 0.94));
+      border: 1px solid rgba(142, 155, 209, 0.2);
+      border-radius: 24px;
+      padding: 32px 24px;
+    }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 20px;
+    }
+    .card {
+      border: 1px solid rgba(151, 116, 255, 0.88);
+      border-radius: 18px;
+      background: linear-gradient(155deg, rgba(19, 28, 52, 0.62), rgba(12, 19, 37, 0.62));
+      padding: 20px;
+      box-shadow: inset 0 0 0 1px rgba(151, 116, 255, 0.36), 0 16px 32px rgba(121, 100, 255, 0.26);
+    }
+    .card.free { border-color: rgba(74, 90, 150, 0.32); box-shadow: none; }
+    .card h3 { margin: 0; color: #ecf1ff; font-size: 1.4rem; }
+    .badge {
+      display: inline-block;
+      margin: 0 0 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 168, 108, 0.5);
+      background: rgba(72, 38, 22, 0.55);
+      color: #ffd8b8;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 5px 10px;
+    }
+    .original { margin: 0; color: #8a98c4; text-decoration: line-through; font-size: 0.95rem; }
+    .promo-price { margin: 4px 0 0; color: #ffe8cc; font-weight: 800; font-size: 2.1rem; }
+    .promo-price span { color: #99a8d6; font-size: 0.95rem; font-weight: 600; }
+    .hint { margin: 6px 0 0; color: #c8b8a8; font-size: 0.78rem; line-height: 1.45; }
+    .countdown {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      max-width: 420px;
+      margin-top: 14px;
+    }
+    .countdown div {
+      border-radius: 12px;
+      border: 1px solid rgba(151, 116, 255, 0.42);
+      background: rgba(18, 24, 44, 0.82);
+      padding: 10px 8px;
+      text-align: center;
+    }
+    .countdown .val { display: block; color: #f3ecff; font-weight: 800; font-size: 1.35rem; }
+    .countdown .lbl { display: block; margin-top: 4px; color: #a8b4e8; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
+
+    /* Popup */
+    .popup-scene {
+      position: relative;
+      height: 420px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(4, 8, 18, 0.5);
+    }
+    .popup-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(4, 8, 18, 0.74);
+      backdrop-filter: blur(6px);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .popup-panel {
+      width: min(480px, 100%);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 168, 108, 0.38);
+      background: linear-gradient(165deg, rgba(36, 24, 48, 0.97), rgba(14, 20, 38, 0.98));
+      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.48);
+      padding: 24px 22px 20px;
+    }
+    .popup-panel h2 { margin: 0; color: #fff3e8; font-size: 1.35rem; }
+    .popup-panel p { margin: 12px 0 0; color: #d8c8bc; line-height: 1.55; font-size: 0.96rem; }
+    .popup-panel .deadline { color: #f0b890; font-weight: 600; font-size: 0.88rem; }
+    .popup-panel .code { color: #ffe4a8; font-weight: 800; }
+    .popup-actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-primary {
+      border: 0; border-radius: 12px; padding: 11px 16px; font-weight: 700; font-size: 0.92rem;
+      color: #1a0f08; background: linear-gradient(125deg, #ffb36b 0%, #ff8f5a 100%);
+      box-shadow: 0 10px 24px rgba(255, 140, 80, 0.32);
+    }
+    .btn-secondary {
+      border-radius: 10px; border: 1px solid rgba(180, 160, 200, 0.42); background: transparent;
+      color: #d8cce8; padding: 10px 14px; font-size: 0.88rem; font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-block" id="banner-preview">
+    <p class="section-label">Promo Banner</p>
+    <div class="promo-banner">
+      <span>🎉</span>
+      <span><strong>Father's Day Weekend:</strong> 50% off all paid plans with code <span class="code">Fatherday26</span> — ends Jun 22 at 11:59 PM.</span>
+    </div>
+  </div>
+
+  <div class="preview-block" id="pricing-preview">
+    <p class="section-label">Pricing Page</p>
+    <div class="pricing-wrap">
+      <div class="promo-banner" style="margin-top:0">
+        <span>🎉</span>
+        <span><strong>Father's Day Weekend:</strong> 50% off all paid plans with code <span class="code">Fatherday26</span> — ends Jun 22 at 11:59 PM.</span>
+      </div>
+      <div class="countdown">
+        <div><span class="val">04</span><span class="lbl">Days</span></div>
+        <div><span class="val">08</span><span class="lbl">Hours</span></div>
+        <div><span class="val">32</span><span class="lbl">Minutes</span></div>
+        <div><span class="val">15</span><span class="lbl">Seconds</span></div>
+      </div>
+      <div class="pricing-grid">
+        <div class="card free">
+          <h3>Free</h3>
+          <p class="promo-price">$0<span>/mo</span></p>
+        </div>
+        <div class="card">
+          <h3>Creator</h3>
+          <span class="badge">🔥 Father's Day Weekend — 50% Off</span>
+          <p class="original">$9/month</p>
+          <p class="promo-price">$4.50<span>/month</span></p>
+          <p class="hint">Use code Fatherday26 at checkout. Offer ends Jun 22 at 11:59 PM.</p>
+        </div>
+        <div class="card">
+          <h3>Pro Studio</h3>
+          <span class="badge">🔥 Father's Day Weekend — 50% Off</span>
+          <p class="original">$24/month</p>
+          <p class="promo-price">$12<span>/month</span></p>
+          <p class="hint">Use code Fatherday26 at checkout. Offer ends Jun 22 at 11:59 PM.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-block" id="popup-preview">
+    <p class="section-label">Promo Popup</p>
+    <div class="popup-scene">
+      <div class="popup-backdrop">
+        <div class="popup-panel">
+          <h2>🎉 Father's Day Weekend Special</h2>
+          <p>Get 50% off any paid plan for the next 12 months using code <span class="code">Fatherday26</span></p>
+          <p class="deadline">Offer ends Jun 22 at 11:59 PM.</p>
+          <div class="countdown">
+            <div><span class="val">04</span><span class="lbl">Days</span></div>
+            <div><span class="val">08</span><span class="lbl">Hours</span></div>
+            <div><span class="val">32</span><span class="lbl">Minutes</span></div>
+            <div><span class="val">15</span><span class="lbl">Seconds</span></div>
+          </div>
+          <div class="popup-actions">
+            <button class="btn-primary" type="button">Upgrade & Save 50%</button>
+            <button class="btn-secondary" type="button">Maybe Later</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

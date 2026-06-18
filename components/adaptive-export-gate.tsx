@@ -13,6 +13,7 @@ import type { PendingAdaptiveExportV1 } from "@/lib/billing/pending-adaptive-exp
 import { savePendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
 import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
 import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
+import { PromoBanner } from "@/components/promo/promo-banner";
 
 type ExportAccessPayload = {
   entitled?: boolean;
@@ -233,6 +234,7 @@ export function AdaptiveExportGate({
         <br />
         Enter the billing email from your subscription so we can unlock the paid WAV export.
       </p>
+      <PromoBanner href="/pricing" />
       <form onSubmit={handleSubmit} style={formStyle}>
         <label htmlFor="adaptive-billing-email" style={labelStyle}>
           Billing email (matches Stripe)

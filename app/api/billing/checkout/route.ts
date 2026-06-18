@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
 
     const session = await stripe.checkout.sessions.create({
       mode: parsed.data.kind === "subscription" ? "subscription" : "payment",
+      allow_promotion_codes: true,
       customer_email: email,
       line_items: [
         {

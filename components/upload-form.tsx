@@ -28,6 +28,7 @@ import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/up
 import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
 import { buildMasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
 import { getLoudnessModeLufsTarget } from "@/lib/genre-presets";
+import { setMastersourceWorkflowBusy } from "@/lib/promo/workflow-guard";
 
 /** Owner panel: session token for owner bypass checks on GET /api/download. */
 function resolveOwnerSessionToken(ownerTestingPanel: boolean): string {
@@ -264,6 +265,10 @@ export function UploadForm() {
   const [mp3ExportDownloading, setMp3ExportDownloading] = useState(false);
   const [finalMasterExportInlineError, setFinalMasterExportInlineError] = useState<string | null>(null);
   const latestAnalysisRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    setMastersourceWorkflowBusy(loading || adaptiveProcessing || wavExportDownloading || mp3ExportDownloading);
+  }, [loading, adaptiveProcessing, wavExportDownloading, mp3ExportDownloading]);
 
   useEffect(() => {
     if (wavDownloadUrl || mp3DownloadUrl) return;

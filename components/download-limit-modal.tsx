@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
 import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
+import { PromoBanner } from "@/components/promo/promo-banner";
 
 type DownloadLimitModalProps = {
   open: boolean;
@@ -84,6 +85,7 @@ export function DownloadLimitModal({ open, planId, analyticsContext, onClose, on
             ? "You've used your free WAV download for this month. Subscribe for more monthly WAV exports, or add a 5-master credit pack to keep exporting finals."
             : "You've used your available masters for this period. Upgrade or add a credit pack to keep exporting finals."}
         </p>
+        <PromoBanner href="/pricing" onNavigate={onViewPlans} />
         <div style={actionsStyle}>
           <button
             ref={viewPlansRef}

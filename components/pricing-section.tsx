@@ -3,8 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { trackEvent } from "@/lib/analytics/ab-comparison";
 import { getGaClientId } from "@/lib/analytics/gtag";
 import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
+import {
+  FATHERS_DAY_PROMO_CODE,
+  formatFathersDayPromoPriceUsd,
+  isFathersDayPromoActive
+} from "@/lib/promo/fathers-day-2026";
+import { PromoBanner } from "@/components/promo/promo-banner";
+import { PromoCountdownTimer } from "@/components/promo/countdown-timer";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { PlanId } from "@/lib/subscriptions/types";
 
@@ -105,11 +113,22 @@ export function PricingSection() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const [promoActive, setPromoActive] = useState(() => isFathersDayPromoActive());
+  const promoViewTrackedRef = useRef(false);
 
   const modalOpen = modalMode !== null;
   const adaptiveIntent = searchParams?.get("intent") === "adaptive";
   const returnTo = searchParams?.get("returnTo")?.trim() ?? "";
   const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
+
+  useEffect(() => {
+    if (!promoActive || promoViewTrackedRef.current) return;
+    promoViewTrackedRef.current = true;
+    trackEvent("promo_pricing_view", {
+      source_component: "pricing_section",
+      page_path: window.location.pathname
+    });
+  }, [promoActive]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -328,6 +347,12 @@ export function PricingSection() {
           </p>
         </div>
       ) : null}
+      {promoActive ? (
+        <>
+          <PromoBanner href="#pricing" />
+          <PromoCountdownTimer onExpired={() => setPromoActive(false)} />
+        </>
+      ) : null}
       <div style={manageBillingRowStyle}>
         <span style={manageBillingHintStyle}>Already subscribed?</span>
         <button type="button" style={manageBillingLinkStyle} onClick={openManageBillingModal}>
@@ -354,10 +379,26 @@ export function PricingSection() {
               {plan.id === "pro_studio_monthly" ? (
                 <p style={ctaHintStyle}>Best for producers, teams, and catalog work</p>
               ) : null}
-              <p style={priceStyle}>
-                ${plan.monthlyPriceUsd}
-                <span style={priceSuffixStyle}>/mo</span>
-              </p>
+              {!isFree && promoActive ? (
+                <div style={promoPriceBlockStyle}>
+                  <p style={promoBadgeStyle}>🔥 Father&apos;s Day Weekend — 50% Off</p>
+                  <p style={originalPriceStyle}>
+                    <span style={strikethroughStyle}>${plan.monthlyPriceUsd}/month</span>
+                  </p>
+                  <p style={promoPriceStyle}>
+                    ${formatFathersDayPromoPriceUsd(plan.monthlyPriceUsd)}
+                    <span style={priceSuffixStyle}>/month</span>
+                  </p>
+                  <p style={promoCodeHintStyle}>
+                    Use code {FATHERS_DAY_PROMO_CODE} at checkout. Offer ends Jun 22 at 11:59 PM.
+                  </p>
+                </div>
+              ) : (
+                <p style={priceStyle}>
+                  ${plan.monthlyPriceUsd}
+                  <span style={priceSuffixStyle}>/mo</span>
+                </p>
+              )}
               {plan.id === "creator_monthly" ? (
                 <p style={ctaHintStyle}>Less than the cost of one manual master revision.</p>
               ) : null}
@@ -647,6 +688,50 @@ const priceStyle: React.CSSProperties = {
 };
 
 const priceSuffixStyle: React.CSSProperties = { color: "#99a8d6", fontSize: "0.95rem", marginLeft: "3px", fontWeight: 600 };
+
+const promoPriceBlockStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "6px"
+};
+
+const promoBadgeStyle: React.CSSProperties = {
+  margin: 0,
+  width: "fit-content",
+  borderRadius: "999px",
+  border: "1px solid rgba(255, 168, 108, 0.5)",
+  background: "rgba(72, 38, 22, 0.55)",
+  color: "#ffd8b8",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  letterSpacing: "0.02em",
+  padding: "5px 10px"
+};
+
+const originalPriceStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#8a98c4",
+  fontSize: "0.95rem"
+};
+
+const strikethroughStyle: React.CSSProperties = {
+  textDecoration: "line-through",
+  textDecorationColor: "rgba(180, 190, 220, 0.75)"
+};
+
+const promoPriceStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#ffe8cc",
+  fontWeight: 800,
+  fontSize: "2.1rem",
+  letterSpacing: "-0.02em"
+};
+
+const promoCodeHintStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#c8b8a8",
+  fontSize: "0.78rem",
+  lineHeight: 1.45
+};
 const descriptionStyle: React.CSSProperties = { margin: 0, color: "#9ca8cc", lineHeight: 1.5, minHeight: "46px" };
 const valueCalloutStyle: React.CSSProperties = {
   margin: "-2px 0 0",
