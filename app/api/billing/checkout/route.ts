@@ -15,6 +15,8 @@ const BodySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("subscription"),
     planId: z.enum(["creator_monthly", "pro_studio_monthly"]),
+    planTier: z.enum(["creator", "pro"]),
+    priceId: z.string().min(1),
     email: z.string(),
     returnTo: z.string().optional(),
     intent: z.enum(["adaptive"]).optional(),
@@ -72,6 +74,17 @@ export async function POST(request: NextRequest) {
         { error: "invalid_billing_email", message: "Enter a valid email address." },
         { status: 400 }
       );
+    }
+
+    if (parsed.data.kind === "subscription") {
+      const expectedPriceId = getStripePriceIdForPlan(parsed.data.planId);
+      if (parsed.data.priceId !== expectedPriceId) {
+        return NextResponse.json({ error: "Checkout price does not match selected plan." }, { status: 400 });
+      }
+      const expectedTier = parsed.data.planId === "creator_monthly" ? "creator" : "pro";
+      if (parsed.data.planTier !== expectedTier) {
+        return NextResponse.json({ error: "Checkout tier does not match selected plan." }, { status: 400 });
+      }
     }
 
     if (parsed.data.kind === "subscription" && parsed.data.intent === "adaptive") {

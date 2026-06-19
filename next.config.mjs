@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  env: {
+    NEXT_PUBLIC_STRIPE_PRICE_CREATOR_MONTHLY: process.env.STRIPE_PRICE_CREATOR_MONTHLY,
+    NEXT_PUBLIC_STRIPE_PRICE_PRO_STUDIO_MONTHLY: process.env.STRIPE_PRICE_PRO_STUDIO_MONTHLY
+  },
   experimental: {
     serverComponentsExternalPackages: ["ffmpeg-static"],
     outputFileTracingIncludes: {

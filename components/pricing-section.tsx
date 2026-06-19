@@ -4,8 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { trackEvent } from "@/lib/analytics/ab-comparison";
+import { trackSubscriptionButtonClick } from "@/lib/analytics/subscription-button";
 import { getGaClientId } from "@/lib/analytics/gtag";
 import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
+import {
+  getSubscriptionPlanMetadata,
+  subscriptionButtonDataAttributes,
+  type PaidSubscriptionPlanId,
+  type SubscriptionButtonMetadata
+} from "@/lib/billing/subscription-button-metadata";
 import {
   FATHERS_DAY_PROMO_CODE,
   formatFathersDayPromoPriceUsd,
@@ -98,7 +105,8 @@ const PRICING_FAQ_ITEMS = [
 
 type CheckoutSelection = {
   kind: "subscription" | "credit_pack";
-  planId?: PlanId;
+  planId?: PaidSubscriptionPlanId;
+  metadata?: SubscriptionButtonMetadata;
 };
 
 type ModalMode = "checkout" | "manage";
@@ -163,6 +171,19 @@ export function PricingSection() {
   }, [modalOpen, isSubmitting]);
 
   function openCheckoutModal(nextSelection: CheckoutSelection) {
+    if (nextSelection.kind === "subscription" && nextSelection.planId) {
+      const metadata = getSubscriptionPlanMetadata(nextSelection.planId);
+      trackSubscriptionButtonClick({
+        metadata,
+        sourceComponent: "pricing_section"
+      });
+      setModalMode("checkout");
+      setSelection({ ...nextSelection, metadata });
+      setBillingEmail("");
+      setEmailError("");
+      setCheckoutError("");
+      return;
+    }
     setModalMode("checkout");
     setSelection(nextSelection);
     setBillingEmail("");
@@ -191,6 +212,11 @@ export function PricingSection() {
     if (!EMAIL_REGEX.test(trimmed)) {
       throw new Error("invalid_billing_email");
     }
+    if (nextSelection.kind === "subscription") {
+      if (!nextSelection.planId || !nextSelection.metadata?.priceId) {
+        throw new Error("Missing subscription plan metadata.");
+      }
+    }
     const ga_client_id = await getGaClientId();
     const body =
       nextSelection.kind === "credit_pack"
@@ -204,6 +230,8 @@ export function PricingSection() {
         : {
             kind: nextSelection.kind,
             planId: nextSelection.planId,
+            planTier: nextSelection.metadata!.planTier,
+            priceId: nextSelection.metadata!.priceId,
             email: trimmed,
             returnTo: safeReturnTo,
             intent: adaptiveIntent ? "adaptive" : undefined,
@@ -416,13 +444,26 @@ export function PricingSection() {
                   {planCopy.ctaLabel}
                 </button>
               ) : (
-                <button
-                  type="button"
-                  style={plan.highlighted ? ctaUpgradeStyle : ctaPaidSecondaryStyle}
-                  onClick={() => openCheckoutModal({ kind: "subscription", planId: plan.id })}
-                >
-                  {adaptiveIntent ? "Continue to checkout" : planCopy.ctaLabel}
-                </button>
+                (() => {
+                  const subscriptionMetadata = getSubscriptionPlanMetadata(plan.id as PaidSubscriptionPlanId);
+                  const subscriptionDataAttrs = subscriptionButtonDataAttributes(subscriptionMetadata);
+                  return (
+                    <button
+                      type="button"
+                      style={plan.highlighted ? ctaUpgradeStyle : ctaPaidSecondaryStyle}
+                      {...subscriptionDataAttrs}
+                      onClick={() =>
+                        openCheckoutModal({
+                          kind: "subscription",
+                          planId: plan.id as PaidSubscriptionPlanId,
+                          metadata: subscriptionMetadata
+                        })
+                      }
+                    >
+                      {adaptiveIntent ? "Continue to checkout" : planCopy.ctaLabel}
+                    </button>
+                  );
+                })()
               )}
               {planCopy.ctaHint ? <p style={ctaHintStyle}>{planCopy.ctaHint}</p> : null}
             </article>
@@ -540,7 +581,22 @@ export function PricingSection() {
               <button
                 type="button"
                 style={primaryButtonStyle}
-                onClick={() => (modalMode === "manage" ? void submitManageBilling() : void submitCheckout())}
+                {...(selection?.kind === "subscription" && selection.metadata
+                  ? subscriptionButtonDataAttributes(selection.metadata)
+                  : {})}
+                onClick={() => {
+                  if (modalMode === "manage") {
+                    void submitManageBilling();
+                    return;
+                  }
+                  if (selection?.kind === "subscription" && selection.metadata) {
+                    trackSubscriptionButtonClick({
+                      metadata: selection.metadata,
+                      sourceComponent: "pricing_checkout_modal"
+                    });
+                  }
+                  void submitCheckout();
+                }}
                 disabled={isSubmitting}
               >
                 {isSubmitting

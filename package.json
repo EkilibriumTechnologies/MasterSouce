@@ -14,7 +14,8 @@
     "test:free-plan-quota": "node scripts/free-plan-download-quota-test.mjs",
     "test:mp3-master-export": "node scripts/mp3-master-export-test.mjs",
     "test:promo": "node scripts/fathers-day-promo-test.mjs",
-    "test": "npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo",
+    "test:subscription-buttons": "node scripts/subscription-button-invariants.mjs",
+    "test": "npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons",
     "inspect:wav": "node scripts/inspect-wav-format.mjs"
   },
   "dependencies": {

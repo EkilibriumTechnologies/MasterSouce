@@ -12,7 +12,12 @@ import { buildAdaptiveCheckoutReturnTo } from "@/lib/billing/adaptive-pricing-li
 import type { PendingAdaptiveExportV1 } from "@/lib/billing/pending-adaptive-export";
 import { savePendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
 import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
+import { trackSubscriptionButtonClick } from "@/lib/analytics/subscription-button";
 import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
+import {
+  getSubscriptionPlanMetadata,
+  subscriptionButtonDataAttributes
+} from "@/lib/billing/subscription-button-metadata";
 import { PromoBanner } from "@/components/promo/promo-banner";
 
 type ExportAccessPayload = {
@@ -53,6 +58,8 @@ function adaptiveExportAccessHeaders(billingEmail: string): HeadersInit {
     ...(trimmed ? { [MASTERSOUCE_BILLING_EMAIL_HEADER]: trimmed } : {})
   };
 }
+
+const ADAPTIVE_CHECKOUT_PLAN_ID = "creator_monthly" as const;
 
 export function AdaptiveExportGate({
   jobId,
@@ -179,13 +186,16 @@ export function AdaptiveExportGate({
       sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, trimmed);
       savePendingAdaptiveExport(pendingCheckoutSnapshot);
 
+      const checkoutMetadata = getSubscriptionPlanMetadata(ADAPTIVE_CHECKOUT_PLAN_ID);
       const ga_client_id = await getGaClientId();
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           kind: "subscription",
-          planId: "creator_monthly",
+          planId: ADAPTIVE_CHECKOUT_PLAN_ID,
+          planTier: checkoutMetadata.planTier,
+          priceId: checkoutMetadata.priceId,
           email: trimmed,
           returnTo: buildAdaptiveCheckoutReturnTo(),
           intent: "adaptive",
@@ -224,6 +234,8 @@ export function AdaptiveExportGate({
   }
 
   const busy = loading || recheckLoading || checkoutLoading;
+  const adaptiveCheckoutMetadata = getSubscriptionPlanMetadata(ADAPTIVE_CHECKOUT_PLAN_ID);
+  const adaptiveCheckoutDataAttrs = subscriptionButtonDataAttributes(adaptiveCheckoutMetadata);
 
   return (
     <section style={panelStyle}>
@@ -269,6 +281,7 @@ export function AdaptiveExportGate({
             type="button"
             data-analytics-id="ab-upgrade"
             data-analytics-version="mastered"
+            {...adaptiveCheckoutDataAttrs}
             disabled={busy}
             style={buttonStyle}
             onClick={() => {
@@ -293,6 +306,10 @@ export function AdaptiveExportGate({
                 file_id: fileId,
                 source_component: "ab_comparison",
                 page_path: window.location.pathname
+              });
+              trackSubscriptionButtonClick({
+                metadata: adaptiveCheckoutMetadata,
+                sourceComponent: "adaptive_export_gate"
               });
               void handleContinueToCheckout();
             }}

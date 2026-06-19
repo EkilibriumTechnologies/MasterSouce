@@ -13,6 +13,13 @@ export type AbEventParams = {
   job_id?: string;
   file_id?: string;
   plan_id?: string;
+  plan_name?: string;
+  plan_tier?: string;
+  price_id?: string;
+  price_amount?: string;
+  price_interval?: string;
+  promo_code?: string;
+  page_location?: string;
   playback_position_seconds?: number;
   playback_percent?: number;
   source_component?: string;
