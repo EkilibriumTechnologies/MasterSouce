@@ -49,4 +49,5 @@ export type MasterAiResponse = {
   adaptiveAiFallback?: boolean;
   adaptiveAiFallbackReason?: "timeout";
   adaptiveAiFallbackMessage?: string;
+  referenceTrackApplied?: boolean;
 };

@@ -109,8 +109,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
         <h1 style={h1Style}>Your track sounds finished today — not almost ready.</h1>
         <p style={subStyle}>
-          Two ways to master your track — pick yours: Preset Mastering or Prompt Mastering. No plugins. No studio time.
-          Hear the difference before you export.
+          AI mastering your way — preset, prompt-guided, or reference-guided. Upload a song you love or name an artist to
+          steer tone and loudness. Free MP3 previews; premium plans unlock HD WAV exports. No plugins. No studio time.
         </p>
         <div style={platformRowStyle} aria-label="Streaming platform optimization">
           <span style={platformLabelStyle}>Optimized for:</span>
@@ -163,9 +163,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         />
 
         <div style={pillRowStyle}>
-          <span style={pillStyle}>⚡ Minutes, not studio turnaround</span>
-          <span style={pillStyle}>🎧 Hear the lift before you export</span>
-          <span style={pillStyle}>✉️ Preview first. Email only when you're ready to export.</span>
+          <span style={pillStyle}>⚡ AI mastering — preset, prompt, or reference-guided</span>
+          <span style={pillStyle}>🎧 Free MP3 previews before you export</span>
+          <span style={pillStyle}>📀 HD WAV exports on premium plans</span>
         </div>
       </section>
 
@@ -174,7 +174,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           What is MasterSauce?
         </h2>
         <p style={proseCenterStyle}>
-          MasterSauce gives you two ways to get a release-ready master.
+          MasterSauce gives you AI mastering with preset, prompt-guided, and reference-guided options — so you can shape
+          a release-ready master your way.
         </p>
         <p style={proseCenterStyle}>Preset Mastering</p>
         <p style={proseCenterStyle}>
@@ -185,10 +186,33 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           Describe the sound you want in plain words — warm, punchy, wide. The engine adapts the master around your
           direction.
         </p>
+        <p style={proseCenterStyle}>Reference-Guided Mastering</p>
+        <p style={proseCenterStyle}>
+          Upload a reference track or name an artist you are aiming for. MasterSauce uses that direction to guide tone,
+          loudness, and balance while keeping your original mix intact.
+        </p>
         <p style={proseCenterStyle}>
           Not ready to record yet? Try Song Architect — build your Suno or Udio blueprint first, then come back to master.
         </p>
-        <p style={proseCenterStyle}>Upload free. Preview first, then export your master.</p>
+        <p style={proseCenterStyle}>
+          Upload free. Preview with MP3, download free MP3 masters, or export HD WAV on premium plans.
+        </p>
+      </section>
+
+      <section id="reference-guided-mastering" style={sectionStyle} aria-labelledby="reference-guided-heading">
+        <h2 id="reference-guided-heading" style={sectionTitle}>
+          Reference-Guided Mastering
+        </h2>
+        <p style={referenceFeatureIntroStyle}>
+          Upload a song you love or name an artist you&apos;re aiming for. MasterSauce uses that reference to guide tone,
+          loudness, and balance while preserving your original mix.
+        </p>
+        <ul style={referenceFeatureListStyle}>
+          <li style={referenceFeatureListItemStyle}>Match tone and loudness direction</li>
+          <li style={referenceFeatureListItemStyle}>Guide the master with a reference artist</li>
+          <li style={referenceFeatureListItemStyle}>Keep your original mix intact</li>
+          <li style={referenceFeatureListItemStyle}>Optional and easy to skip</li>
+        </ul>
       </section>
 
       <section id="who-its-for" style={sectionStyle} aria-labelledby="who-heading">
@@ -218,10 +242,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⚙</div>
-            <h3 style={stepTitleStyle}>Set genre, loudness, or prompt</h3>
+            <h3 style={stepTitleStyle}>Set genre, prompt, or reference</h3>
             <p style={stepTextStyle}>
-              Choose a genre preset for instant results — or describe the sound you want in plain words and the engine
-              steers the master around your direction.
+              Choose a genre preset, describe the sound in plain words, or add a reference track or artist to guide tone
+              and loudness — all optional.
             </p>
           </div>
           <div style={stepCardStyle}>
@@ -232,7 +256,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⬇</div>
             <h3 style={stepTitleStyle}>Export the final</h3>
-            <p style={stepTextStyle}>Unlock the full-resolution master with email — only that export touches your quota.</p>
+            <p style={stepTextStyle}>
+              Download free MP3 masters or unlock HD WAV exports on premium plans — only final exports touch your quota.
+            </p>
           </div>
         </div>
       </section>
@@ -504,6 +530,35 @@ const proseCenterStyle: React.CSSProperties = {
   lineHeight: 1.65,
   fontSize: "1.02rem",
   textAlign: "center"
+};
+
+const referenceFeatureIntroStyle: React.CSSProperties = {
+  margin: "16px auto 0",
+  maxWidth: "640px",
+  color: "#9ca8cc",
+  lineHeight: 1.7,
+  fontSize: "1.05rem",
+  textAlign: "center"
+};
+
+const referenceFeatureListStyle: React.CSSProperties = {
+  margin: "22px auto 0",
+  padding: 0,
+  maxWidth: "420px",
+  listStyle: "none",
+  display: "grid",
+  gap: "10px"
+};
+
+const referenceFeatureListItemStyle: React.CSSProperties = {
+  color: "#b8c4e8",
+  lineHeight: 1.55,
+  fontSize: "0.98rem",
+  textAlign: "center",
+  border: "1px solid rgba(74, 90, 150, 0.28)",
+  borderRadius: "12px",
+  background: "rgba(14, 22, 40, 0.55)",
+  padding: "10px 14px"
 };
 
 const faqListStyle: React.CSSProperties = {

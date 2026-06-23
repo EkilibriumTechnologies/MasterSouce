@@ -8,6 +8,7 @@ import type { AdaptiveDecision } from "@/lib/openai/adaptive-mastering";
 import { tryRequestAdaptiveDecisionWithTimeoutRetry } from "@/lib/openai/adaptive-mastering";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
 import { GENRE_PRESETS, getLoudnessModeLufsTarget, getLoudnessModeTruePeak, type LoudnessMode } from "@/lib/genre-presets";
+import { applyReferenceTrackGuidance } from "@/lib/audio/reference-track-guidance";
 import { validateExportedWav } from "@/lib/audio/wav-export-validation";
 import { resolveCodecForQuality, WAV_EXPORT_CHANNELS, WAV_EXPORT_SAMPLE_RATE } from "@/lib/audio/wav-export-codec";
 import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
@@ -20,6 +21,7 @@ export type AdaptiveMasteringRequest = {
   genre?: keyof typeof GENRE_PRESETS;
   loudnessMode?: LoudnessMode;
   userIntent?: string;
+  referenceAnalysis?: TrackAnalysis;
   outputQuality: PlanQuality;
 };
 
@@ -50,6 +52,7 @@ export type AdaptiveMasteringResult = {
   adaptiveAnalysis: TrackAnalysis | null;
   adaptiveReadiness: ReturnType<typeof evaluateTrackReadiness> | null;
   instructionSummary: AdaptiveInstructionSummary;
+  referenceTrackApplied: boolean;
   adaptiveMasteredPath: string;
   adaptivePreviewPath: string;
   baselinePreviewPath: string;
@@ -279,7 +282,8 @@ async function generateAdaptiveInstructions(
   baseline: TrackAnalysis,
   genre: keyof typeof GENRE_PRESETS | undefined,
   loudnessMode: LoudnessMode | undefined,
-  userIntent: string | undefined
+  userIntent: string | undefined,
+  referenceAnalysis?: TrackAnalysis
 ): Promise<{
   instructionSummary: AdaptiveInstructionSummary;
   adaptiveAiFallback?: boolean;
@@ -290,7 +294,8 @@ async function generateAdaptiveInstructions(
     analysis: baseline,
     genre,
     loudnessMode,
-    userIntent
+    userIntent,
+    referenceAnalysis
   });
 
   if (tryResult.ok) {
@@ -339,9 +344,18 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     baselineAnalysis,
     request.genre,
     request.loudnessMode,
-    request.userIntent
+    request.userIntent,
+    request.referenceAnalysis
   );
-  const { instructionSummary, adaptiveAiFallback, adaptiveAiFallbackReason, adaptiveAiFallbackMessage } = generated;
+  let { instructionSummary, adaptiveAiFallback, adaptiveAiFallbackReason, adaptiveAiFallbackMessage } = generated;
+  const referenceTrackApplied = Boolean(request.referenceAnalysis);
+  if (request.referenceAnalysis && instructionSummary.source === "heuristic") {
+    instructionSummary = applyReferenceTrackGuidance(
+      instructionSummary,
+      baselineAnalysis,
+      request.referenceAnalysis
+    );
+  }
   const outputCodec = resolveCodecForQuality(request.outputQuality);
 
   const adaptiveMasteredPath = path.join(getTempRoot(), `${makeId(`adaptive_${request.jobId}`)}.wav`);
@@ -515,6 +529,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     adaptiveAnalysis,
     adaptiveReadiness: adaptiveAnalysis ? evaluateTrackReadiness(adaptiveAnalysis, "postmaster") : null,
     instructionSummary,
+    referenceTrackApplied,
     adaptiveMasteredPath,
     adaptivePreviewPath,
     baselinePreviewPath,

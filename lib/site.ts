@@ -29,6 +29,6 @@ export const SITE_TAGLINE = "Release-ready mastering for modern creators";
 
 /** Default meta description — also used in JSON-LD where a short summary is needed. */
 export const SITE_DESCRIPTION =
-  "Turn your mix into a streaming-ready master: quick analysis, unlimited A/B previews, then export when you are satisfied. Built for independent artists, bedroom producers, and AI-assisted music.";
+  "AI mastering with preset, prompt-guided, and reference-track guidance — upload a reference song or name an artist to steer tone and loudness. Free MP3 previews and downloads; premium plans unlock HD WAV exports. Built for independent artists and modern creators.";
 
 export const LEGAL_CONTACT_EMAIL = "consulting@ekilibriumtechnologies.com";

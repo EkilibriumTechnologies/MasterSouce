@@ -166,6 +166,11 @@ function debugAdaptive(message: string, meta?: Record<string, unknown>) {
   console.log(`[ADAPTIVE_DEBUG] ${message}`);
 }
 
+function isAcceptedReferenceTrackFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return name.endsWith(".wav") || name.endsWith(".mp3");
+}
+
 function readStoredBillingEmail(): string {
   if (typeof window === "undefined") return "";
   return sessionStorage.getItem(MASTERSOUCE_BILLING_EMAIL_KEY)?.trim() ?? "";
@@ -236,6 +241,8 @@ export function UploadForm() {
   const isProduction = process.env.NODE_ENV === "production";
   const preMasterAnalysisEnabled = true;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const referenceTrackInputRef = useRef<HTMLInputElement>(null);
+  const adaptiveSectionRef = useRef<HTMLDivElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [genre, setGenre] = useState<keyof typeof GENRE_PRESETS>("pop");
   const [loudness, setLoudness] = useState<LoudnessMode>("balanced");
@@ -249,6 +256,10 @@ export function UploadForm() {
   const [preMasterDebug, setPreMasterDebug] = useState<PreMasterAnalysisResponse["debug"] | null>(null);
   const [showAdaptivePlaceholder, setShowAdaptivePlaceholder] = useState(false);
   const [adaptiveIntent, setAdaptiveIntent] = useState("");
+  const [advancedControlsOpen, setAdvancedControlsOpen] = useState(false);
+  const [referenceTrackFile, setReferenceTrackFile] = useState<File | null>(null);
+  const [referenceTrackNotice, setReferenceTrackNotice] = useState<string | null>(null);
+  const [referenceArtist, setReferenceArtist] = useState("");
   const [adaptiveProcessing, setAdaptiveProcessing] = useState(false);
   const [adaptiveModeActive, setAdaptiveModeActive] = useState(false);
   /** Non-blocking info when adaptive preview used heuristic fallback (e.g. AI timeout). */
@@ -269,6 +280,11 @@ export function UploadForm() {
   useEffect(() => {
     setMastersourceWorkflowBusy(loading || adaptiveProcessing || wavExportDownloading || mp3ExportDownloading);
   }, [loading, adaptiveProcessing, wavExportDownloading, mp3ExportDownloading]);
+
+  useEffect(() => {
+    if (!showAdaptivePlaceholder) return;
+    adaptiveSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [showAdaptivePlaceholder]);
 
   useEffect(() => {
     if (wavDownloadUrl || mp3DownloadUrl) return;
@@ -471,6 +487,10 @@ export function UploadForm() {
     setPreMasterDebug(null);
     setShowAdaptivePlaceholder(false);
     setAdaptiveIntent("");
+    setAdvancedControlsOpen(false);
+    setReferenceTrackFile(null);
+    setReferenceTrackNotice(null);
+    setReferenceArtist("");
     setAdaptiveModeActive(false);
     setAdaptiveAiNotice(null);
     setLastStandardResult(null);
@@ -493,6 +513,29 @@ export function UploadForm() {
     }
     setError(null);
     setFile(selected);
+  }
+
+  function handleReferenceTrackSelection(selected: File | null, input?: HTMLInputElement) {
+    setReferenceTrackNotice(null);
+    if (!selected) {
+      setReferenceTrackFile(null);
+      return;
+    }
+    if (!isAcceptedReferenceTrackFile(selected)) {
+      setReferenceTrackFile(null);
+      setReferenceTrackNotice("Reference track must be a WAV or MP3 file. Adaptive preview will continue without it.");
+      if (input) input.value = "";
+      return;
+    }
+    if (selected.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+      setReferenceTrackFile(null);
+      setReferenceTrackNotice(
+        `Reference track exceeds ${MAX_UPLOAD_FILE_SIZE_LABEL}. Adaptive preview will continue without it.`
+      );
+      if (input) input.value = "";
+      return;
+    }
+    setReferenceTrackFile(selected);
   }
 
   async function runStandardMastering(keepPostAnalysisUi = false): Promise<MasterResponse | null> {
@@ -575,6 +618,8 @@ export function UploadForm() {
     console.log("[ADAPTIVE_UI] adaptive preview started");
     debugAdaptive("adaptive processing started", {
       hasIntent: adaptiveIntent.trim().length > 0,
+      hasReferenceArtist: referenceArtist.trim().length > 0,
+      hasReferenceTrack: Boolean(referenceTrackFile),
       genre,
       loudness
     });
@@ -593,24 +638,45 @@ export function UploadForm() {
       }
 
       setStatus("Shaping your adaptive preview (free)…");
-      const response = await fetch("/api/master-ai", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...masteringBillingHeaders()
-        },
-        body: JSON.stringify({
-          standardMasterFileId: standard.download.fileId,
-          standardMasterJobId: standard.jobId,
-          preset: genre,
-          loudnessMode: loudness,
-          user_intent: adaptiveIntent.trim() || undefined,
-          ...(readStoredBillingEmail()
-            ? { billingEmail: readStoredBillingEmail().trim().toLowerCase() }
-            : {})
-        })
-      });
+      const billingEmail = readStoredBillingEmail();
+      let response: Response;
+      if (referenceTrackFile) {
+        const formData = new FormData();
+        formData.append("standardMasterFileId", standard.download.fileId);
+        formData.append("standardMasterJobId", standard.jobId);
+        formData.append("preset", genre);
+        formData.append("loudnessMode", loudness);
+        const intent = adaptiveIntent.trim();
+        const artist = referenceArtist.trim();
+        if (intent) formData.append("user_intent", intent);
+        if (artist) formData.append("referenceArtist", artist);
+        if (billingEmail) formData.append("billingEmail", billingEmail.trim().toLowerCase());
+        formData.append("referenceTrack", referenceTrackFile);
+        response = await fetch("/api/master-ai", {
+          method: "POST",
+          credentials: "include",
+          headers: masteringBillingHeaders(),
+          body: formData
+        });
+      } else {
+        response = await fetch("/api/master-ai", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...masteringBillingHeaders()
+          },
+          body: JSON.stringify({
+            standardMasterFileId: standard.download.fileId,
+            standardMasterJobId: standard.jobId,
+            preset: genre,
+            loudnessMode: loudness,
+            user_intent: adaptiveIntent.trim() || undefined,
+            ...(referenceArtist.trim() ? { referenceArtist: referenceArtist.trim() } : {}),
+            ...(billingEmail ? { billingEmail: billingEmail.trim().toLowerCase() } : {})
+          })
+        });
+      }
       const payload = await readResponsePayload(response);
       debugAdaptive("adaptive processing response received", {
         ok: response.ok,
@@ -647,6 +713,8 @@ export function UploadForm() {
       setAdaptiveModeActive(true);
       if (adaptive.adaptiveAiFallback === true && typeof adaptive.adaptiveAiFallbackMessage === "string") {
         setAdaptiveAiNotice(adaptive.adaptiveAiFallbackMessage);
+      } else if (adaptive.referenceTrackApplied) {
+        setAdaptiveAiNotice("Reference track applied as tonal guidance for this adaptive preview.");
       } else {
         setAdaptiveAiNotice(null);
       }
@@ -974,6 +1042,7 @@ export function UploadForm() {
               onClick={() => {
                 debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
                 setShowAdaptivePlaceholder(true);
+                setAdvancedControlsOpen(true);
                 setError(null);
                 setStatus("Adaptive customization — add a short note about the sound you want, then run the free preview.");
               }}
@@ -981,8 +1050,13 @@ export function UploadForm() {
               Prompt Master — describe your sound
             </button>
           </div>
+          {!showAdaptivePlaceholder ? (
+            <p style={analysisContinueHintStyle}>
+              Optional reference track lives in Prompt Master — upload a song you love as tonal guidance.
+            </p>
+          ) : null}
           {showAdaptivePlaceholder ? (
-            <div style={adaptivePlaceholderStyle}>
+            <div ref={adaptiveSectionRef} style={adaptivePlaceholderStyle}>
               <p style={{ margin: 0, color: "#c4d1f5" }}>
                 Adaptive previews are free. Downloading the adaptive WAV needs Creator or Pro Studio (same billing email you
                 use at checkout).
@@ -1001,6 +1075,92 @@ export function UploadForm() {
               <p style={adaptiveIntentHintStyle}>
                 Short phrases work best — think “warmer vocal,” “tighter low end,” or “more club energy.”
               </p>
+              <div style={advancedControlsSectionStyle}>
+                <button
+                  type="button"
+                  style={advancedControlsToggleStyle}
+                  aria-expanded={advancedControlsOpen}
+                  aria-controls="adaptive-advanced-controls"
+                  onClick={() => setAdvancedControlsOpen((open) => !open)}
+                >
+                  <span>Advanced Controls</span>
+                  <span aria-hidden="true" style={advancedControlsChevronStyle}>
+                    {advancedControlsOpen ? "▾" : "▸"}
+                  </span>
+                </button>
+                {advancedControlsOpen ? (
+                  <div id="adaptive-advanced-controls" style={advancedControlsPanelStyle}>
+                    <div style={referenceTrackSectionStyle}>
+                      <p style={adaptiveIntentLabelStyle}>Reference Track (Optional)</p>
+                      <p style={adaptiveIntentHintStyle}>
+                        Want a specific sound? Upload a song you love and MasterSauce will use its tone, loudness, and
+                        balance as guidance while preserving your original mix.
+                      </p>
+                      <p style={referenceTrackExamplesStyle}>
+                        <span style={referenceTrackExamplesLabelStyle}>Examples:</span>
+                        <span style={referenceTrackExamplesListStyle}>
+                          The Prodigy • Linkin Park • Don Omar • Bad Bunny
+                        </span>
+                      </p>
+                      <label htmlFor="reference-artist" style={referenceTrackFieldLabelStyle}>
+                        Reference Artist (Optional)
+                      </label>
+                      <input
+                        id="reference-artist"
+                        type="text"
+                        value={referenceArtist}
+                        onChange={(event) => setReferenceArtist(event.target.value)}
+                        placeholder="The Prodigy, Don Omar, Linkin Park..."
+                        style={referenceArtistInputStyle}
+                      />
+                      <p style={referenceArtistHelpStyle}>
+                        Don&apos;t have a reference file? Tell us an artist or sound you&apos;re aiming for.
+                      </p>
+                      {referenceTrackFile ? (
+                        <div style={referenceTrackLoadedStyle}>
+                          <p style={referenceTrackLoadedTitleStyle}>✓ Reference Loaded</p>
+                          <p style={referenceTrackFilenameStyle}>{referenceTrackFile.name}</p>
+                          <p style={referenceTrackConfidenceStyle}>
+                            Reference tracks guide the master but never replace your original mix.
+                          </p>
+                          <button
+                            type="button"
+                            style={referenceTrackChooseStyle}
+                            aria-label="Change reference track file"
+                            onClick={() => referenceTrackInputRef.current?.click()}
+                          >
+                            Change Reference Track
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          style={referenceTrackChooseStyle}
+                          aria-label="Choose reference track file"
+                          onClick={() => referenceTrackInputRef.current?.click()}
+                        >
+                          Choose Reference Track
+                        </button>
+                      )}
+                      <input
+                        ref={referenceTrackInputRef}
+                        id="reference-track"
+                        type="file"
+                        accept=".wav,.mp3"
+                        onChange={(event) =>
+                          handleReferenceTrackSelection(event.target.files?.[0] ?? null, event.currentTarget)
+                        }
+                        style={inputStyle}
+                      />
+                      {referenceTrackNotice ? (
+                        <p style={referenceTrackNoticeStyle} role="status">
+                          {referenceTrackNotice}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <button
                 type="button"
                 disabled={adaptiveProcessing || loading}
@@ -1820,6 +1980,136 @@ const adaptiveIntentHintStyle: React.CSSProperties = {
   margin: 0,
   color: "#9eb0dd",
   fontSize: "0.8rem"
+};
+const advancedControlsSectionStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "8px",
+  borderTop: "1px solid rgba(116, 133, 191, 0.28)",
+  paddingTop: "10px"
+};
+const advancedControlsToggleStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "10px",
+  width: "100%",
+  boxSizing: "border-box",
+  margin: 0,
+  padding: "10px 12px",
+  borderRadius: "10px",
+  border: "1px solid rgba(81, 97, 148, 0.48)",
+  background: "rgba(14, 22, 39, 0.82)",
+  color: "#d8e2ff",
+  fontWeight: 700,
+  fontSize: "0.88rem",
+  cursor: "pointer",
+  textAlign: "left"
+};
+const advancedControlsChevronStyle: React.CSSProperties = {
+  color: "#9eb0dd",
+  fontSize: "0.9rem",
+  lineHeight: 1
+};
+const advancedControlsPanelStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "8px",
+  borderRadius: "10px",
+  border: "1px solid rgba(92, 111, 174, 0.35)",
+  background: "rgba(10, 16, 30, 0.72)",
+  padding: "10px 12px"
+};
+const referenceTrackSectionStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "6px"
+};
+const referenceTrackExamplesStyle: React.CSSProperties = {
+  margin: 0,
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "baseline",
+  gap: "4px 6px",
+  fontSize: "0.76rem",
+  lineHeight: 1.45
+};
+const referenceTrackExamplesLabelStyle: React.CSSProperties = {
+  color: "#6f82b0",
+  fontWeight: 600,
+  flexShrink: 0
+};
+const referenceTrackExamplesListStyle: React.CSSProperties = {
+  color: "#7d8fb8"
+};
+const referenceTrackFieldLabelStyle: React.CSSProperties = {
+  margin: "4px 0 0",
+  color: "#d8e2ff",
+  fontWeight: 700,
+  fontSize: "0.85rem"
+};
+const referenceArtistInputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  borderRadius: "10px",
+  border: "1px solid rgba(116, 133, 191, 0.6)",
+  background: "rgba(8, 13, 25, 0.85)",
+  color: "#eef3ff",
+  padding: "9px 12px",
+  fontSize: "0.88rem",
+  lineHeight: 1.35
+};
+const referenceArtistHelpStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#8a9bc8",
+  fontSize: "0.76rem",
+  lineHeight: 1.4
+};
+const referenceTrackChooseStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  marginTop: "2px",
+  borderRadius: "10px",
+  border: "1px solid rgba(168, 184, 235, 0.55)",
+  background: "rgba(14, 22, 39, 0.82)",
+  color: "#eef2ff",
+  fontWeight: 700,
+  fontSize: "0.88rem",
+  padding: "11px 14px",
+  cursor: "pointer",
+  textAlign: "center"
+};
+const referenceTrackLoadedStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+  marginTop: "2px",
+  borderRadius: "10px",
+  border: "1px solid rgba(45, 227, 157, 0.35)",
+  background: "rgba(16, 42, 38, 0.35)",
+  padding: "8px 10px"
+};
+const referenceTrackLoadedTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#8ef0c8",
+  fontWeight: 700,
+  fontSize: "0.85rem"
+};
+const referenceTrackFilenameStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#e8fff6",
+  fontWeight: 600,
+  fontSize: "0.88rem",
+  lineHeight: 1.35,
+  wordBreak: "break-word"
+};
+const referenceTrackConfidenceStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#8a9bc8",
+  fontSize: "0.76rem",
+  lineHeight: 1.4
+};
+const referenceTrackNoticeStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#c8d4f8",
+  fontSize: "0.8rem",
+  lineHeight: 1.45
 };
 const analysisContinueHintStyle: React.CSSProperties = {
   margin: 0,

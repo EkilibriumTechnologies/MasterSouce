@@ -2,8 +2,10 @@ import { stat } from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
+import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { toPublicMetrics } from "@/lib/audio/public-analysis";
 import { runAdaptiveMasteringPipeline } from "@/lib/audio/adaptive-mastering-pipeline";
+import { combineAdaptiveUserIntent } from "@/lib/audio/combine-adaptive-user-intent";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import {
@@ -12,7 +14,7 @@ import {
   isAdaptiveMasteringOpenAiFatalError
 } from "@/lib/openai/adaptive-mastering";
 import { createJobId } from "@/lib/jobs/job-id";
-import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord } from "@/lib/storage/temp-files";
+import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord, saveTempFile } from "@/lib/storage/temp-files";
 import { incrementProductMetric } from "@/lib/product-metrics";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import {
@@ -22,14 +24,99 @@ import {
 } from "@/lib/subscriptions/resolve-entitlement-billing-context";
 import { resolveCodecForQuality } from "@/lib/audio/wav-export-codec";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
+import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
+
+const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
+const ACCEPTED_EXT = new Set(["wav", "mp3"]);
 
 const BodySchema = z.object({
   standardMasterFileId: z.string().min(8),
   standardMasterJobId: z.string().min(4),
   preset: z.enum(["pop", "hiphop", "edm", "rock", "reggaeton", "rnb", "lofi"]).optional(),
   loudnessMode: z.enum(["clean", "balanced", "loud"]).optional(),
-  user_intent: z.string().max(700).optional()
+  user_intent: z.string().max(700).optional(),
+  referenceArtist: z.string().trim().min(1).max(120).optional()
 });
+
+type ParsedMasterAiRequest = {
+  data: z.infer<typeof BodySchema>;
+  billingEmailHint?: string;
+  referenceFile: File | null;
+};
+
+async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterAiRequest | "invalid_json" | "invalid_payload"> {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  if (contentType.includes("multipart/form-data")) {
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return "invalid_json";
+    }
+
+    const billingEmailField = formData.get("billingEmail");
+    const billingEmailHint = typeof billingEmailField === "string" ? billingEmailField : undefined;
+    const referenceField = formData.get("referenceTrack");
+    const referenceFile = referenceField instanceof File && referenceField.size > 0 ? referenceField : null;
+
+    const referenceArtistField = formData.get("referenceArtist");
+    const parsed = BodySchema.safeParse({
+      standardMasterFileId: formData.get("standardMasterFileId"),
+      standardMasterJobId: formData.get("standardMasterJobId"),
+      preset: formData.get("preset") || undefined,
+      loudnessMode: formData.get("loudnessMode") || undefined,
+      user_intent: formData.get("user_intent") || undefined,
+      referenceArtist:
+        typeof referenceArtistField === "string" && referenceArtistField.trim()
+          ? referenceArtistField
+          : undefined
+    });
+    if (!parsed.success) return "invalid_payload";
+    return { data: parsed.data, billingEmailHint, referenceFile };
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return "invalid_json";
+  }
+
+  const parsed = BodySchema.safeParse(body);
+  if (!parsed.success) return "invalid_payload";
+
+  const billingEmailHint =
+    body && typeof body === "object" && "billingEmail" in body && typeof (body as { billingEmail?: unknown }).billingEmail === "string"
+      ? (body as { billingEmail: string }).billingEmail
+      : undefined;
+
+  return { data: parsed.data, billingEmailHint, referenceFile: null };
+}
+
+async function resolveReferenceAnalysis(referenceFile: File, jobId: string) {
+  const filename = referenceFile.name || "reference";
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const mimeAccepted = ACCEPTED_MIME.has(referenceFile.type);
+  const extAccepted = ACCEPTED_EXT.has(ext);
+  if (!mimeAccepted && !extAccepted) {
+    throw new Error("Reference track must be WAV or MP3.");
+  }
+  if (referenceFile.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+    throw new Error(`Reference track exceeds ${MAX_UPLOAD_FILE_SIZE_LABEL}.`);
+  }
+
+  const normalizedExt = ext === "wav" || referenceFile.type.includes("wav") ? "wav" : "mp3";
+  const buffer = Buffer.from(await referenceFile.arrayBuffer());
+  const uploadRecord = await saveTempFile({
+    data: buffer,
+    extension: normalizedExt,
+    kind: "upload",
+    mime: normalizedExt === "wav" ? "audio/wav" : "audio/mpeg",
+    jobId
+  });
+  return analyzeTrack(uploadRecord.filePath);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,37 +142,31 @@ export async function POST(request: NextRequest) {
 
     const user = buildApiUser(request, sessionPrep.sessionId);
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      const res = NextResponse.json({ error: "Expected JSON body." }, { status: 400 });
+    const parsedRequest = await parseMasterAiRequest(request);
+    if (parsedRequest === "invalid_json") {
+      const res = NextResponse.json({ error: "Expected JSON or multipart body." }, { status: 400 });
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
-
-    const parsed = BodySchema.safeParse(body);
-    if (!parsed.success) {
+    if (parsedRequest === "invalid_payload") {
       const res = NextResponse.json({ error: "Invalid adaptive mastering request payload." }, { status: 400 });
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
 
-    const billingEmailHint =
-      body && typeof body === "object" && "billingEmail" in body && typeof (body as { billingEmail?: unknown }).billingEmail === "string"
-        ? (body as { billingEmail: string }).billingEmail
-        : undefined;
+    const { data: parsed, billingEmailHint, referenceFile } = parsedRequest;
+
     const billingResolution = resolveEntitlementBillingContext(request, user, { billingEmailHint });
 
     const entitlements = await getEntitlementsForUser(user, billingResolution.billingContext);
 
     await cleanupExpiredTempFiles();
 
-    const standardRecord = await resolveTempRecord(parsed.data.standardMasterFileId);
+    const standardRecord = await resolveTempRecord(parsed.standardMasterFileId);
     if (
       !standardRecord ||
       standardRecord.kind !== "mastered" ||
-      standardRecord.jobId !== parsed.data.standardMasterJobId
+      standardRecord.jobId !== parsed.standardMasterJobId
     ) {
       const res = NextResponse.json({ error: "Standard master reference is missing or expired." }, { status: 404 });
       attachSessionCookieIfNeeded(res, sessionPrep);
@@ -112,8 +193,9 @@ export async function POST(request: NextRequest) {
       outputCodec
     });
     console.log("[master-ai] adaptive_preview:start", {
-      standardJobId: parsed.data.standardMasterJobId,
-      adaptiveJobId: jobId
+      standardJobId: parsed.standardMasterJobId,
+      adaptiveJobId: jobId,
+      hasReferenceTrack: Boolean(referenceFile)
     });
     // Safe preflight before adaptive OpenAI path (no secrets, no audio payloads).
     const timeoutDiag = getAdaptiveOpenAiTimeoutDiagnostics();
@@ -126,12 +208,25 @@ export async function POST(request: NextRequest) {
       openaiApiKeyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
       nodeEnv: process.env.NODE_ENV
     });
+    let referenceAnalysis: Awaited<ReturnType<typeof analyzeTrack>> | undefined;
+    if (referenceFile) {
+      try {
+        referenceAnalysis = await resolveReferenceAnalysis(referenceFile, jobId);
+      } catch (referenceError) {
+        const detail = referenceError instanceof Error ? referenceError.message : String(referenceError);
+        console.warn("[master-ai] reference_track_skipped", { jobId, detail });
+      }
+    }
+
+    const userIntent = combineAdaptiveUserIntent(parsed.user_intent, parsed.referenceArtist);
+
     const adaptive = await runAdaptiveMasteringPipeline({
       inputPath: standardRecord.filePath,
       jobId,
-      genre: parsed.data.preset,
-      loudnessMode: parsed.data.loudnessMode,
-      userIntent: parsed.data.user_intent,
+      genre: parsed.preset,
+      loudnessMode: parsed.loudnessMode,
+      userIntent,
+      referenceAnalysis,
       outputQuality
     });
 
@@ -212,7 +307,8 @@ export async function POST(request: NextRequest) {
             adaptiveAiFallbackReason: adaptive.adaptiveAiFallbackReason,
             adaptiveAiFallbackMessage: adaptive.adaptiveAiFallbackMessage
           }
-        : {})
+        : {}),
+      ...(adaptive.referenceTrackApplied ? { referenceTrackApplied: true as const } : {})
     };
 
     console.log("[master-ai] adaptive_preview:completed", {

@@ -22,6 +22,7 @@ Safety and quality rules:
 - Avoid stacking aggressive compression + saturation + stereo width boosts together.
 - If the track appears already close to target, recommend lighter-touch settings.
 - Interpret user_intent as directional guidance, not a command to damage quality.
+- If reference_track_analysis is provided, use it as tonal/loudness/balance guidance for the user's mix — match character partially, not identically.
 - Do not invent audio facts beyond provided stats/context.
 
 Behavior defaults:
@@ -56,6 +57,7 @@ export type AdaptiveDecisionInput = {
   genre?: string;
   loudnessMode?: LoudnessMode;
   userIntent?: string;
+  referenceAnalysis?: TrackAnalysis;
 };
 
 export class AdaptiveOpenAIError extends Error {
@@ -133,7 +135,8 @@ function buildUserPayload(input: AdaptiveDecisionInput): string {
       context: {
         genre: input.genre ?? null,
         loudnessMode: input.loudnessMode ?? null,
-        user_intent: input.userIntent ?? null
+        user_intent: input.userIntent ?? null,
+        reference_track_analysis: input.referenceAnalysis ?? null
       }
     },
     null,

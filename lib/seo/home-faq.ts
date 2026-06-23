@@ -35,7 +35,12 @@ export const HOME_FAQ_ITEMS: HomeFaqItem[] = [
   {
     question: "What is MasterSauce?",
     answer:
-      "An in-browser mastering tool: upload your mix, choose genre and loudness, run a short analysis, then A/B the recommended master (or optional adaptive customization on paid plans). When you like what you hear, export the full-resolution WAV."
+      "An in-browser AI mastering tool: upload your mix, choose a genre preset, describe the sound you want, or add an optional reference track or artist for guidance. Run a short analysis, A/B preview with free MP3, then export — free MP3 downloads on all plans, HD WAV on premium."
+  },
+  {
+    question: "How does reference-guided mastering work?",
+    answer:
+      "Upload a song you love or name an artist you are aiming for. MasterSauce uses that reference to guide tone, loudness, and balance while keeping your original mix intact. It is optional — skip it anytime and master with presets or prompts instead."
   },
   {
     question: "Do you keep my audio?",
