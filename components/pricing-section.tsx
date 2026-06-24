@@ -22,6 +22,7 @@ import { PromoBanner } from "@/components/promo/promo-banner";
 import { PromoCountdownTimer } from "@/components/promo/countdown-timer";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { PlanId } from "@/lib/subscriptions/types";
+import { formatMonthlyWavLimitLabel } from "@/lib/usage/download-quota-policy";
 
 const PLAN_ORDER: PlanId[] = ["free", "creator_monthly", "pro_studio_monthly"];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -57,7 +58,7 @@ const PLAN_COPY: Record<
     positioning: "Weekly releases with room to iterate.",
     features: (plan) => [
       "Unlimited MP3 downloads",
-      `${plan.monthlyMastersLimit} WAV downloads / month`,
+      formatMonthlyWavLimitLabel(plan.monthlyMastersLimit),
       "WAV 24-bit",
       "Unlimited A/B previews (never counted)",
       "Adaptive customization + exports",
@@ -72,7 +73,7 @@ const PLAN_COPY: Record<
     positioning: "Studios, small labels, or anyone mastering in batches.",
     features: (plan) => [
       "Unlimited MP3 downloads",
-      `${plan.monthlyMastersLimit} WAV downloads / month`,
+      formatMonthlyWavLimitLabel(plan.monthlyMastersLimit),
       "WAV 32-bit float",
       "Unlimited A/B previews (never counted)",
       "Adaptive customization + exports",
@@ -80,7 +81,7 @@ const PLAN_COPY: Record<
       formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
     ],
     ctaLabel: "Choose Pro Studio",
-    ctaHint: "Highest monthly cap plus float WAV."
+    ctaHint: "Unlimited WAV exports plus float format."
   }
 };
 

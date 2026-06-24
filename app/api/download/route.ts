@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
     });
     const user = buildApiUser(request, sessionPrep.sessionId);
     const adminBypass = isMasterAdminBypassGranted(request);
-    const freePlanCap = resolveFreePlanWavCap(PLAN_DEFINITIONS.free.monthlyMastersLimit);
+    const freePlanCap = resolveFreePlanWavCap(PLAN_DEFINITIONS.free.monthlyMastersLimit ?? 1);
     const quotaRecord = { kind: record.kind, mime: record.mime };
     const enforceWavQuota = shouldEnforceWavDownloadQuota({
       record: quotaRecord,
@@ -410,7 +410,10 @@ export async function GET(request: NextRequest) {
           const currentEntitlements = await getEntitlementsForUser(user, {
             normalizedEmail: masteredUnlock.normalizedEmail
           });
-          if ((currentEntitlements.remainingMonthlyMasters ?? 0) <= 0) {
+          if (
+            currentEntitlements.remainingMonthlyMasters !== null &&
+            currentEntitlements.remainingMonthlyMasters <= 0
+          ) {
             await consumeCreditPackMaster(masteredUnlock.normalizedEmail, {
               jobId: record.jobId,
               fileId: record.id

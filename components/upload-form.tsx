@@ -102,13 +102,17 @@ function resolveExportPlanId(planId: string | undefined): PlanId {
 function applyWavQuotaConsumed(prev: MasterResponse | null): MasterResponse | null {
   if (!prev?.quota) return prev;
   const { quota } = prev;
-  if (quota.remainingMasters <= 0) return prev;
+  if (quota.monthlyMastersLimit === null) return prev;
+  if (quota.remainingMasters === null || quota.remainingMasters <= 0) return prev;
   return {
     ...prev,
     quota: {
       ...quota,
       mastersUsedThisPeriod: quota.mastersUsedThisPeriod + 1,
-      remainingMonthlyMasters: Math.max(quota.remainingMonthlyMasters - 1, 0),
+      remainingMonthlyMasters:
+        quota.remainingMonthlyMasters === null
+          ? null
+          : Math.max(quota.remainingMonthlyMasters - 1, 0),
       remainingMasters: Math.max(quota.remainingMasters - 1, 0)
     }
   };
@@ -201,10 +205,10 @@ type MasterResponse = {
   analysis: MasterJobAnalysis;
   quota?: {
     mastersUsedThisPeriod: number;
-    monthlyMastersLimit: number;
-    remainingMonthlyMasters: number;
+    monthlyMastersLimit: number | null;
+    remainingMonthlyMasters: number | null;
     creditPackBalance: number;
-    remainingMasters: number;
+    remainingMasters: number | null;
     planId: string;
   };
 };
@@ -1223,12 +1227,20 @@ export function UploadForm() {
                 <p
                   style={{
                     margin: "14px 0 0",
-                    color: result.quota.remainingMasters > 0 ? "#7dccb0" : "#a8c4bb",
+                    color:
+                      result.quota.monthlyMastersLimit === null ||
+                      (result.quota.remainingMasters ?? 0) > 0
+                        ? "#7dccb0"
+                        : "#a8c4bb",
                     fontSize: "0.82rem",
                     lineHeight: 1.55
                   }}
                 >
-                  {result.quota.remainingMasters > 0 ? (
+                  {result.quota.monthlyMastersLimit === null ? (
+                    <>
+                      Unlimited WAV downloads. {result.quota.mastersUsedThisPeriod} used this month.
+                    </>
+                  ) : (result.quota.remainingMasters ?? 0) > 0 ? (
                     <>
                       {result.quota.planId === "free" ? (
                         <>
@@ -1242,7 +1254,7 @@ export function UploadForm() {
                         </>
                       )}
                       {result.quota.creditPackBalance > 0 ? ` + ${result.quota.creditPackBalance} credit pack` : ""}.
-                      {result.quota.remainingMasters <= 2 ? " Running low — upgrade or get 5 more for $4" : ""}
+                      {(result.quota.remainingMasters ?? 0) <= 2 ? " Running low — upgrade or get 5 more for $4" : ""}
                       {result.quota.planId === "free" ? (
                         <>
                           {" "}

@@ -2,7 +2,10 @@ import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import { EntitlementSnapshot, PlanId } from "@/lib/subscriptions/types";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getCurrentMonthKeyUtc } from "@/lib/usage/month-key";
-import { FREE_WAV_DOWNLOADS_PER_MONTH, resolveFreePlanWavCap } from "@/lib/usage/download-quota-policy";
+import {
+  FREE_WAV_DOWNLOADS_PER_MONTH,
+  resolvePlanMonthlyWavCap
+} from "@/lib/usage/download-quota-policy";
 import { getLocalBillableDownloadCount } from "@/lib/usage/local-download-usage";
 import { countBillableDownloadsForMonth } from "@/lib/usage/supabase-download-usage";
 import {
@@ -58,8 +61,7 @@ export async function getEntitlementsForUser(
   }
 
   const plan = PLAN_DEFINITIONS[activePlanId];
-  const monthlyCap =
-    plan.id === "free" ? resolveFreePlanWavCap(plan.monthlyMastersLimit) : plan.monthlyMastersLimit;
+  const monthlyCap = resolvePlanMonthlyWavCap(activePlanId, plan.monthlyMastersLimit);
   const monthKey = getCurrentMonthKeyUtc();
 
   let usedThisMonth: number | null;
@@ -78,7 +80,7 @@ export async function getEntitlementsForUser(
               billingPeriodEndIso ? new Date(billingPeriodEndIso) : undefined
             );
       usedThisMonth = used;
-      remainingMonthly = Math.max(monthlyCap - used, 0);
+      remainingMonthly = monthlyCap === null ? null : Math.max(monthlyCap - used, 0);
       creditPackBalance = await getCreditPackBalance(emailForBilling);
     } else {
       usedThisMonth = null;
@@ -88,7 +90,7 @@ export async function getEntitlementsForUser(
   } else {
     const used = getLocalBillableDownloadCount(user.sessionId);
     usedThisMonth = used;
-    remainingMonthly = Math.max(monthlyCap - used, 0);
+    remainingMonthly = monthlyCap === null ? null : Math.max(monthlyCap - used, 0);
     creditPackBalance = 0;
   }
 

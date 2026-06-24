@@ -10,10 +10,10 @@ export type PendingAdaptiveExportV1 = {
   analysis: MasterJobAnalysis;
   quota?: {
     mastersUsedThisPeriod: number;
-    monthlyMastersLimit: number;
-    remainingMonthlyMasters: number;
+    monthlyMastersLimit: number | null;
+    remainingMonthlyMasters: number | null;
     creditPackBalance: number;
-    remainingMasters: number;
+    remainingMasters: number | null;
     planId: string;
   };
 };

@@ -339,17 +339,32 @@ export async function POST(request: NextRequest) {
       masteredStat = null;
     }
 
-    const quotaSnapshot =
+    const hasMeteredQuota =
       nextEntitlements.mastersUsedThisPeriod !== null &&
       nextEntitlements.monthlyMastersLimit !== null &&
       nextEntitlements.remainingMonthlyMasters !== null &&
-      nextEntitlements.remainingMasters !== null
+      nextEntitlements.remainingMasters !== null;
+    const hasUnlimitedQuota =
+      nextEntitlements.mastersUsedThisPeriod !== null &&
+      nextEntitlements.monthlyMastersLimit === null &&
+      nextEntitlements.planId === "pro_studio_monthly";
+
+    const quotaSnapshot = hasMeteredQuota
+      ? {
+          mastersUsedThisPeriod: nextEntitlements.mastersUsedThisPeriod!,
+          monthlyMastersLimit: nextEntitlements.monthlyMastersLimit,
+          remainingMonthlyMasters: nextEntitlements.remainingMonthlyMasters,
+          creditPackBalance: nextEntitlements.creditPackBalance ?? 0,
+          remainingMasters: nextEntitlements.remainingMasters,
+          planId: nextEntitlements.planId
+        }
+      : hasUnlimitedQuota
         ? {
-            mastersUsedThisPeriod: nextEntitlements.mastersUsedThisPeriod,
-            monthlyMastersLimit: nextEntitlements.monthlyMastersLimit,
-            remainingMonthlyMasters: nextEntitlements.remainingMonthlyMasters,
+            mastersUsedThisPeriod: nextEntitlements.mastersUsedThisPeriod!,
+            monthlyMastersLimit: null,
+            remainingMonthlyMasters: null,
             creditPackBalance: nextEntitlements.creditPackBalance ?? 0,
-            remainingMasters: nextEntitlements.remainingMasters,
+            remainingMasters: null,
             planId: nextEntitlements.planId
           }
         : null;

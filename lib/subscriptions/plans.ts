@@ -1,4 +1,5 @@
 import { PlanDefinition, PlanId } from "@/lib/subscriptions/types";
+import { CREATOR_WAV_DOWNLOADS_PER_MONTH } from "@/lib/usage/download-quota-policy";
 
 export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
   free: {
@@ -27,7 +28,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     id: "creator_monthly",
     name: "Creator",
     monthlyPriceUsd: 9,
-    monthlyMastersLimit: 15,
+    monthlyMastersLimit: CREATOR_WAV_DOWNLOADS_PER_MONTH,
     songArchitectGenerationsPerMonth: 20,
     quality: "24bit",
     stems: true,
@@ -36,7 +37,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     description: "For the indie artist releasing consistently.",
     features: [
       "Unlimited MP3 downloads",
-      "15 WAV downloads / month",
+      "25 WAV downloads / month",
       "All 7 genre presets",
       "Prompt-Based Adaptive Mastering",
       "A/B preview",
@@ -51,7 +52,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     id: "pro_studio_monthly",
     name: "Pro Studio",
     monthlyPriceUsd: 24,
-    monthlyMastersLimit: 60,
+    monthlyMastersLimit: null,
     songArchitectGenerationsPerMonth: 50,
     quality: "32bit_float",
     stems: true,
@@ -60,7 +61,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     description: "For producers and small labels with volume.",
     features: [
       "Unlimited MP3 downloads",
-      "60 WAV downloads / month",
+      "Unlimited WAV downloads",
       "All 7 genre presets",
       "Prompt-Based Adaptive Mastering",
       "A/B preview",

@@ -27,7 +27,7 @@ export function tryConsumeLocalBillableDownload(
   sessionId: string,
   jobId: string,
   fileId: string,
-  monthlyCap: number,
+  monthlyCap: number | null,
   adminBypass: boolean
 ): { allowed: boolean; isRepeat: boolean } {
   if (adminBypass) {
@@ -46,7 +46,7 @@ export function tryConsumeLocalBillableDownload(
     return { allowed: true, isRepeat: true };
   }
 
-  if (entry.billedJobFileKeys.size >= monthlyCap) {
+  if (monthlyCap !== null && entry.billedJobFileKeys.size >= monthlyCap) {
     return { allowed: false, isRepeat: false };
   }
 

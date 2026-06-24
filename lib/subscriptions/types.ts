@@ -5,8 +5,8 @@ export type PlanDefinition = {
   id: PlanId;
   name: string;
   monthlyPriceUsd: number;
-  /** Final mastered file entitlements included in the active period. */
-  monthlyMastersLimit: number;
+  /** Final mastered file entitlements included in the active period; null = unlimited. */
+  monthlyMastersLimit: number | null;
   /** Song Architect blueprint generations included in the active period. */
   songArchitectGenerationsPerMonth: number;
   quality: PlanQuality;
