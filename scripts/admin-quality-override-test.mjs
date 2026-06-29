@@ -9,6 +9,7 @@ function read(relPath) {
 }
 
 const ADMIN_EMAIL = "llarod@gmail.com";
+const ADMIN_PLAN_ID = "pro_studio_monthly";
 const ADMIN_QUALITY = "32bit_float";
 const DEFERRED_ARCHIVE_QUALITY = "32bit_float";
 const BILLING_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,19 +25,21 @@ function normalizeAdminOverrideEmail(email) {
   return normalizeBillingEmail(email.trim());
 }
 
-function isAdminQualityOverrideEmail(email) {
+function isAdminEntitlementOverrideEmail(email) {
   const normalized = normalizeAdminOverrideEmail(email);
   return normalized === ADMIN_EMAIL;
 }
 
-function resolveMasteringOutputQuality(entitlementQuality, emailSource) {
-  return emailSource === "none" ? DEFERRED_ARCHIVE_QUALITY : entitlementQuality;
-}
+const isAdminQualityOverrideEmail = isAdminEntitlementOverrideEmail;
 
 function applyAdminQualityOverride(normalizedEmail, outputQuality) {
   const resolvedEmail = normalizeAdminOverrideEmail(normalizedEmail);
   if (!resolvedEmail || resolvedEmail !== ADMIN_EMAIL) return outputQuality;
   return ADMIN_QUALITY;
+}
+
+function resolveMasteringOutputQuality(entitlementQuality, emailSource) {
+  return emailSource === "none" ? DEFERRED_ARCHIVE_QUALITY : entitlementQuality;
 }
 
 function resolveEncodeOutputQuality(entitlementQuality, emailSource, normalizedEmail) {
@@ -52,6 +55,20 @@ function resolveCodecForQuality(quality) {
   if (quality === "32bit_float") return "pcm_f32le";
   if (quality === "24bit") return "pcm_s24le";
   return "pcm_s16le";
+}
+
+function applyAdminEntitlementOverride(entitlements, email) {
+  if (!isAdminEntitlementOverrideEmail(email)) return entitlements;
+  return {
+    ...entitlements,
+    planId: ADMIN_PLAN_ID,
+    canMaster: true,
+    canDownload: true,
+    monthlyMastersLimit: null,
+    remainingMonthlyMasters: null,
+    remainingMasters: null,
+    quality: ADMIN_QUALITY
+  };
 }
 
 function runCodecTests() {
@@ -79,10 +96,10 @@ function runCodecTests() {
 }
 
 function runEmailNormalizationTests() {
-  assert.ok(isAdminQualityOverrideEmail("  LLAROD@gmail.com  "), "admin match is case-insensitive and trim-safe");
+  assert.ok(isAdminEntitlementOverrideEmail("  LLAROD@gmail.com  "), "admin match is case-insensitive and trim-safe");
   assert.ok(isAdminQualityOverrideEmail("llarod@gmail.com"), "admin match accepts normalized lowercase");
-  assert.ok(!isAdminQualityOverrideEmail("llarod01@gmail.com"), "old typo email must not match");
-  assert.ok(!isAdminQualityOverrideEmail("  free@example.com  "), "non-admin email must not match");
+  assert.ok(!isAdminEntitlementOverrideEmail("llarod01@gmail.com"), "old typo email must not match");
+  assert.ok(!isAdminEntitlementOverrideEmail("  free@example.com  "), "non-admin email must not match");
 
   const spacedAdminEncode = resolveEncodeOutputQuality("16bit", "verified_cookie", "  LLAROD@gmail.com  ");
   assert.equal(spacedAdminEncode, "32bit_float", "encode override normalizes email before compare");
@@ -91,18 +108,56 @@ function runEmailNormalizationTests() {
   assert.equal(wrongClientDepth, "32bit_float", "server overrides client/plan 16bit for admin email");
 }
 
+function runEntitlementOverrideTests() {
+  const freeSnapshot = {
+    planId: "free",
+    canMaster: true,
+    canDownload: false,
+    monthlyMastersLimit: 1,
+    remainingMonthlyMasters: 0,
+    remainingMasters: 0,
+    quality: "16bit"
+  };
+
+  const adminEntitled = applyAdminEntitlementOverride(freeSnapshot, ADMIN_EMAIL);
+  assert.equal(adminEntitled.planId, ADMIN_PLAN_ID, "admin gets pro_studio_monthly plan");
+  assert.equal(adminEntitled.canDownload, true, "admin can download without subscription");
+  assert.equal(adminEntitled.quality, ADMIN_QUALITY, "admin gets 32-bit quality in entitlements");
+  assert.equal(adminEntitled.monthlyMastersLimit, null, "admin gets unlimited monthly cap");
+  assert.equal(adminEntitled.remainingMasters, null, "admin has no remaining quota cap");
+
+  const freeUser = applyAdminEntitlementOverride(freeSnapshot, "free@example.com");
+  assert.equal(freeUser.planId, "free", "free user keeps free plan");
+  assert.equal(freeUser.canDownload, false, "free user keeps quota block");
+
+  const proSnapshot = {
+    planId: "creator_monthly",
+    canMaster: true,
+    canDownload: true,
+    monthlyMastersLimit: 25,
+    remainingMonthlyMasters: 10,
+    remainingMasters: 10,
+    quality: "24bit"
+  };
+  const proUser = applyAdminEntitlementOverride(proSnapshot, "creator@example.com");
+  assert.equal(proUser.planId, "creator_monthly", "paid user keeps their plan");
+  assert.equal(proUser.quality, "24bit", "paid user keeps their quality");
+}
+
 function runSourceInvariantTests() {
-  const override = read("lib/subscriptions/admin-quality-override.ts");
-  assertIncludes(override, 'export const ADMIN_QUALITY_OVERRIDE_EMAIL = "llarod@gmail.com";', "hardcoded admin email");
+  const override = read("lib/subscriptions/admin-entitlement-override.ts");
+  assertIncludes(override, 'export const ADMIN_ENTITLEMENT_OVERRIDE_EMAIL = "llarod@gmail.com";', "hardcoded admin email");
+  assertIncludes(override, "export function isAdminEntitlementOverrideEmail", "admin entitlement matcher exported");
+  assertIncludes(override, "export function applyAdminEntitlementOverride", "admin entitlement applier exported");
   assertIncludes(override, 'event: "admin_quality_override_attempt"', "structured admin override attempt log");
-  assertIncludes(override, "export function isAdminQualityOverrideEmail", "admin email matcher exported");
   assertIncludes(override, 'event: "admin_quality_override_applied"', "structured admin override applied log");
-  assertIncludes(override, 'event: "admin_quality_override_skipped"', "structured admin override skipped log");
+  assertIncludes(override, 'event: "admin_entitlement_override_applied"', "structured admin entitlement applied log");
   assertIncludes(override, "maskNormalizedEmailForLog", "masked email in log");
 
   const resolver = read("lib/subscriptions/resolve-entitlement-billing-context.ts");
   assertIncludes(resolver, "resolveEncodeOutputQuality", "encode output resolver exported");
   assertIncludes(resolver, "resolveDeliveryOutputQuality", "delivery output resolver exported");
+  assertIncludes(resolver, "admin-entitlement-override", "resolver imports admin entitlement module");
 
   const masterRoute = read("app/api/master/route.ts");
   assertIncludes(masterRoute, "resolveEncodeOutputQuality", "master route uses encode resolver");
@@ -126,11 +181,20 @@ function runSourceInvariantTests() {
 
   const finalize = read("lib/audio/wav-export-finalize.ts");
   assertIncludes(finalize, "resolveDeliveryOutputQuality", "finalize uses delivery quality resolver");
-  assertIncludes(finalize, "isAdminQualityOverrideEmail", "finalize uses normalized admin email matcher");
+  assertIncludes(finalize, "isAdminEntitlementOverrideEmail", "finalize uses normalized admin email matcher");
   assertIncludes(finalize, "adminForceFloatDelivery", "finalize can upgrade admin QA to float");
 
   const entitlements = read("lib/subscriptions/entitlements.ts");
-  assertExcludes(entitlements, "admin-quality-override", "entitlements must not apply admin encode override");
+  assertIncludes(entitlements, "applyAdminEntitlementOverride", "entitlements applies admin entitlement override");
+  assertIncludes(entitlements, "admin-entitlement-override", "entitlements imports admin entitlement module");
+
+  const adaptiveResolve = read("lib/billing/adaptive-resolve.ts");
+  assertIncludes(adaptiveResolve, "isAdminEntitlementOverrideEmail", "adaptive resolve checks admin entitlement");
+  assertIncludes(adaptiveResolve, "admin_entitlement_override", "adaptive resolve grants admin entitlement reason");
+
+  const downloadRoute = read("app/api/download/route.ts");
+  assertIncludes(downloadRoute, "isAdminEntitlementOverrideEmail", "download route checks admin entitlement bypass");
+  assertIncludes(downloadRoute, "adminEntitlementBypass", "download route wires admin entitlement bypass");
 }
 
 function assertIncludes(content, needle, context) {
@@ -152,8 +216,9 @@ function assertBefore(content, firstNeedle, laterNeedle, context) {
 function run() {
   runCodecTests();
   runEmailNormalizationTests();
+  runEntitlementOverrideTests();
   runSourceInvariantTests();
-  console.log("admin quality override tests passed");
+  console.log("admin entitlement override tests passed");
 }
 
 run();

@@ -13,6 +13,7 @@ import {
   getBillingSubscriptionByEmail,
   getCreditPackBalance
 } from "@/lib/subscriptions/billing-store";
+import { applyAdminEntitlementOverride, isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
 import { resolveMasterWavExportPlanOverride } from "@/lib/subscriptions/master-wav-export-allowlist";
 import { UserProfile } from "@/lib/users/user-profile";
 
@@ -97,18 +98,13 @@ export async function getEntitlementsForUser(
   const remainingTotal = remainingMonthly === null || creditPackBalance === null ? null : remainingMonthly + creditPackBalance;
   const canDownload = remainingTotal === null ? true : remainingTotal > 0;
 
-  /** Mirrors pricing UX: paid subscription missing from DB while quota is gone (typical paid-user failure). */
-  const requiresCheckout =
-    isSupabaseConfigured() &&
-    Boolean(emailForBilling) &&
-    !canDownload &&
-    (activePlanId === "free" || !billingSubscriptionHit);
-
   let entitlementReason: string;
   if (!isSupabaseConfigured()) {
     entitlementReason = "supabase_not_configured_local_usage";
   } else if (!emailForBilling) {
     entitlementReason = "no_billing_email_context";
+  } else if (isAdminEntitlementOverrideEmail(emailForBilling)) {
+    entitlementReason = "admin_entitlement_override";
   } else if (masterWavExportPlanOverride) {
     entitlementReason = "master_wav_export_allowlist";
   } else if (!billingSubscriptionHit) {
@@ -122,40 +118,7 @@ export async function getEntitlementsForUser(
     entitlementReason = "entitled_by_plan_or_unmetered_local";
   }
 
-  const logEntitlements =
-    process.env.BILLING_DIAGNOSTIC_LOGS === "1" ||
-    !canDownload ||
-    (billingSubscriptionHit && activePlanId === "free" && Boolean(stripeSubscriptionId));
-  if (logEntitlements) {
-    console.log(
-      JSON.stringify({
-        scope: "entitlement_resolution",
-        event: "snapshot",
-        userId: user.id,
-        userEmail: user.email,
-        billingEmail: emailForBilling,
-        stripeCustomerId,
-        stripeSubscriptionId,
-        stripePriceId,
-        planId: activePlanId,
-        billingSubscriptionHit,
-        subscriptionStatus,
-        canDownload,
-        mastersUsedThisPeriod: usedThisMonth,
-        monthlyMastersLimit: monthlyCap,
-        remainingMonthlyMasters: remainingMonthly,
-        creditPackBalance,
-        remainingMasters: remainingTotal,
-        requiresCheckout,
-        reason: entitlementReason,
-        billingPeriodStartIso,
-        billingPeriodEndIso,
-        diagnosticMode: process.env.BILLING_DIAGNOSTIC_LOGS === "1"
-      })
-    );
-  }
-
-  return {
+  const snapshot: EntitlementSnapshot = {
     planId: activePlanId,
     canMaster: true,
     canDownload,
@@ -173,6 +136,47 @@ export async function getEntitlementsForUser(
     subscriptionStatus,
     customerPortalEligible: plan.canUseCustomerPortal && Boolean(stripeCustomerId)
   };
+
+  const resolved = applyAdminEntitlementOverride(snapshot, emailForBilling);
+
+  const logEntitlements =
+    process.env.BILLING_DIAGNOSTIC_LOGS === "1" ||
+    !resolved.canDownload ||
+    (billingSubscriptionHit && activePlanId === "free" && Boolean(stripeSubscriptionId));
+  if (logEntitlements) {
+    console.log(
+      JSON.stringify({
+        scope: "entitlement_resolution",
+        event: "snapshot",
+        userId: user.id,
+        userEmail: user.email,
+        billingEmail: emailForBilling,
+        stripeCustomerId,
+        stripeSubscriptionId,
+        stripePriceId,
+        planId: resolved.planId,
+        billingSubscriptionHit,
+        subscriptionStatus,
+        canDownload: resolved.canDownload,
+        mastersUsedThisPeriod: resolved.mastersUsedThisPeriod,
+        monthlyMastersLimit: resolved.monthlyMastersLimit,
+        remainingMonthlyMasters: resolved.remainingMonthlyMasters,
+        creditPackBalance: resolved.creditPackBalance,
+        remainingMasters: resolved.remainingMasters,
+        requiresCheckout:
+          isSupabaseConfigured() &&
+          Boolean(emailForBilling) &&
+          !resolved.canDownload &&
+          (resolved.planId === "free" || !billingSubscriptionHit),
+        reason: entitlementReason,
+        billingPeriodStartIso,
+        billingPeriodEndIso,
+        diagnosticMode: process.env.BILLING_DIAGNOSTIC_LOGS === "1"
+      })
+    );
+  }
+
+  return resolved;
 }
 
 export async function consumeCreditPackMaster(normalizedEmail: string, metadata?: Record<string, unknown>): Promise<boolean> {

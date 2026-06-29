@@ -17,6 +17,7 @@ import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAt
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
+import { isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
 import {
@@ -218,7 +219,8 @@ export async function GET(request: NextRequest) {
       clientIp
     });
     const user = buildApiUser(request, sessionPrep.sessionId);
-    const adminBypass = isMasterAdminBypassGranted(request);
+    const adminEntitlementBypass = isAdminEntitlementOverrideEmail(masteredUnlock?.normalizedEmail);
+    const adminBypass = isMasterAdminBypassGranted(request) || adminEntitlementBypass;
     const freePlanCap = resolveFreePlanWavCap(PLAN_DEFINITIONS.free.monthlyMastersLimit ?? 1);
     const quotaRecord = { kind: record.kind, mime: record.mime };
     const enforceWavQuota = shouldEnforceWavDownloadQuota({

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER } from "@/lib/billing/client-key";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { recordJobExportEncodeResolution } from "@/lib/jobs/job-export-verify";
-import { applyAdminQualityOverride } from "@/lib/subscriptions/admin-quality-override";
+import { applyAdminQualityOverride } from "@/lib/subscriptions/admin-entitlement-override";
 import type { EntitlementBillingContext } from "@/lib/subscriptions/entitlements";
 import { readVerifiedEmailState } from "@/lib/security/verified-email-state";
 import type { PlanQuality } from "@/lib/subscriptions/types";

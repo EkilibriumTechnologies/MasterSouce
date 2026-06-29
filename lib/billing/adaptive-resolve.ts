@@ -3,6 +3,7 @@ import { isAdaptiveBillingAllowlisted } from "./adaptive-billing-allowlist";
 import { reconcileAdaptiveEntitlementFromStripeByEmail } from "./adaptive-stripe-fallback";
 import { normalizeBillingEmail } from "./email";
 import { getAdaptiveEntitlementByEmail } from "./store";
+import { isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
 
 export type AdaptiveEntitlementApiResult = {
   entitled: boolean;
@@ -68,6 +69,19 @@ export async function resolveAdaptiveEntitlementForEmail(
       planId: "free",
       subscriptionStatus: null,
       entitlementActive: null,
+      stripeEmailSyncAttempted,
+      stripeEmailSyncRecovered
+    };
+  }
+
+  if (isAdminEntitlementOverrideEmail(normalized)) {
+    logAdaptiveEntitlement("resolve_admin_entitlement_override", { normalizedEmail: normalized });
+    return {
+      entitled: true,
+      reason: "admin_entitlement_override",
+      planId: "pro_studio_monthly",
+      subscriptionStatus: null,
+      entitlementActive: true,
       stripeEmailSyncAttempted,
       stripeEmailSyncRecovered
     };
