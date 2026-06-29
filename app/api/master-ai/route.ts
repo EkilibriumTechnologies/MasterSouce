@@ -6,6 +6,11 @@ import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { toPublicMetrics } from "@/lib/audio/public-analysis";
 import { runAdaptiveMasteringPipeline } from "@/lib/audio/adaptive-mastering-pipeline";
 import { combineAdaptiveUserIntent } from "@/lib/audio/combine-adaptive-user-intent";
+import {
+  formDataToFieldRecord,
+  normalizeAdaptiveNotes,
+  normalizeReferenceArtist
+} from "@/lib/audio/parse-adaptive-master-ai-fields";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import {
@@ -29,19 +34,19 @@ import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/up
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
 
-const BodySchema = z.object({
+const CoreBodySchema = z.object({
   standardMasterFileId: z.string().min(8),
   standardMasterJobId: z.string().min(4),
   preset: z.enum(["pop", "hiphop", "edm", "rock", "reggaeton", "rnb", "lofi"]).optional(),
-  loudnessMode: z.enum(["clean", "balanced", "loud"]).optional(),
-  user_intent: z.string().max(700).optional(),
-  referenceArtist: z.string().trim().min(1).max(120).optional()
+  loudnessMode: z.enum(["clean", "balanced", "loud"]).optional()
 });
 
 type ParsedMasterAiRequest = {
-  data: z.infer<typeof BodySchema>;
+  data: z.infer<typeof CoreBodySchema>;
   billingEmailHint?: string;
   referenceFile: File | null;
+  adaptiveNotes: string;
+  referenceArtist?: string;
 };
 
 async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterAiRequest | "invalid_json" | "invalid_payload"> {
@@ -60,20 +65,21 @@ async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterA
     const referenceField = formData.get("referenceTrack");
     const referenceFile = referenceField instanceof File && referenceField.size > 0 ? referenceField : null;
 
-    const referenceArtistField = formData.get("referenceArtist");
-    const parsed = BodySchema.safeParse({
+    const fieldRecord = formDataToFieldRecord(formData);
+    const parsed = CoreBodySchema.safeParse({
       standardMasterFileId: formData.get("standardMasterFileId"),
       standardMasterJobId: formData.get("standardMasterJobId"),
       preset: formData.get("preset") || undefined,
-      loudnessMode: formData.get("loudnessMode") || undefined,
-      user_intent: formData.get("user_intent") || undefined,
-      referenceArtist:
-        typeof referenceArtistField === "string" && referenceArtistField.trim()
-          ? referenceArtistField
-          : undefined
+      loudnessMode: formData.get("loudnessMode") || undefined
     });
     if (!parsed.success) return "invalid_payload";
-    return { data: parsed.data, billingEmailHint, referenceFile };
+    return {
+      data: parsed.data,
+      billingEmailHint,
+      referenceFile,
+      adaptiveNotes: normalizeAdaptiveNotes(fieldRecord),
+      referenceArtist: normalizeReferenceArtist(fieldRecord)
+    };
   }
 
   let body: unknown;
@@ -83,15 +89,22 @@ async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterA
     return "invalid_json";
   }
 
-  const parsed = BodySchema.safeParse(body);
+  const fieldRecord =
+    body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+
+  const parsed = CoreBodySchema.safeParse(body);
   if (!parsed.success) return "invalid_payload";
 
   const billingEmailHint =
-    body && typeof body === "object" && "billingEmail" in body && typeof (body as { billingEmail?: unknown }).billingEmail === "string"
-      ? (body as { billingEmail: string }).billingEmail
-      : undefined;
+    typeof fieldRecord.billingEmail === "string" ? fieldRecord.billingEmail : undefined;
 
-  return { data: parsed.data, billingEmailHint, referenceFile: null };
+  return {
+    data: parsed.data,
+    billingEmailHint,
+    referenceFile: null,
+    adaptiveNotes: normalizeAdaptiveNotes(fieldRecord),
+    referenceArtist: normalizeReferenceArtist(fieldRecord)
+  };
 }
 
 async function resolveReferenceAnalysis(referenceFile: File, jobId: string) {
@@ -154,7 +167,7 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    const { data: parsed, billingEmailHint, referenceFile } = parsedRequest;
+    const { data: parsed, billingEmailHint, referenceFile, adaptiveNotes, referenceArtist } = parsedRequest;
 
     const billingResolution = resolveEntitlementBillingContext(request, user, { billingEmailHint });
 
@@ -218,7 +231,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const userIntent = combineAdaptiveUserIntent(parsed.user_intent, parsed.referenceArtist);
+    const userIntent = combineAdaptiveUserIntent(adaptiveNotes || undefined, referenceArtist);
 
     const adaptive = await runAdaptiveMasteringPipeline({
       inputPath: standardRecord.filePath,
