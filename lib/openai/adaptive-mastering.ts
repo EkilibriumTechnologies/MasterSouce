@@ -144,6 +144,28 @@ function buildUserPayload(input: AdaptiveDecisionInput): string {
   );
 }
 
+/**
+ * OpenAI Responses API `reasoning.effort` is only valid on o-series and gpt-5 models —
+ * not gpt-4o, gpt-4.1, or other non-reasoning chat models.
+ */
+export function supportsReasoningEffort(model: string): boolean {
+  const id = model.trim().toLowerCase();
+  if (/^o\d+/.test(id)) {
+    return true;
+  }
+  if (/^gpt-5/.test(id)) {
+    return true;
+  }
+  return false;
+}
+
+function resolveAdaptiveReasoningEffort(model: string): string | undefined {
+  if (!supportsReasoningEffort(model)) {
+    return undefined;
+  }
+  return process.env.OPENAI_ADAPTIVE_REASONING_EFFORT?.trim() || "low";
+}
+
 function toSafeRedactedRequestBody(input: AdaptiveDecisionInput, model: string, reasoningEffort?: string): Record<string, unknown> {
   const analysis = (input.analysis ?? {}) as Record<string, unknown>;
   const analysisSnapshot = {
@@ -236,7 +258,7 @@ async function requestAdaptiveDecisionFromOpenAISingleAttempt(
   meta: SingleAttemptMeta
 ): Promise<AdaptiveDecision> {
   const { model, resolvedTimeoutMs } = meta;
-  const reasoningEffort = process.env.OPENAI_ADAPTIVE_REASONING_EFFORT?.trim();
+  const reasoningEffort = resolveAdaptiveReasoningEffort(model);
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new AdaptiveOpenAIError("missing_api_key", "OPENAI_API_KEY is not configured.", {
@@ -275,12 +297,9 @@ async function requestAdaptiveDecisionFromOpenAISingleAttempt(
           strict: true,
           schema: RESPONSE_SCHEMA
         }
-      }
+      },
+      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {})
     };
-
-    if (reasoningEffort) {
-      body.reasoning = { effort: reasoningEffort };
-    }
 
     const res = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
