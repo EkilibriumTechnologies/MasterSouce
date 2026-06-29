@@ -94,3 +94,15 @@ export type SongArchitectOutput = {
     songLength?: SongArchitectSongLength;
   };
 };
+
+/** Advanced Song Architect output unlocked for Creator / Pro Studio plans. */
+export type SongArchitectPremiumEnhancements = {
+  diagnostics: SongArchitectDiagnostics;
+  altHooks: string[];
+  performanceNotes: string[];
+  exportPrompt: string;
+  masteringReadyPrompt: string;
+  styleDirections: [string, string, string];
+  referenceArtistGuidance: string;
+  exportMasteringGuidance: string;
+};

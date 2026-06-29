@@ -3,7 +3,10 @@ import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 import { hasTrustedEmailAccess } from "@/lib/security/verified-email-state";
+import { logSongArchitectFunnelEvent } from "@/lib/song-architect/analytics";
 import { recordSongArchitectGenerationEvent } from "@/lib/song-architect/entitlements";
+import { isSongArchitectPremiumPlan } from "@/lib/song-architect/premium-access";
+import { partitionSongArchitectClientPayload } from "@/lib/song-architect/premium-output";
 import { normalizeSongArchitectOutput } from "@/lib/song-architect/normalize-output";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
 import { resolveSongArchitectInput } from "@/lib/song-architect/resolve-input";
@@ -558,6 +561,24 @@ export async function POST(request: NextRequest) {
       status: "success",
       counted: true
     });
+    const clientPayload = partitionSongArchitectClientPayload(
+      normalized,
+      usagePlanId,
+      openAiResult.resolvedInput
+    );
+    if (isSongArchitectPremiumPlan(usagePlanId)) {
+      logSongArchitectFunnelEvent("premium_tool_feature_used", {
+        normalizedEmail: trustedAccess.normalizedEmail,
+        planId: usagePlanId,
+        sessionId: sessionPrep.sessionId
+      });
+    } else {
+      logSongArchitectFunnelEvent("free_tool_success", {
+        normalizedEmail: trustedAccess.normalizedEmail,
+        planId: usagePlanId,
+        sessionId: sessionPrep.sessionId
+      });
+    }
     const nextUsage = {
       ...trustedAccess.usage,
       used: trustedAccess.usage.used + 1,
@@ -566,7 +587,7 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json(
       {
         ok: true,
-        data: normalized,
+        data: clientPayload,
         usage: nextUsage
       },
       { status: 200 }

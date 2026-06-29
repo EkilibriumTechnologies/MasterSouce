@@ -18,7 +18,8 @@
     "test:adaptive-reference-artist": "node scripts/adaptive-reference-artist-test.mjs",
     "test:adaptive-openai-reasoning": "node scripts/adaptive-openai-reasoning-effort-test.mjs",
     "test:admin-quality-override": "node scripts/admin-quality-override-test.mjs",
-    "test": "npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-openai-reasoning && npm run test:admin-quality-override",
+    "test:song-architect-funnel": "node scripts/song-architect-premium-funnel-invariants.mjs",
+    "test": "npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-openai-reasoning && npm run test:admin-quality-override && npm run test:song-architect-funnel",
     "inspect:wav": "node scripts/inspect-wav-format.mjs"
   },
   "dependencies": {

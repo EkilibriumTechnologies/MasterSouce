@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER, MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
+import { trackSongArchitectFunnelEvent } from "@/lib/song-architect/analytics";
+import type { SongArchitectClientPayload } from "@/lib/song-architect/premium-output";
 import { SONG_ARCHITECT_PRESETS } from "@/lib/song-architect/presets";
 import { SONG_LENGTH_UI_OPTIONS } from "@/lib/song-architect/song-length";
-import type { SongArchitectInput, SongArchitectOutput, SongArchitectSongLength } from "@/lib/song-architect/types";
+import type { SongArchitectInput, SongArchitectPremiumEnhancements, SongArchitectSongLength } from "@/lib/song-architect/types";
+import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
 
 type FormState = {
   preset: string;
@@ -36,7 +39,7 @@ type SongArchitectUsage = {
 
 type SongArchitectGenerateResponse = {
   ok: boolean;
-  data?: SongArchitectOutput;
+  data?: SongArchitectClientPayload;
   usage?: SongArchitectUsage;
   code?: string;
   message?: string;
@@ -148,6 +151,90 @@ function CopyButton({ label, value }: { label: string; value: string }) {
   );
 }
 
+function PremiumOutputSections({ premium }: { premium: SongArchitectPremiumEnhancements }) {
+  return (
+    <>
+      <div style={conceptCardStyle}>
+        <p style={outputHeadingStyle}>Diagnostics</p>
+        {Object.entries(premium.diagnostics).map(([key, value]) => (
+          <div key={key} style={metricRowStyle}>
+            <span style={metricKeyStyle}>{key}</span>
+            <span style={metricValueStyle}>{Math.round(value)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={conceptCardStyle}>
+        <div style={outputCardHeaderStyle}>
+          <p style={outputHeadingStyle}>Alternate Style Directions</p>
+          <CopyButton label="Copy Directions" value={premium.styleDirections.join("\n")} />
+        </div>
+        <ol style={outputListStyle}>
+          {premium.styleDirections.map((direction) => (
+            <li key={direction}>{direction}</li>
+          ))}
+        </ol>
+      </div>
+
+      <div style={conceptCardStyle}>
+        <div style={outputCardHeaderStyle}>
+          <p style={outputHeadingStyle}>Reference Artist Guidance</p>
+          <CopyButton label="Copy Guidance" value={premium.referenceArtistGuidance} />
+        </div>
+        <p style={outputLineStyle}>{premium.referenceArtistGuidance}</p>
+      </div>
+
+      <div style={conceptCardStyle}>
+        <div style={outputCardHeaderStyle}>
+          <p style={outputHeadingStyle}>Alt Hooks</p>
+          <CopyButton label="Copy Hooks" value={premium.altHooks.join("\n")} />
+        </div>
+        <ul style={outputListStyle}>
+          {premium.altHooks.map((hook) => (
+            <li key={hook}>{hook}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div style={conceptCardStyle}>
+        <div style={outputCardHeaderStyle}>
+          <p style={outputHeadingStyle}>Performance Notes</p>
+          <CopyButton label="Copy Notes" value={premium.performanceNotes.join("\n")} />
+        </div>
+        <ul style={outputListStyle}>
+          {premium.performanceNotes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div style={conceptCardStyle}>
+        <div style={outputCardHeaderStyle}>
+          <p style={outputHeadingStyle}>Mastering-Ready Prompt</p>
+          <CopyButton label="Copy Mastering Prompt" value={premium.masteringReadyPrompt} />
+        </div>
+        <pre style={lyricsStyle}>{premium.masteringReadyPrompt}</pre>
+      </div>
+
+      <div style={conceptCardStyle}>
+        <div style={outputCardHeaderStyle}>
+          <p style={outputHeadingStyle}>Export + Mastering Guidance</p>
+          <CopyButton label="Copy Guidance" value={premium.exportMasteringGuidance} />
+        </div>
+        <pre style={lyricsStyle}>{premium.exportMasteringGuidance}</pre>
+      </div>
+
+      <div style={conceptCardStyle}>
+        <div style={outputCardHeaderStyle}>
+          <p style={outputHeadingStyle}>Suno/Udio Export Prompt</p>
+          <CopyButton label="Copy Prompt" value={premium.exportPrompt} />
+        </div>
+        <textarea style={readonlyTextareaStyle} value={premium.exportPrompt} readOnly />
+      </div>
+    </>
+  );
+}
+
 const songLengthSectionStyle: React.CSSProperties = {
   marginTop: "14px",
   padding: "12px",
@@ -249,7 +336,7 @@ export default function SongArchitectPage() {
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string>("");
-  const [result, setResult] = useState<SongArchitectOutput | null>(null);
+  const [result, setResult] = useState<SongArchitectClientPayload | null>(null);
   const [usage, setUsage] = useState<SongArchitectUsage | null>(null);
   const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState("");
@@ -329,6 +416,11 @@ export default function SongArchitectPage() {
 
       setResult(data.data);
       setUsage(data.usage);
+      if (data.data.premiumLocked) {
+        trackSongArchitectFunnelEvent("free_tool_success", { plan_id: "free" });
+      } else if (data.data.premium) {
+        trackSongArchitectFunnelEvent("premium_tool_feature_used", { plan_id: data.data.planId });
+      }
     } catch {
       setResult(null);
       setError("Could not generate right now. Please retry in a moment.");
@@ -692,93 +784,66 @@ export default function SongArchitectPage() {
           <h2 style={panelTitleStyle}>Output</h2>
           {!result ? (
             <p style={emptyStateStyle}>
-              Configure your inputs and generate. Your concept, style prompt, lyrics, diagnostics, and export prompt will
-              appear here.
+              Configure your inputs and generate. Your concept, style prompt, and lyrics appear here. Creator plans unlock
+              advanced export and mastering guidance.
             </p>
           ) : (
             <div style={outputStackStyle}>
+              {result.premiumLocked ? (
+                <PostSuccessUpgradeCta planId={result.planId} remaining={usage?.remaining ?? 0} />
+              ) : null}
+
               <div style={conceptCardStyle}>
                 <p style={outputHeadingStyle}>Concept</p>
                 <p style={outputLineStyle}>
-                  <strong style={outputKeyStyle}>Theme:</strong> {result.concept.theme}
+                  <strong style={outputKeyStyle}>Theme:</strong> {result.basic.concept.theme}
                 </p>
                 <p style={outputLineStyle}>
-                  <strong style={outputKeyStyle}>Angle:</strong> {result.concept.angle}
+                  <strong style={outputKeyStyle}>Angle:</strong> {result.basic.concept.angle}
                 </p>
                 <p style={outputLineStyle}>
-                  <strong style={outputKeyStyle}>Hook:</strong> {result.concept.hookIdentity}
+                  <strong style={outputKeyStyle}>Hook:</strong> {result.basic.concept.hookIdentity}
                 </p>
                 <p style={outputLineStyle}>
-                  <strong style={outputKeyStyle}>Structure:</strong> {result.concept.structure}
+                  <strong style={outputKeyStyle}>Structure:</strong> {result.basic.concept.structure}
                 </p>
-                {result.meta.songLength ? (
+                {result.basic.meta.songLength ? (
                   <p style={outputLineStyle}>
                     <strong style={outputKeyStyle}>Song length:</strong>{" "}
-                    {SONG_LENGTH_UI_OPTIONS.find((o) => o.id === result.meta.songLength)?.label ?? result.meta.songLength}{" "}
+                    {SONG_LENGTH_UI_OPTIONS.find((o) => o.id === result.basic.meta.songLength)?.label ??
+                      result.basic.meta.songLength}{" "}
                     <span style={outputKeyStyle}>
-                      ({SONG_LENGTH_UI_OPTIONS.find((o) => o.id === result.meta.songLength)?.hint ?? ""})
+                      ({SONG_LENGTH_UI_OPTIONS.find((o) => o.id === result.basic.meta.songLength)?.hint ?? ""})
                     </span>
                   </p>
                 ) : null}
               </div>
 
               <div style={conceptCardStyle}>
-                <p style={outputHeadingStyle}>Diagnostics</p>
-                {Object.entries(result.diagnostics).map(([key, value]) => (
-                  <div key={key} style={metricRowStyle}>
-                    <span style={metricKeyStyle}>{key}</span>
-                    <span style={metricValueStyle}>{Math.round(value)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div style={conceptCardStyle}>
-                <div style={outputCardHeaderStyle}>
-                  <p style={outputHeadingStyle}>Alt Hooks</p>
-                  <CopyButton label="Copy Hooks" value={result.altHooks.join("\n")} />
-                </div>
-                <ul style={outputListStyle}>
-                  {result.altHooks.map((hook) => (
-                    <li key={hook}>{hook}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div style={conceptCardStyle}>
-                <div style={outputCardHeaderStyle}>
-                  <p style={outputHeadingStyle}>Performance Notes</p>
-                  <CopyButton label="Copy Notes" value={result.performanceNotes.join("\n")} />
-                </div>
-                <ul style={outputListStyle}>
-                  {result.performanceNotes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div style={conceptCardStyle}>
                 <div style={outputCardHeaderStyle}>
                   <p style={outputHeadingStyle}>Style Prompt</p>
-                  <CopyButton label="Copy Style Prompt" value={result.stylePrompt} />
+                  <CopyButton label="Copy Style Prompt" value={result.basic.stylePrompt} />
                 </div>
-                <pre style={lyricsStyle}>{result.stylePrompt}</pre>
+                <pre style={lyricsStyle}>{result.basic.stylePrompt}</pre>
               </div>
 
               <div style={conceptCardStyle}>
                 <div style={outputCardHeaderStyle}>
                   <p style={outputHeadingStyle}>Lyrics</p>
-                  <CopyButton label="Copy Lyrics" value={result.lyrics} />
+                  <CopyButton label="Copy Lyrics" value={result.basic.lyrics} />
                 </div>
-                <pre style={lyricsStyle}>{result.lyrics}</pre>
+                <pre style={lyricsStyle}>{result.basic.lyrics}</pre>
               </div>
 
-              <div style={conceptCardStyle}>
-                <div style={outputCardHeaderStyle}>
-                  <p style={outputHeadingStyle}>Suno/Udio Export Prompt</p>
-                  <CopyButton label="Copy Prompt" value={result.exportPrompt} />
-                </div>
-                <textarea style={readonlyTextareaStyle} value={result.exportPrompt} readOnly />
-              </div>
+              {result.premiumLocked ? (
+                <PremiumLockedPanel
+                  onUpgradeClick={() =>
+                    trackSongArchitectFunnelEvent("free_tool_upgrade_cta_clicked", { plan_id: "free" })
+                  }
+                />
+              ) : result.premium ? (
+                <PremiumOutputSections premium={result.premium} />
+              ) : null}
             </div>
           )}
         </aside>
