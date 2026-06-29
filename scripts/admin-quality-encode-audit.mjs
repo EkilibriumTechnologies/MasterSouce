@@ -6,7 +6,7 @@ import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 
 const BASE_URL = process.env.ENCODE_AUDIT_BASE_URL?.trim() || "http://localhost:3000";
-const ADMIN_EMAIL = "llarod01@gmail.com";
+const ADMIN_EMAIL = "llarod@gmail.com";
 const BILLING_HEADER = "x-mastersouce-billing-email";
 
 function signVerifiedEmailCookie(normalizedEmail) {

@@ -13,8 +13,8 @@ import {
 import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import {
-  ADMIN_QUALITY_OVERRIDE_EMAIL,
-  ADMIN_QUALITY_OVERRIDE_QUALITY
+  ADMIN_QUALITY_OVERRIDE_QUALITY,
+  isAdminQualityOverrideEmail
 } from "@/lib/subscriptions/admin-quality-override";
 import {
   resolveDeliveryOutputQuality,
@@ -100,7 +100,7 @@ export async function finalizeMasteredWavDelivery(params: {
   }
 
   const adminForceFloatDelivery =
-    params.normalizedEmail === ADMIN_QUALITY_OVERRIDE_EMAIL &&
+    isAdminQualityOverrideEmail(params.normalizedEmail) &&
     deliveryQuality === ADMIN_QUALITY_OVERRIDE_QUALITY;
   const mayTranscodeToTarget =
     sourceCodec === "pcm_f32le" ||

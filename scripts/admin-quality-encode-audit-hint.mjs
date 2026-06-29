@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 
-const ADMIN_EMAIL = "llarod01@gmail.com";
+const ADMIN_EMAIL = "llarod@gmail.com";
 const workDir = mkdtempSync(path.join(tmpdir(), "hint-only-"));
 try {
   const out = path.join(workDir, "probe.mp3");
