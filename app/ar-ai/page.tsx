@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { MASTERSOUCE_BILLING_EMAIL_HEADER, MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import type { ArAiReport } from "@/lib/ar-ai/types";
 
 const RELEASE_INTENT_OPTIONS = [
@@ -30,6 +31,67 @@ const defaultFormState: FormState = {
   releaseIntent: ""
 };
 
+type HitAnalyzerLaunchInfo = {
+  launchActive: boolean;
+  launchEndsAt: string;
+  unit: "days" | "hours";
+  value: number;
+  label: string;
+  message: string;
+};
+
+type HitAnalyzerUsage = {
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  planId: string;
+  unlimited: boolean;
+  entitled: boolean;
+};
+
+type HitAnalyzerAccessResponse =
+  | {
+      ok: true;
+      launch: HitAnalyzerLaunchInfo;
+      emailRequired: boolean;
+      usage: HitAnalyzerUsage | null;
+      planId: string;
+      unlimited: boolean;
+    }
+  | {
+      ok: false;
+      code?: string;
+      message?: string;
+      launch?: HitAnalyzerLaunchInfo;
+      emailRequired?: boolean;
+    };
+
+type ArAiErrorResponse = {
+  ok?: false;
+  error?: string;
+  message?: string;
+  code?: string;
+  upgradeRequired?: boolean;
+  limit?: number;
+  remaining?: number;
+};
+
+function getStoredBillingEmail(): string {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem(MASTERSOUCE_BILLING_EMAIL_KEY)?.trim().toLowerCase() ?? "";
+}
+
+function persistBillingEmail(nextEmail: string): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, nextEmail.trim().toLowerCase());
+}
+
+function getPlanDisplayName(planId: string): string {
+  if (planId === "creator_monthly") return "Creator";
+  if (planId === "pro_studio_monthly") return "Pro Studio";
+  return "Free";
+}
+
 function ratingColor(score: number): string {
   if (score >= 80) return "#8de8cb";
   if (score >= 70) return "#9eb6ff";
@@ -42,12 +104,63 @@ export default function ArAiPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [upgradeRequired, setUpgradeRequired] = useState(false);
   const [report, setReport] = useState<ArAiReport | null>(null);
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [launch, setLaunch] = useState<HitAnalyzerLaunchInfo | null>(null);
+  const [usage, setUsage] = useState<HitAnalyzerUsage | null>(null);
+  const [emailRequired, setEmailRequired] = useState(false);
+  const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [verifyError, setVerifyError] = useState("");
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  const [pendingRetryAfterVerify, setPendingRetryAfterVerify] = useState(false);
 
   const canSubmit = useMemo(() => Boolean(audioFile) && !isSubmitting, [audioFile, isSubmitting]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function refreshAccess(emailHint?: string): Promise<HitAnalyzerAccessResponse | null> {
+    const storedBillingEmail = emailHint?.trim().toLowerCase() || getStoredBillingEmail();
+    const query = storedBillingEmail ? `?email=${encodeURIComponent(storedBillingEmail)}` : "";
+    const headers: Record<string, string> = {};
+    if (storedBillingEmail) {
+      headers[MASTERSOUCE_BILLING_EMAIL_HEADER] = storedBillingEmail;
+    }
+    try {
+      const response = await fetch(`/api/ar-ai/access${query}`, {
+        method: "GET",
+        credentials: "include",
+        headers
+      });
+      const data = (await response.json()) as HitAnalyzerAccessResponse;
+      if (data.launch) setLaunch(data.launch);
+      if (data.ok) {
+        setUsage(data.usage);
+        setEmailRequired(data.emailRequired);
+      } else if (typeof data.emailRequired === "boolean") {
+        setEmailRequired(data.emailRequired);
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    void refreshAccess();
+  }, []);
+
+  useEffect(() => {
+    if (!howItWorksOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setHowItWorksOpen(false);
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [howItWorksOpen]);
+
+  async function runAnalysis(): Promise<void> {
     if (!audioFile) {
       setError("Please upload an audio file (WAV or MP3).");
       return;
@@ -55,8 +168,10 @@ export default function ArAiPage() {
 
     setIsSubmitting(true);
     setError("");
+    setUpgradeRequired(false);
     setReport(null);
 
+    const storedBillingEmail = getStoredBillingEmail();
     const payload = new FormData();
     payload.append("audio", audioFile);
     payload.append("intendedGenre", form.intendedGenre.trim());
@@ -64,25 +179,100 @@ export default function ArAiPage() {
     if (form.lyrics.trim()) payload.append("lyrics", form.lyrics.trim());
     if (form.references.trim()) payload.append("references", form.references.trim());
     if (form.releaseIntent) payload.append("releaseIntent", form.releaseIntent);
+    if (storedBillingEmail) payload.append("billingEmail", storedBillingEmail);
+
+    const headers: Record<string, string> = {};
+    if (storedBillingEmail) {
+      headers[MASTERSOUCE_BILLING_EMAIL_HEADER] = storedBillingEmail;
+    }
 
     try {
       const response = await fetch("/api/ar-ai", {
         method: "POST",
+        credentials: "include",
+        headers,
         body: payload
       });
 
-      const data = (await response.json()) as ArAiReport & { error?: string; message?: string };
+      const data = (await response.json()) as ArAiReport & ArAiErrorResponse;
 
       if (!response.ok) {
+        if (data.code === "email_verification_required") {
+          setVerifyError("");
+          setVerifyEmail(storedBillingEmail);
+          setPendingRetryAfterVerify(true);
+          setShowEmailVerifyModal(true);
+          return;
+        }
+        if (data.code === "hit_analyzer_quota_exhausted") {
+          setUpgradeRequired(Boolean(data.upgradeRequired));
+          setError(data.message || "You reached your Hit Analyzer limit for this month.");
+          if (typeof data.limit === "number") {
+            setUsage((current) =>
+              current
+                ? { ...current, remaining: 0, limit: data.limit ?? current.limit, entitled: false }
+                : {
+                    used: data.limit ?? 0,
+                    limit: data.limit ?? null,
+                    remaining: 0,
+                    planId: "free",
+                    unlimited: false,
+                    entitled: false
+                  }
+            );
+          }
+          return;
+        }
         setError(data.message || data.error || "A&R evaluation failed. Please try again.");
         return;
       }
 
-      setReport(data);
+      if ("overallRating" in data && data.overallRating) {
+        setReport(data);
+        void refreshAccess(storedBillingEmail);
+      }
     } catch {
       setError("Network error while submitting your track. Please check your connection and retry.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAnalysis();
+  }
+
+  async function verifyEmailAndMaybeRetry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedEmail = verifyEmail.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setVerifyError("Enter a valid email address.");
+      return;
+    }
+
+    setIsVerifyingEmail(true);
+    setVerifyError("");
+    try {
+      const data = await refreshAccess(normalizedEmail);
+      if (!data || !data.ok) {
+        setVerifyError(
+          data && "message" in data && typeof data.message === "string"
+            ? data.message
+            : "Unable to confirm email access."
+        );
+        return;
+      }
+      persistBillingEmail(normalizedEmail);
+      setShowEmailVerifyModal(false);
+      if (pendingRetryAfterVerify) {
+        setPendingRetryAfterVerify(false);
+        await runAnalysis();
+      }
+    } catch {
+      setVerifyError("Could not confirm email access right now. Please try again.");
+    } finally {
+      setIsVerifyingEmail(false);
     }
   }
 
@@ -96,17 +286,104 @@ export default function ArAiPage() {
 
       <header style={heroStyle}>
         <p style={eyebrowStyle}>Release readiness</p>
-        <h1 style={h1Style}>MasterSauce A&R AI</h1>
+        <div style={titleRowStyle}>
+          <h1 style={h1Style}>MasterSauce A&R AI</h1>
+          <button
+            type="button"
+            style={howItWorksButtonStyle}
+            aria-expanded={howItWorksOpen}
+            aria-controls="how-it-works-dialog"
+            onClick={() => setHowItWorksOpen(true)}
+          >
+            How it works
+          </button>
+        </div>
         <p style={introStyle}>
           Get a professional A&R-style release readiness report for your song. This does not predict hits — it evaluates
           how competitive your track appears within its intended genre.
         </p>
       </header>
 
+      {howItWorksOpen ? (
+        <div
+          style={modalBackdropStyle}
+          onClick={() => setHowItWorksOpen(false)}
+          role="presentation"
+        >
+          <div
+            id="how-it-works-dialog"
+            style={modalCardStyle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="how-it-works-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="how-it-works-title" style={modalTitleStyle}>
+              How MasterSauce Hit Analyzer Works
+            </h2>
+            <div style={modalBodyStyle}>
+              <p style={modalParagraphStyle}>
+                MasterSauce Hit Analyzer does not predict whether a song will become a hit.
+              </p>
+              <p style={modalParagraphStyle}>
+                It creates a professional A&amp;R-style release readiness report by combining audio feature analysis,
+                commercial songwriting principles, music psychology, and modern streaming behavior.
+              </p>
+              <p style={modalParagraphStyle}>
+                The system reviews signals like production quality, hook strength, replay value, emotional impact,
+                arrangement, playlist fit, and commercial competitiveness within your intended genre.
+              </p>
+              <p style={modalParagraphStyle}>
+                Use the report as a creative decision tool: it helps you understand what feels strong, what may hold the
+                song back, and what to improve before release.
+              </p>
+            </div>
+            <div style={modalFooterStyle}>
+              <Link href="/learn" style={learnMoreLinkStyle}>
+                Learn more
+              </Link>
+              <button type="button" style={modalCloseButtonStyle} onClick={() => setHowItWorksOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {launch ? (
+        <div style={launch.launchActive ? launchBannerActiveStyle : launchBannerEndedStyle} role="status">
+          {launch.launchActive ? (
+            <>
+              <p style={launchBannerTitleStyle}>{launch.message}</p>
+              <p style={launchBannerSubStyle}>Try Hit Analyzer free during launch.</p>
+            </>
+          ) : (
+            <>
+              <p style={launchBannerTitleStyle}>Monthly Hit Analyzer allowance</p>
+              <p style={launchBannerSubStyle}>
+                {usage?.unlimited
+                  ? `${getPlanDisplayName(usage.planId)}: unlimited reports`
+                  : usage
+                    ? `${getPlanDisplayName(usage.planId)}: ${usage.limit ?? "—"}/month${
+                        usage.remaining != null ? ` · ${usage.remaining} remaining` : ""
+                      }`
+                    : "Free: 1/month · Creator: 10/month · Pro: 50/month"}
+              </p>
+            </>
+          )}
+        </div>
+      ) : null}
+
       <form style={cardStyle} onSubmit={handleSubmit} aria-labelledby="ar-ai-form-heading">
         <h2 id="ar-ai-form-heading" style={h2Style}>
           Submit your track
         </h2>
+
+        {emailRequired && !getStoredBillingEmail() ? (
+          <p style={emailHintStyle}>
+            After launch, reports are tied to your email. You&apos;ll be asked to confirm before your first analysis.
+          </p>
+        ) : null}
 
         <label style={labelStyle}>
           Audio file (WAV or MP3) *
@@ -186,9 +463,16 @@ export default function ArAiPage() {
         </button>
 
         {error ? (
-          <p role="alert" style={errorStyle}>
-            {error}
-          </p>
+          <div role="alert" style={errorPanelStyle}>
+            <p style={errorStyle}>{error}</p>
+            {upgradeRequired ? (
+              <p style={upgradeCtaStyle}>
+                <Link href="/#pricing" style={upgradeLinkStyle}>
+                  Upgrade to analyze more songs
+                </Link>
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {isSubmitting ? (
@@ -199,6 +483,51 @@ export default function ArAiPage() {
       </form>
 
       {report ? <ArAiReportView report={report} /> : null}
+
+      {showEmailVerifyModal ? (
+        <div style={verifyEmailModalOverlayStyle}>
+          <div
+            style={verifyEmailModalCardStyle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="verify-hit-analyzer-email-title"
+          >
+            <button
+              type="button"
+              style={verifyEmailModalCloseStyle}
+              onClick={() => setShowEmailVerifyModal(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h3 id="verify-hit-analyzer-email-title" style={verifyEmailModalTitleStyle}>
+              Confirm email for Hit Analyzer
+            </h3>
+            <p style={verifyEmailModalBodyStyle}>
+              Hit Analyzer usage is tied to confirmed email access and anti-abuse checks after the launch period.
+            </p>
+            <form onSubmit={verifyEmailAndMaybeRetry} style={verifyEmailModalFormStyle}>
+              <input
+                type="email"
+                autoComplete="email"
+                value={verifyEmail}
+                onChange={(event) => setVerifyEmail(event.target.value)}
+                placeholder="you@example.com"
+                style={inputStyle}
+                required
+              />
+              <button type="submit" disabled={isVerifyingEmail} style={submitButtonStyle}>
+                {isVerifyingEmail ? "Confirming…" : "Confirm email access"}
+              </button>
+              {verifyError ? (
+                <p role="alert" style={errorStyle}>
+                  {verifyError}
+                </p>
+              ) : null}
+            </form>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -351,6 +680,26 @@ const heroStyle: CSSProperties = {
   marginBottom: "24px"
 };
 
+const titleRowStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: "12px 16px",
+  marginBottom: "12px"
+};
+
+const howItWorksButtonStyle: CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: "999px",
+  border: "1px solid rgba(158, 182, 255, 0.45)",
+  background: "rgba(14, 22, 42, 0.85)",
+  color: "#9eb6ff",
+  fontWeight: 600,
+  fontSize: "0.88rem",
+  cursor: "pointer",
+  fontFamily: "inherit"
+};
+
 const eyebrowStyle: CSSProperties = {
   margin: "0 0 8px",
   color: "#8de8cb",
@@ -361,7 +710,7 @@ const eyebrowStyle: CSSProperties = {
 };
 
 const h1Style: CSSProperties = {
-  margin: "0 0 12px",
+  margin: 0,
   fontSize: "clamp(1.8rem, 4vw, 2.4rem)",
   lineHeight: 1.15,
   letterSpacing: "-0.02em"
@@ -372,6 +721,41 @@ const introStyle: CSSProperties = {
   color: "#b8c4ea",
   maxWidth: "62ch",
   fontSize: "1.02rem"
+};
+
+const launchBannerActiveStyle: CSSProperties = {
+  marginBottom: "16px",
+  padding: "14px 16px",
+  borderRadius: "14px",
+  border: "1px solid rgba(141, 232, 203, 0.4)",
+  background: "linear-gradient(145deg, rgba(18, 44, 38, 0.92), rgba(10, 24, 22, 0.88))"
+};
+
+const launchBannerEndedStyle: CSSProperties = {
+  marginBottom: "16px",
+  padding: "14px 16px",
+  borderRadius: "14px",
+  border: "1px solid rgba(118, 136, 210, 0.35)",
+  background: "linear-gradient(145deg, rgba(22, 28, 52, 0.92), rgba(12, 18, 36, 0.88))"
+};
+
+const launchBannerTitleStyle: CSSProperties = {
+  margin: 0,
+  color: "#eef2ff",
+  fontWeight: 700,
+  fontSize: "0.95rem"
+};
+
+const launchBannerSubStyle: CSSProperties = {
+  margin: "6px 0 0",
+  color: "#b8c4ea",
+  fontSize: "0.88rem"
+};
+
+const emailHintStyle: CSSProperties = {
+  margin: 0,
+  color: "#9eb6ff",
+  fontSize: "0.86rem"
 };
 
 const cardStyle: CSSProperties = {
@@ -443,10 +827,71 @@ const submitButtonDisabledStyle: CSSProperties = {
   cursor: "not-allowed"
 };
 
+const errorPanelStyle: CSSProperties = {
+  display: "grid",
+  gap: "6px"
+};
+
 const errorStyle: CSSProperties = {
   margin: 0,
   color: "#ffb4ab",
   fontWeight: 600
+};
+
+const upgradeCtaStyle: CSSProperties = {
+  margin: 0,
+  fontSize: "0.9rem"
+};
+
+const upgradeLinkStyle: CSSProperties = {
+  color: "#8de8cb",
+  fontWeight: 700,
+  textDecoration: "none"
+};
+
+const verifyEmailModalOverlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(4, 8, 18, 0.72)",
+  display: "grid",
+  placeItems: "center",
+  padding: "20px",
+  zIndex: 95
+};
+
+const verifyEmailModalCardStyle: CSSProperties = {
+  ...cardStyle,
+  width: "min(100%, 420px)",
+  position: "relative"
+};
+
+const verifyEmailModalCloseStyle: CSSProperties = {
+  position: "absolute",
+  top: "10px",
+  right: "12px",
+  border: "none",
+  background: "transparent",
+  color: "#9eb6ff",
+  fontSize: "1.4rem",
+  cursor: "pointer",
+  lineHeight: 1
+};
+
+const verifyEmailModalTitleStyle: CSSProperties = {
+  ...h2Style,
+  marginBottom: "8px"
+};
+
+const verifyEmailModalBodyStyle: CSSProperties = {
+  margin: "0 0 12px",
+  color: "#b8c4ea",
+  fontSize: "0.9rem",
+  lineHeight: 1.45
+};
+
+const verifyEmailModalFormStyle: CSSProperties = {
+  display: "grid",
+  gap: "10px"
 };
 
 const loadingStyle: CSSProperties = {
@@ -633,4 +1078,75 @@ const disclaimerStyle: CSSProperties = {
   color: "#9aa8cf",
   fontSize: "0.86rem",
   fontStyle: "italic"
+};
+
+const modalBackdropStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 90,
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(2, 5, 14, 0.72)",
+  backdropFilter: "blur(4px)",
+  padding: "20px"
+};
+
+const modalCardStyle: CSSProperties = {
+  width: "min(100%, 560px)",
+  maxHeight: "min(90vh, 640px)",
+  overflowY: "auto",
+  borderRadius: "20px",
+  border: "1px solid rgba(146, 160, 220, 0.28)",
+  background: "linear-gradient(160deg, rgba(20, 29, 51, 0.98), rgba(11, 18, 34, 0.98))",
+  boxShadow: "0 30px 70px rgba(1, 5, 14, 0.55)",
+  padding: "24px",
+  color: "#eaf0ff"
+};
+
+const modalTitleStyle: CSSProperties = {
+  margin: 0,
+  color: "#f0f5ff",
+  fontSize: "clamp(1.2rem, 2vw, 1.45rem)",
+  lineHeight: 1.25
+};
+
+const modalBodyStyle: CSSProperties = {
+  marginTop: "14px",
+  display: "grid",
+  gap: "12px"
+};
+
+const modalParagraphStyle: CSSProperties = {
+  margin: 0,
+  color: "#b8c4ea",
+  lineHeight: 1.55,
+  fontSize: "0.96rem"
+};
+
+const modalFooterStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  marginTop: "20px",
+  paddingTop: "16px",
+  borderTop: "1px solid rgba(86, 104, 160, 0.35)"
+};
+
+const learnMoreLinkStyle: CSSProperties = {
+  color: "#8de8cb",
+  fontWeight: 600,
+  textDecoration: "none"
+};
+
+const modalCloseButtonStyle: CSSProperties = {
+  border: "1px solid rgba(136, 154, 212, 0.42)",
+  borderRadius: "11px",
+  background: "rgba(13, 21, 40, 0.9)",
+  color: "#b4c3ec",
+  padding: "10px 14px",
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: "inherit"
 };

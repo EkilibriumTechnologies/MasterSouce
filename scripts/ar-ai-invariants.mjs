@@ -67,6 +67,14 @@ function runSchemaAndPromptTests() {
   assertIncludes(normalize, "AR_AI_LABEL_DISCUSSION_TITLE", "normalize ensures label discussion title");
 }
 
+const FORBIDDEN_UI_PHRASES = [
+  "predicts hits",
+  "guaranteed hit",
+  "will become successful",
+  "will not become successful",
+  "hit score guarantee"
+];
+
 function runUiTests() {
   const page = read("app/ar-ai/page.tsx");
   assertIncludes(page, 'type="file"', "UI renders file upload");
@@ -81,6 +89,15 @@ function runUiTests() {
   assertIncludes(page, "A&R Scorecard", "UI displays scorecard");
   assertIncludes(page, "MasterSauce A&R AI", "UI headline");
   assertIncludes(page, "does not predict hits", "UI subheadline disclaimer");
+  assertIncludes(page, "Try Hit Analyzer free during launch.", "UI launch promo copy");
+  assertIncludes(page, "How MasterSauce Hit Analyzer Works", "UI how-it-works title");
+  assertIncludes(page, "does not predict whether a song will become a hit", "UI how-it-works disclaimer");
+  assertIncludes(page, "How it works", "UI how-it-works trigger");
+  assertIncludes(page, 'href="/learn"', "UI learn-more link");
+
+  for (const phrase of FORBIDDEN_UI_PHRASES) {
+    assert.ok(!page.includes(phrase), `UI must not include forbidden phrase "${phrase}"`);
+  }
 }
 
 function runIsolationTests() {
@@ -89,7 +106,8 @@ function runIsolationTests() {
 
   assert.ok(!masterAi.includes("ar-ai"), "master-ai route must not reference ar-ai");
   assert.ok(!route.includes("adaptiveMastering"), "ar-ai route must not invoke adaptive mastering");
-  assert.ok(!route.includes("getEntitlementsForUser"), "ar-ai route must not touch billing entitlements");
+  assertIncludes(route, "resolveHitAnalyzerAccess", "ar-ai route enforces Hit Analyzer access before OpenAI");
+  assertIncludes(route, "requestArAiEvaluationFromOpenAI", "ar-ai route still calls OpenAI after access checks");
 }
 
 function run() {
