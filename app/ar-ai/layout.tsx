@@ -6,7 +6,7 @@ import { buildPageMetadata } from "@/lib/seo/page-metadata";
 export const metadata: Metadata = buildPageMetadata({
   title: "MasterSauce Hit Analyzer | A&R-Style Release Readiness Report",
   description:
-    "Professional A&R-style release readiness report based on audio analysis, commercial songwriting principles, and streaming behavior — not hit prediction.",
+    "Get a professional A&R-style report for your song. It does not predict hits — it evaluates hook strength, production quality, replay value, playlist fit, and commercial readiness.",
   path: "/ar-ai",
   absoluteTitle: true
 });
