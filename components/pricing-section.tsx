@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { trackEvent } from "@/lib/analytics/ab-comparison";
+import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 import { trackSubscriptionButtonClick } from "@/lib/analytics/subscription-button";
 import { getGaClientId } from "@/lib/analytics/gtag";
 import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
@@ -124,6 +125,7 @@ export function PricingSection() {
   const emailInputRef = useRef<HTMLInputElement>(null);
   const [promoActive, setPromoActive] = useState(() => isFathersDayPromoActive());
   const promoViewTrackedRef = useRef(false);
+  const funnelViewTrackedRef = useRef(false);
 
   const modalOpen = modalMode !== null;
   const adaptiveIntent = searchParams?.get("intent") === "adaptive";
@@ -138,6 +140,20 @@ export function PricingSection() {
       page_path: window.location.pathname
     });
   }, [promoActive]);
+
+  useEffect(() => {
+    if (funnelViewTrackedRef.current) return;
+    funnelViewTrackedRef.current = true;
+    trackMasteringFunnelEvent("mastering_credit_pack_cta_viewed", {
+      source_component: "pricing_section"
+    });
+    for (const planId of ["creator_monthly", "pro_studio_monthly"] as const) {
+      trackMasteringFunnelEvent("mastering_subscription_cta_viewed", {
+        source_component: "pricing_section",
+        plan_id: planId
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -178,12 +194,21 @@ export function PricingSection() {
         metadata,
         sourceComponent: "pricing_section"
       });
+      trackMasteringFunnelEvent("mastering_subscription_cta_clicked", {
+        source_component: "pricing_section",
+        plan_id: nextSelection.planId
+      });
       setModalMode("checkout");
       setSelection({ ...nextSelection, metadata });
       setBillingEmail("");
       setEmailError("");
       setCheckoutError("");
       return;
+    }
+    if (nextSelection.kind === "credit_pack") {
+      trackMasteringFunnelEvent("mastering_credit_pack_cta_clicked", {
+        source_component: "pricing_section"
+      });
     }
     setModalMode("checkout");
     setSelection(nextSelection);
@@ -241,6 +266,10 @@ export function PricingSection() {
     if (typeof window !== "undefined") {
       sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, trimmed.toLowerCase());
     }
+    trackMasteringFunnelEvent("mastering_checkout_started", {
+      source_component: "pricing_section",
+      plan_id: nextSelection.kind === "subscription" ? nextSelection.planId : "credit_pack"
+    });
     const response = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
+import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
 import { PromoBanner } from "@/components/promo/promo-banner";
 
@@ -20,6 +21,19 @@ export function DownloadLimitModal({ open, planId, analyticsContext, onClose, on
 
   useEffect(() => {
     if (!open) return;
+    trackMasteringFunnelEvent("mastering_export_gate_viewed", {
+      source_component: "download_limit_modal",
+      plan_id: planId ?? undefined,
+      gate_reason: "wav_quota_exhausted"
+    });
+    trackMasteringFunnelEvent("mastering_credit_pack_cta_viewed", {
+      source_component: "download_limit_modal",
+      plan_id: planId ?? undefined
+    });
+    trackMasteringFunnelEvent("mastering_subscription_cta_viewed", {
+      source_component: "download_limit_modal",
+      plan_id: planId ?? undefined
+    });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -105,6 +119,11 @@ export function DownloadLimitModal({ open, planId, analyticsContext, onClose, on
                 plan_id: planId ?? undefined,
                 source_component: "ab_comparison",
                 page_path: window.location.pathname
+              });
+              trackMasteringFunnelEvent("mastering_subscription_cta_clicked", {
+                source_component: "download_limit_modal",
+                plan_id: planId ?? undefined,
+                gate_reason: "wav_quota_exhausted"
               });
               onViewPlans();
             }}

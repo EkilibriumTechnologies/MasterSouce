@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { CSSProperties, ReactNode } from "react";
 import { CompareSpectrum } from "@/components/audio-compare-spectrum";
 import { trackAbEvent, type AbVersion } from "@/lib/analytics/ab-comparison";
+import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 
 type AudioCompareProps = {
   originalPreviewUrl: string;
@@ -81,7 +82,14 @@ export function AudioCompare({
     setMasteredDuration(0);
     progressMilestonesRef.current.original.clear();
     progressMilestonesRef.current.mastered.clear();
-  }, [originalPreviewUrl, masteredPreviewUrl]);
+    trackMasteringFunnelEvent("mastering_ab_viewed", {
+      source_component: "ab_comparison",
+      job_id: analyticsContext?.jobId,
+      file_id: analyticsContext?.fileId,
+      plan_id: analyticsContext?.planId,
+      mastering_mode: analyticsContext?.masteringMode
+    });
+  }, [originalPreviewUrl, masteredPreviewUrl, analyticsContext?.jobId, analyticsContext?.fileId, analyticsContext?.planId, analyticsContext?.masteringMode]);
 
   useLayoutEffect(() => {
     activeSourceRef.current = activeSource;
@@ -224,6 +232,16 @@ export function AudioCompare({
     };
   }
 
+  function trackMasteringPreviewPlayed(version: AbVersion): void {
+    trackMasteringFunnelEvent("mastering_preview_played", {
+      source_component: "ab_comparison",
+      job_id: analyticsContext?.jobId,
+      file_id: analyticsContext?.fileId,
+      plan_id: analyticsContext?.planId,
+      mastering_mode: analyticsContext?.masteringMode ?? version
+    });
+  }
+
   function trackProgressMilestones(version: AbVersion, position: number, duration: number) {
     if (duration <= 0) return;
     const currentPercent = (position / duration) * 100;
@@ -327,6 +345,7 @@ export function AudioCompare({
               const position = event.currentTarget.currentTime || 0;
               const duration = event.currentTarget.duration || 0;
               trackAbEvent("ab_original_play", baseAnalyticsParams("original", position, duration));
+              trackMasteringPreviewPlayed("original");
             }}
             onPause={(event) => {
               if (activeSourceRef.current !== "original") return;
@@ -445,6 +464,7 @@ export function AudioCompare({
               const position = event.currentTarget.currentTime || 0;
               const duration = event.currentTarget.duration || 0;
               trackAbEvent("ab_mastered_play", baseAnalyticsParams("mastered", position, duration));
+              trackMasteringPreviewPlayed("mastered");
             }}
             onPause={(event) => {
               if (activeSourceRef.current !== "mastered") return;

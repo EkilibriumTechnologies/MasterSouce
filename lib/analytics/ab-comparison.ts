@@ -23,9 +23,16 @@ export type AbEventParams = {
   playback_position_seconds?: number;
   playback_percent?: number;
   source_component?: string;
+  source_flow?: string;
   page_path?: string;
   timestamp?: string;
   debug_mode?: boolean;
+  has_active_subscription?: boolean;
+  has_credit_balance?: boolean;
+  credit_balance?: number;
+  export_quality?: string;
+  gate_reason?: string;
+  error_code?: string;
 };
 
 function resolvePagePath(): string | undefined {

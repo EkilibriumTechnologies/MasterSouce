@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
+import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 
 type EmailCaptureFormProps = {
   jobId: string;
@@ -14,6 +15,15 @@ export function EmailCaptureForm({ jobId, fileId, onUnlocked }: EmailCaptureForm
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    trackMasteringFunnelEvent("mastering_export_gate_viewed", {
+      source_component: "email_capture_form",
+      job_id: jobId,
+      file_id: fileId,
+      gate_reason: "email_unlock_required"
+    });
+  }, [jobId, fileId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

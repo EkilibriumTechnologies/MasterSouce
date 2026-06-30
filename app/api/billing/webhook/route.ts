@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { trackGa4PurchaseFromCheckoutSession, trackGa4PurchaseFromPaidSubscriptionInvoice } from "@/lib/analytics/stripe-ga4-purchase";
 import { appendCreditPackLedgerEntry, hasProcessedStripeEvent, persistStripeBillingEvent } from "@/lib/billing/store";
+import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel";
 import { reconcileStripeSubscription } from "@/lib/billing/stripe-reconcile";
 import { getStripeClient, getStripeWebhookSecret } from "@/lib/stripe/server";
 
@@ -80,6 +81,12 @@ export async function POST(request: NextRequest) {
         );
         if (subId) {
           await retrieveAndReconcileSubscription(stripe, subId);
+          logMasteringFunnelEvent("mastering_subscription_detected", {
+            source_component: "billing_webhook",
+            normalized_email: normalizeEmailForFunnelLog(sessionEmail),
+            plan_id: typeof session.metadata?.plan_id === "string" ? session.metadata.plan_id : undefined,
+            has_active_subscription: true
+          });
           console.log(
             JSON.stringify({
               scope: "billing_webhook",
@@ -118,6 +125,19 @@ export async function POST(request: NextRequest) {
               source: "stripe_webhook",
               eventId: event.id
             }
+          });
+          logMasteringFunnelEvent("mastering_credit_pack_purchase_completed", {
+            source_component: "billing_webhook",
+            normalized_email: normalizeEmailForFunnelLog(email),
+            credit_balance: 5,
+            has_credit_balance: true,
+            plan_id: "credit_pack"
+          });
+          logMasteringFunnelEvent("mastering_user_has_unused_credits", {
+            source_component: "billing_webhook",
+            normalized_email: normalizeEmailForFunnelLog(email),
+            credit_balance: 5,
+            has_credit_balance: true
           });
           console.log("[billing-webhook] credit pack ledger", { email, sessionId: session.id });
         }

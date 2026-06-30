@@ -27,8 +27,27 @@ import {
 } from "@/lib/usage/download-quota-policy";
 import { tryConsumeLocalBillableDownload } from "@/lib/usage/local-download-usage";
 import { hasRecentBillableDownloadForJobFile } from "@/lib/usage/supabase-download-usage";
+import {
+  logMasteringFunnelEvent,
+  masteringFunnelBillingSnapshot,
+  normalizeEmailForFunnelLog
+} from "@/lib/analytics/mastering-funnel";
 
 type DownloadRateKeyType = "user" | "session" | "ip" | "fallback";
+
+function logMasteringDownloadBlocked(details: Record<string, unknown>): void {
+  logMasteringFunnelEvent("mastering_download_blocked", {
+    source_component: "api_download",
+    ...details
+  });
+}
+
+function logMasteringDownloadAllowed(details: Record<string, unknown>): void {
+  logMasteringFunnelEvent("mastering_download_allowed", {
+    source_component: "api_download",
+    ...details
+  });
+}
 
 function getAuthenticatedUserIdFromRequest(request: NextRequest): string | null {
   const raw =
@@ -115,10 +134,22 @@ export async function GET(request: NextRequest) {
           if (isJobUnlocked(resolvedJobId)) {
             masteredUnlock = null;
           } else {
+            logMasteringDownloadBlocked({
+              job_id: resolvedJobId,
+              file_id: wavRecord.id,
+              export_format: "mp3",
+              gate_reason: "email_required"
+            });
             return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
           }
         }
       } else if (!isJobUnlocked(resolvedJobId)) {
+        logMasteringDownloadBlocked({
+          job_id: resolvedJobId,
+          file_id: wavRecord.id,
+          export_format: "mp3",
+          gate_reason: "email_required"
+        });
         return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
       }
 
@@ -139,6 +170,12 @@ export async function GET(request: NextRequest) {
             { status: 403 }
           );
           attachSessionCookieIfNeeded(res, sessionPrep);
+          logMasteringDownloadBlocked({
+            job_id: resolvedJobId,
+            file_id: wavRecord.id,
+            export_format: "mp3",
+            gate_reason: "unverified_email"
+          });
           return res;
         }
 
@@ -202,10 +239,22 @@ export async function GET(request: NextRequest) {
           if (isJobUnlocked(record.jobId)) {
             masteredUnlock = null;
           } else {
+            logMasteringDownloadBlocked({
+              job_id: record.jobId,
+              file_id: record.id,
+              export_format: isMasteredWavAsset ? "wav" : "mp3",
+              gate_reason: "email_required"
+            });
             return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
           }
         }
       } else if (!isJobUnlocked(record.jobId)) {
+        logMasteringDownloadBlocked({
+          job_id: record.jobId,
+          file_id: record.id,
+          export_format: isMasteredWavAsset ? "wav" : "mp3",
+          gate_reason: "email_required"
+        });
         return NextResponse.json({ error: "Email required before full download." }, { status: 403 });
       }
     }
@@ -277,6 +326,12 @@ export async function GET(request: NextRequest) {
           { status: 403 }
         );
         attachSessionCookieIfNeeded(res, sessionPrep);
+        logMasteringDownloadBlocked({
+          job_id: record.jobId,
+          file_id: record.id,
+          export_format: "wav",
+          gate_reason: "unverified_email"
+        });
         return res;
       }
 
@@ -333,6 +388,14 @@ export async function GET(request: NextRequest) {
                     reason: "getEntitlementsForUser_returned_canDownload_false"
                   })
                 );
+                logMasteringDownloadBlocked({
+                  job_id: record.jobId,
+                  file_id: record.id,
+                  export_format: "wav",
+                  gate_reason: "quota_exhausted",
+                  normalized_email: normalizeEmailForFunnelLog(masteredUnlock.normalizedEmail),
+                  ...masteringFunnelBillingSnapshot(entitlements)
+                });
                 const res = NextResponse.json(noMastersRemainingPayload(entitlements.planId), { status: 403 });
                 attachSessionCookieIfNeeded(res, sessionPrep);
                 return res;
@@ -353,6 +416,13 @@ export async function GET(request: NextRequest) {
           adminBypass
         );
         if (!allowed) {
+          logMasteringDownloadBlocked({
+            job_id: record.jobId,
+            file_id: record.id,
+            export_format: "wav",
+            gate_reason: "quota_exhausted_local",
+            plan_id: "free"
+          });
           const res = NextResponse.json(noMastersRemainingPayload("free"), { status: 403 });
           attachSessionCookieIfNeeded(res, sessionPrep);
           return res;
@@ -439,6 +509,15 @@ export async function GET(request: NextRequest) {
     }
 
     const maxBuffered = 60 * 1024 * 1024;
+    if (forceDownload && (isMasteredWavAsset || record.kind === "mastered_mp3")) {
+      logMasteringDownloadAllowed({
+        job_id: record.jobId,
+        file_id: record.id,
+        export_format: wantsMp3Master || record.kind === "mastered_mp3" ? "mp3" : "wav",
+        normalized_email: normalizeEmailForFunnelLog(masteredUnlock?.normalizedEmail),
+        plan_id: masteredUnlock ? undefined : "free"
+      });
+    }
     if (refreshedStats.size <= maxBuffered) {
       const buffer = await readFile(record.filePath);
       const res = new NextResponse(new Uint8Array(buffer), { headers });

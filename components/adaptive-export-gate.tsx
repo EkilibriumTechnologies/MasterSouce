@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { getGaClientId } from "@/lib/analytics/gtag";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import {
@@ -12,6 +12,7 @@ import { buildAdaptiveCheckoutReturnTo } from "@/lib/billing/adaptive-pricing-li
 import type { PendingAdaptiveExportV1 } from "@/lib/billing/pending-adaptive-export";
 import { savePendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
 import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
+import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 import { trackSubscriptionButtonClick } from "@/lib/analytics/subscription-button";
 import type { MasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
 import {
@@ -78,6 +79,19 @@ export function AdaptiveExportGate({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [needsCheckoutPath, setNeedsCheckoutPath] = useState(false);
+
+  useEffect(() => {
+    trackMasteringFunnelEvent("mastering_export_gate_viewed", {
+      source_component: "adaptive_export_gate",
+      job_id: jobId,
+      file_id: fileId,
+      gate_reason: "adaptive_subscription_required"
+    });
+    trackMasteringFunnelEvent("mastering_subscription_cta_viewed", {
+      source_component: "adaptive_export_gate",
+      plan_id: ADAPTIVE_CHECKOUT_PLAN_ID
+    });
+  }, [jobId, fileId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -182,6 +196,12 @@ export function AdaptiveExportGate({
     setCheckoutLoading(true);
     setError(null);
     setInfo(null);
+    trackMasteringFunnelEvent("mastering_checkout_started", {
+      source_component: "adaptive_export_gate",
+      plan_id: ADAPTIVE_CHECKOUT_PLAN_ID,
+      job_id: jobId,
+      file_id: fileId
+    });
     try {
       sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, trimmed);
       savePendingAdaptiveExport(pendingCheckoutSnapshot);
@@ -310,6 +330,12 @@ export function AdaptiveExportGate({
               trackSubscriptionButtonClick({
                 metadata: adaptiveCheckoutMetadata,
                 sourceComponent: "adaptive_export_gate"
+              });
+              trackMasteringFunnelEvent("mastering_subscription_cta_clicked", {
+                source_component: "adaptive_export_gate",
+                plan_id: ADAPTIVE_CHECKOUT_PLAN_ID,
+                job_id: jobId,
+                file_id: fileId
               });
               void handleContinueToCheckout();
             }}

@@ -27,6 +27,7 @@ import type { PlanId } from "@/lib/subscriptions/types";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 import { trackAbEvent, trackEvent } from "@/lib/analytics/ab-comparison";
 import { buildMasteringAnalyticsContext } from "@/lib/analytics/mastering-context";
+import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 import { getLoudnessModeLufsTarget } from "@/lib/genre-presets";
 import { setMastersourceWorkflowBusy } from "@/lib/promo/workflow-guard";
 
@@ -507,9 +508,17 @@ export function UploadForm() {
       setFile(null);
       return;
     }
+    trackMasteringFunnelEvent("mastering_upload_started", {
+      source_component: "upload_form",
+      mastering_mode: adaptiveModeActive ? "adaptive" : "standard"
+    });
     if (selected.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
       setFile(null);
       setError(`File exceeds the maximum upload size of ${MAX_UPLOAD_FILE_SIZE_LABEL}.`);
+      trackMasteringFunnelEvent("mastering_upload_failed", {
+        source_component: "upload_form",
+        error_code: "file_too_large"
+      });
       if (input) {
         input.value = "";
       }
@@ -517,6 +526,10 @@ export function UploadForm() {
     }
     setError(null);
     setFile(selected);
+    trackMasteringFunnelEvent("mastering_upload_succeeded", {
+      source_component: "upload_form",
+      mastering_mode: adaptiveModeActive ? "adaptive" : "standard"
+    });
   }
 
   function handleReferenceTrackSelection(selected: File | null, input?: HTMLInputElement) {
@@ -562,6 +575,10 @@ export function UploadForm() {
       setConfirmedContinueWithStandard(false);
     }
     setStatus("Uploading your file…");
+    trackMasteringFunnelEvent("mastering_preview_started", {
+      source_component: "upload_form",
+      mastering_mode: "standard"
+    });
 
     try {
       const formData = new FormData();
@@ -596,6 +613,13 @@ export function UploadForm() {
     setAdaptiveModeActive(false);
     setAdaptiveAiNotice(null);
     setStatus("Recommended master is ready — A/B below, then add email only when you export.");
+      trackMasteringFunnelEvent("mastering_preview_succeeded", {
+        source_component: "upload_form",
+        mastering_mode: "standard",
+        job_id: masterPayload.jobId,
+        file_id: masterPayload.download.fileId,
+        plan_id: masterPayload.quota?.planId
+      });
       return masterPayload;
     } catch (err) {
       const isLocalhost =
@@ -612,6 +636,11 @@ export function UploadForm() {
         setError(raw);
       }
       setStatus("Something failed. Please try again.");
+      trackMasteringFunnelEvent("mastering_preview_failed", {
+        source_component: "upload_form",
+        mastering_mode: "standard",
+        error_code: isLikelyNetworkError(err) ? "network_error" : "mastering_failed"
+      });
       return null;
     } finally {
       setLoading(false);
@@ -631,6 +660,10 @@ export function UploadForm() {
     setError(null);
     setAdaptiveAiNotice(null);
     setStatus("Preparing your recommended baseline for adaptive…");
+    trackMasteringFunnelEvent("mastering_preview_started", {
+      source_component: "upload_form",
+      mastering_mode: "adaptive"
+    });
 
     try {
       let standard = lastStandardResult;
@@ -724,10 +757,22 @@ export function UploadForm() {
       }
       console.log("[ADAPTIVE_UI] adaptive preview completed", { jobId: adaptive.jobId });
       setStatus("Adaptive preview ready — compare below, then export when you are happy.");
+      trackMasteringFunnelEvent("mastering_preview_succeeded", {
+        source_component: "upload_form",
+        mastering_mode: "adaptive",
+        job_id: adaptive.jobId,
+        file_id: adaptive.download.fileId,
+        plan_id: mergedResult.quota?.planId
+      });
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Unexpected adaptive error.";
       setError(raw);
       setStatus("Adaptive preview could not finish. Try again in a moment.");
+      trackMasteringFunnelEvent("mastering_preview_failed", {
+        source_component: "upload_form",
+        mastering_mode: "adaptive",
+        error_code: "adaptive_mastering_failed"
+      });
     } finally {
       setAdaptiveProcessing(false);
     }
@@ -1344,6 +1389,14 @@ export function UploadForm() {
                         }}
                         onClick={() => {
                           if (mp3ExportDownloading || !mp3DownloadUrl) return;
+                          trackMasteringFunnelEvent("mastering_download_clicked", {
+                            source_component: "upload_form",
+                            export_format: "mp3",
+                            job_id: result.jobId,
+                            file_id: result.download.fileId,
+                            plan_id: result.quota?.planId,
+                            mastering_mode: adaptiveModeActive ? "adaptive" : "standard"
+                          });
                           trackAbEvent("ab_download_clicked", {
                             ...masteringAnalyticsContext,
                             version: "mastered",
@@ -1427,6 +1480,14 @@ export function UploadForm() {
                           }}
                           onClick={() => {
                             if (wavExportDownloading || !wavDownloadUrl) return;
+                            trackMasteringFunnelEvent("mastering_download_clicked", {
+                              source_component: "upload_form",
+                              export_format: "wav",
+                              job_id: result.jobId,
+                              file_id: result.download.fileId,
+                              plan_id: result.quota?.planId,
+                              mastering_mode: adaptiveModeActive ? "adaptive" : "standard"
+                            });
                             trackAbEvent("ab_download_clicked", {
                               ...masteringAnalyticsContext,
                               version: "mastered",
@@ -1516,6 +1577,15 @@ export function UploadForm() {
                           style={exportMasterWavLockedCtaStyle}
                           onClick={() => {
                             const exportPlanId = resolveExportPlanId(result.quota?.planId);
+                            trackMasteringFunnelEvent("mastering_download_clicked", {
+                              source_component: "upload_form",
+                              export_format: "wav",
+                              job_id: result.jobId,
+                              file_id: result.download.fileId,
+                              plan_id: exportPlanId,
+                              mastering_mode: adaptiveModeActive ? "adaptive" : "standard",
+                              gate_reason: "wav_quota_exhausted"
+                            });
                             setDownloadLimitPlanId(
                               exportPlanId === "creator_monthly" || exportPlanId === "pro_studio_monthly"
                                 ? exportPlanId

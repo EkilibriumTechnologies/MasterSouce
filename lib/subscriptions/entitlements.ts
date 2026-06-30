@@ -15,6 +15,7 @@ import {
 } from "@/lib/subscriptions/billing-store";
 import { applyAdminEntitlementOverride, isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
 import { resolveMasterWavExportPlanOverride } from "@/lib/subscriptions/master-wav-export-allowlist";
+import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel";
 import { UserProfile } from "@/lib/users/user-profile";
 
 /** @deprecated Use FREE_WAV_DOWNLOADS_PER_MONTH from download-quota-policy. */
@@ -188,5 +189,23 @@ export async function consumeCreditPackMaster(normalizedEmail: string, metadata?
     reason: "credit_pack_consume",
     metadata: metadata ?? null
   });
+  const remaining = balance - 1;
+  const emailForLog = normalizeEmailForFunnelLog(normalizedEmail);
+  logMasteringFunnelEvent("mastering_credit_consumed", {
+    source_component: "credit_ledger",
+    normalized_email: emailForLog,
+    credit_balance: remaining,
+    has_credit_balance: remaining > 0,
+    job_id: typeof metadata?.jobId === "string" ? metadata.jobId : undefined,
+    file_id: typeof metadata?.fileId === "string" ? metadata.fileId : undefined
+  });
+  if (remaining > 0) {
+    logMasteringFunnelEvent("mastering_user_has_unused_credits", {
+      source_component: "credit_ledger",
+      normalized_email: emailForLog,
+      credit_balance: remaining,
+      has_credit_balance: true
+    });
+  }
   return true;
 }

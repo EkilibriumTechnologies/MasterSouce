@@ -23,6 +23,11 @@ import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/up
 import { probeFfmpegSpawnVersion } from "@/lib/audio/ffmpeg-spawn-diagnostics";
 import { createJobId } from "@/lib/jobs/job-id";
 import { incrementProductMetric } from "@/lib/product-metrics";
+import {
+  logMasteringFunnelEvent,
+  masteringFunnelBillingSnapshot,
+  normalizeEmailForFunnelLog
+} from "@/lib/analytics/mastering-funnel";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
@@ -168,6 +173,12 @@ export async function POST(request: NextRequest) {
 
     const normalizedExt = ext === "wav" || file.type.includes("wav") ? "wav" : "mp3";
     const jobId = createJobId("job");
+    logMasteringFunnelEvent("mastering_preview_api_started", {
+      source_component: "api_master",
+      job_id: jobId,
+      normalized_email: normalizeEmailForFunnelLog(billingResolution.normalizedEmail),
+      ...masteringFunnelBillingSnapshot(entitlements)
+    });
     const outputQuality = resolveEncodeOutputQuality(
       entitlements.quality,
       billingResolution.emailSource,
@@ -386,6 +397,21 @@ export async function POST(request: NextRequest) {
     console.log("[MASTER_DEBUG] return:success");
 
     await incrementProductMetric("previews");
+    logMasteringFunnelEvent("mastering_preview_api_succeeded", {
+      source_component: "api_master",
+      job_id: jobId,
+      file_id: masteredRecord.id,
+      normalized_email: normalizeEmailForFunnelLog(billingResolution.normalizedEmail),
+      export_quality: outputQuality,
+      ...masteringFunnelBillingSnapshot(nextEntitlements)
+    });
+    if ((nextEntitlements.creditPackBalance ?? 0) > 0) {
+      logMasteringFunnelEvent("mastering_user_has_unused_credits", {
+        source_component: "api_master",
+        normalized_email: normalizeEmailForFunnelLog(billingResolution.normalizedEmail),
+        ...masteringFunnelBillingSnapshot(nextEntitlements)
+      });
+    }
 
     const response = NextResponse.json({
       jobId,
@@ -423,6 +449,10 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     console.log("[MASTER_DEBUG] catch:error", { name, message, stack });
+    logMasteringFunnelEvent("mastering_preview_api_failed", {
+      source_component: "api_master",
+      error_code: error instanceof FfmpegBinaryMissingError ? "ffmpeg_missing" : "mastering_failed"
+    });
 
     const errSession = prepareSessionForRequest(request);
     const errStack = error instanceof Error ? error.stack ?? error.message : String(error);

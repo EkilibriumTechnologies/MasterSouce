@@ -21,6 +21,11 @@ import {
 import { createJobId } from "@/lib/jobs/job-id";
 import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord, saveTempFile } from "@/lib/storage/temp-files";
 import { incrementProductMetric } from "@/lib/product-metrics";
+import {
+  logMasteringFunnelEvent,
+  masteringFunnelBillingSnapshot,
+  normalizeEmailForFunnelLog
+} from "@/lib/analytics/mastering-funnel";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import {
   logWavExportEntitlementResolution,
@@ -187,6 +192,13 @@ export async function POST(request: NextRequest) {
     }
 
     const jobId = createJobId("adaptive");
+    logMasteringFunnelEvent("mastering_preview_api_started", {
+      source_component: "api_master_ai",
+      job_id: jobId,
+      mastering_mode: "adaptive",
+      normalized_email: normalizeEmailForFunnelLog(billingResolution.normalizedEmail),
+      ...masteringFunnelBillingSnapshot(entitlements)
+    });
     const outputQuality = resolveEncodeOutputQuality(
       entitlements.quality,
       billingResolution.emailSource,
@@ -343,11 +355,25 @@ export async function POST(request: NextRequest) {
     }
 
     await incrementProductMetric("previews");
+    logMasteringFunnelEvent("mastering_preview_api_succeeded", {
+      source_component: "api_master_ai",
+      job_id: jobId,
+      file_id: adaptiveMasterRecord.id,
+      mastering_mode: "adaptive",
+      normalized_email: normalizeEmailForFunnelLog(billingResolution.normalizedEmail),
+      export_quality: outputQuality,
+      ...masteringFunnelBillingSnapshot(entitlements)
+    });
 
     const response = NextResponse.json(payload);
     attachSessionCookieIfNeeded(response, sessionPrep);
     return response;
   } catch (error) {
+    logMasteringFunnelEvent("mastering_preview_api_failed", {
+      source_component: "api_master_ai",
+      mastering_mode: "adaptive",
+      error_code: error instanceof AdaptiveOpenAIError ? error.code : "adaptive_mastering_failed"
+    });
     if (error instanceof AdaptiveOpenAIError) {
       const diag = getAdaptiveOpenAiTimeoutDiagnostics();
       console.error("[master-ai] adaptive_openai_error", {

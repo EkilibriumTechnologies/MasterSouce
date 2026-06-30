@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAdaptiveEntitlementByEmail } from "@/lib/billing/store";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { getStripeClient, getStripeCreditPackPriceId, getStripePriceIdForPlan } from "@/lib/stripe/server";
+import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel";
 
 const optionalGaClientId = z.preprocess((val) => {
   if (val == null) return undefined;
@@ -159,6 +160,11 @@ export async function POST(request: NextRequest) {
     if (!session.url) {
       return NextResponse.json({ error: "Unable to start checkout session." }, { status: 500 });
     }
+    logMasteringFunnelEvent("mastering_checkout_session_created", {
+      source_component: "api_billing_checkout",
+      plan_id: parsed.data.kind === "subscription" ? parsed.data.planId : "credit_pack",
+      normalized_email: normalizeEmailForFunnelLog(email)
+    });
     if (parsed.data.kind === "subscription" && parsed.data.intent === "adaptive") {
       console.log("[billing-checkout] adaptive: Stripe checkout session created (user explicitly started checkout)");
     }
