@@ -83,6 +83,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <Link href="/song-architect" style={topNavLinkStyle}>
             Song Architect
           </Link>
+          <Link href="/ar-ai" style={topNavLinkStyle}>
+            Hit Analyzer
+          </Link>
           <a href="#pricing" style={topNavLinkStyle}>
             Pricing
           </a>
@@ -197,6 +200,22 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <p style={proseCenterStyle}>
           Upload free. Preview with MP3, download free MP3 masters, or export HD WAV on premium plans.
         </p>
+      </section>
+
+      <section id="hit-analyzer" style={productFeatureSectionStyle} aria-labelledby="hit-analyzer-heading">
+        <p style={productBadgeStyle}>A&amp;R RELEASE READINESS</p>
+        <h2 id="hit-analyzer-heading" style={sectionTitle}>
+          MasterSauce Hit Analyzer
+        </h2>
+        <p style={productFeatureCopyStyle}>
+          Get a professional A&amp;R-style report for your song. This does not predict hits — it evaluates hook
+          strength, production quality, replay value, playlist fit, and commercial readiness within your intended genre.
+        </p>
+        <div style={productCtaRowStyle}>
+          <Link href="/ar-ai" style={ctaPrimaryStyle}>
+            Analyze Your Song
+          </Link>
+        </div>
       </section>
 
       <section id="reference-guided-mastering" style={sectionStyle} aria-labelledby="reference-guided-heading">
@@ -508,6 +527,42 @@ const sectionStyle: React.CSSProperties = {
   borderRadius: "24px",
   boxShadow: "0 18px 40px rgba(2, 4, 12, 0.45)",
   padding: "32px 24px"
+};
+
+const productFeatureSectionStyle: React.CSSProperties = {
+  ...sectionStyle,
+  textAlign: "center",
+  background:
+    "radial-gradient(720px 280px at 50% 0%, rgba(143, 98, 255, 0.18), rgba(143, 98, 255, 0) 65%), linear-gradient(145deg, rgba(22, 29, 48, 0.94), rgba(12, 17, 30, 0.94))"
+};
+
+const productBadgeStyle: React.CSSProperties = {
+  margin: "0 auto 12px",
+  display: "inline-block",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  letterSpacing: "0.14em",
+  textTransform: "uppercase",
+  color: "#c4b0ff",
+  border: "1px solid rgba(143, 98, 255, 0.42)",
+  borderRadius: "999px",
+  padding: "6px 12px",
+  background: "rgba(20, 16, 42, 0.72)"
+};
+
+const productFeatureCopyStyle: React.CSSProperties = {
+  margin: "16px auto 0",
+  maxWidth: "680px",
+  color: "#9ca8cc",
+  lineHeight: 1.7,
+  fontSize: "1.05rem",
+  textAlign: "center"
+};
+
+const productCtaRowStyle: React.CSSProperties = {
+  marginTop: "24px",
+  display: "flex",
+  justifyContent: "center"
 };
 
 const sectionTitle: React.CSSProperties = {

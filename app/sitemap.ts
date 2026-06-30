@@ -8,6 +8,7 @@ const PATHS = [
   "/about",
   "/pricing",
   "/song-architect",
+  "/ar-ai",
   "/terms",
   "/privacy",
   "/contact",
