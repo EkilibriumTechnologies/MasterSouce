@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import "@/components/brand/mastersauce-brand-header.css";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER, MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import type { ArAiReport } from "@/lib/ar-ai/types";
 
@@ -98,6 +100,17 @@ function ratingColor(score: number): string {
   if (score >= 60) return "#f0c674";
   return "#f5a097";
 }
+
+const HIT_ANALYZER_SIGNALS = [
+  "Production quality",
+  "Hook strength",
+  "Replay value",
+  "Emotional impact",
+  "Arrangement",
+  "Playlist fit",
+  "Commercial readiness",
+  "Improvement opportunities"
+] as const;
 
 export default function ArAiPage() {
   const [form, setForm] = useState<FormState>(defaultFormState);
@@ -279,15 +292,26 @@ export default function ArAiPage() {
   return (
     <main style={mainStyle}>
       <nav style={topNavStyle} aria-label="Site">
+        <Link href="/" style={navLogoLinkStyle}>
+          <Image
+            src="/mastersauce-logo.png"
+            alt="MasterSauce"
+            width={466}
+            height={381}
+            className="mastersauce-brand-nav__logo"
+            sizes="(max-width: 639px) 108px, 148px"
+            style={navLogoStyle}
+          />
+        </Link>
         <Link href="/" style={backLinkStyle}>
           ← Back to MasterSauce
         </Link>
       </nav>
 
       <header style={heroStyle}>
-        <p style={eyebrowStyle}>Release readiness</p>
+        <span style={releaseBadgeStyle}>A&amp;R RELEASE READINESS</span>
         <div style={titleRowStyle}>
-          <h1 style={h1Style}>MasterSauce A&R AI</h1>
+          <h1 style={h1Style}>MasterSauce Hit Analyzer</h1>
           <button
             type="button"
             style={howItWorksButtonStyle}
@@ -299,8 +323,20 @@ export default function ArAiPage() {
           </button>
         </div>
         <p style={introStyle}>
-          Get a professional A&R-style release readiness report for your song. This does not predict hits — it evaluates
-          how competitive your track appears within its intended genre.
+          MasterSauce Hit Analyzer does not predict whether a song will become a hit. It gives a professional A&amp;R-style
+          release readiness report based on audio feature analysis, commercial songwriting principles, music psychology, and
+          modern streaming behavior.
+        </p>
+        <ul style={signalsListStyle} aria-label="What the report evaluates">
+          {HIT_ANALYZER_SIGNALS.map((signal) => (
+            <li key={signal} style={signalPillStyle}>
+              {signal}
+            </li>
+          ))}
+        </ul>
+        <p style={introSubStyle}>
+          Use the report as a creative decision tool — understand what feels strong, what may hold the song back, and what
+          to improve before release.
         </p>
       </header>
 
@@ -484,6 +520,18 @@ export default function ArAiPage() {
 
       {report ? <ArAiReportView report={report} /> : null}
 
+      <section style={crossLinkSectionStyle} aria-label="Related MasterSauce tools">
+        <p style={crossLinkHeadingStyle}>Next steps after your report</p>
+        <div style={crossLinkRowStyle}>
+          <Link href="/" style={crossLinkPrimaryStyle}>
+            Master this track
+          </Link>
+          <Link href="/song-architect" style={crossLinkSecondaryStyle}>
+            Improve song structure with Song Architect
+          </Link>
+        </div>
+      </section>
+
       {showEmailVerifyModal ? (
         <div style={verifyEmailModalOverlayStyle}>
           <div
@@ -662,8 +710,27 @@ const mainStyle: CSSProperties = {
 };
 
 const topNavStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
   margin: "0 0 28px",
-  padding: "0 2px"
+  padding: "10px 14px",
+  border: "1px solid rgba(84, 100, 148, 0.32)",
+  borderRadius: "16px",
+  background: "linear-gradient(140deg, rgba(17, 24, 44, 0.78), rgba(10, 16, 31, 0.82))",
+  boxShadow: "0 12px 24px rgba(2, 5, 14, 0.34)"
+};
+
+const navLogoLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  textDecoration: "none"
+};
+
+const navLogoStyle: CSSProperties = {
+  width: "min(100%, clamp(120px, 20vw, 148px))",
+  height: "auto"
 };
 
 const backLinkStyle: CSSProperties = {
@@ -671,13 +738,35 @@ const backLinkStyle: CSSProperties = {
   alignItems: "center",
   minHeight: "44px",
   padding: "8px 10px 8px 4px",
-  color: "#9eb6ff",
+  color: "rgba(142, 160, 208, 0.88)",
   textDecoration: "none",
-  fontWeight: 600
+  fontWeight: 600,
+  fontSize: "0.92rem"
 };
 
 const heroStyle: CSSProperties = {
-  marginBottom: "24px"
+  marginBottom: "24px",
+  padding: "clamp(24px, 4vw, 32px)",
+  borderRadius: "24px",
+  border: "1px solid rgba(74, 90, 150, 0.22)",
+  background:
+    "radial-gradient(700px 240px at 50% -20%, rgba(141, 232, 203, 0.12), rgba(141, 232, 203, 0) 60%), linear-gradient(145deg, #121a32 0%, #0d1428 52%, #090f1f 100%)",
+  boxShadow: "0 18px 40px rgba(2, 4, 12, 0.45)"
+};
+
+const releaseBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  margin: "0 0 12px",
+  borderRadius: "999px",
+  border: "1px solid rgba(141, 232, 203, 0.45)",
+  background: "rgba(18, 44, 38, 0.55)",
+  color: "#8de8cb",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  letterSpacing: "0.14em",
+  textTransform: "uppercase",
+  padding: "5px 10px"
 };
 
 const titleRowStyle: CSSProperties = {
@@ -717,10 +806,88 @@ const h1Style: CSSProperties = {
 };
 
 const introStyle: CSSProperties = {
-  margin: 0,
+  margin: "0 0 14px",
   color: "#b8c4ea",
   maxWidth: "62ch",
-  fontSize: "1.02rem"
+  fontSize: "1.02rem",
+  lineHeight: 1.65
+};
+
+const introSubStyle: CSSProperties = {
+  margin: "14px 0 0",
+  color: "#9ca8cc",
+  maxWidth: "58ch",
+  fontSize: "0.94rem",
+  lineHeight: 1.6
+};
+
+const signalsListStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  margin: 0,
+  padding: 0,
+  listStyle: "none"
+};
+
+const signalPillStyle: CSSProperties = {
+  borderRadius: "999px",
+  border: "1px solid rgba(118, 136, 210, 0.35)",
+  background: "rgba(12, 19, 36, 0.64)",
+  color: "#c9d4f5",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  padding: "6px 11px"
+};
+
+const crossLinkSectionStyle: CSSProperties = {
+  marginTop: "28px",
+  padding: "18px",
+  borderRadius: "16px",
+  border: "1px solid rgba(118, 136, 210, 0.35)",
+  background: "linear-gradient(145deg, rgba(22, 28, 52, 0.92), rgba(12, 18, 36, 0.88))",
+  textAlign: "center"
+};
+
+const crossLinkHeadingStyle: CSSProperties = {
+  margin: "0 0 12px",
+  color: "#c9d4f5",
+  fontWeight: 600,
+  fontSize: "0.95rem"
+};
+
+const crossLinkRowStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  flexWrap: "wrap",
+  gap: "10px"
+};
+
+const crossLinkPrimaryStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  borderRadius: "999px",
+  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)",
+  color: "#ffffff",
+  fontWeight: 700,
+  fontSize: "0.9rem",
+  padding: "11px 20px"
+};
+
+const crossLinkSecondaryStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  borderRadius: "999px",
+  border: "1px solid rgba(136, 154, 212, 0.5)",
+  color: "#d6defa",
+  fontWeight: 600,
+  fontSize: "0.9rem",
+  padding: "10px 18px",
+  background: "rgba(13, 21, 40, 0.65)"
 };
 
 const launchBannerActiveStyle: CSSProperties = {

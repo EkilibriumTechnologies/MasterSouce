@@ -87,8 +87,9 @@ function runUiTests() {
   assertIncludes(page, "setError", "UI handles error state");
   assertIncludes(page, "Overall A&R Rating", "UI displays overall rating");
   assertIncludes(page, "A&R Scorecard", "UI displays scorecard");
-  assertIncludes(page, "MasterSauce A&R AI", "UI headline");
-  assertIncludes(page, "does not predict hits", "UI subheadline disclaimer");
+  assertIncludes(page, "MasterSauce Hit Analyzer", "UI headline");
+  assertIncludes(page, "does not predict whether a song will become a hit", "UI subheadline disclaimer");
+  assertIncludes(page, "A&amp;R RELEASE READINESS", "UI release readiness badge");
   assertIncludes(page, "Try Hit Analyzer free during launch.", "UI launch promo copy");
   assertIncludes(page, "How MasterSauce Hit Analyzer Works", "UI how-it-works title");
   assertIncludes(page, "does not predict whether a song will become a hit", "UI how-it-works disclaimer");

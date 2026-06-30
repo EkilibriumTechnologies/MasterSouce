@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -43,7 +44,7 @@ const PLAN_COPY: Record<
   }
 > = {
   free: {
-    positioning: "Hear the master before you spend — no card on file.",
+    positioning: "Try MasterSauce and export a limited number of full-quality files — hear the master before you spend.",
     features: () => [
       "Unlimited MP3 downloads",
       "1 free WAV download",
@@ -56,7 +57,7 @@ const PLAN_COPY: Record<
     ctaHint: "No card on file. Upgrade from checkout when you need more finals or adaptive exports."
   },
   creator_monthly: {
-    positioning: "Weekly releases with room to iterate.",
+    positioning: "For artists releasing regularly — more WAV exports, 24-bit depth, and adaptive customization.",
     features: (plan) => [
       "Unlimited MP3 downloads",
       formatMonthlyWavLimitLabel(plan.monthlyMastersLimit),
@@ -71,7 +72,8 @@ const PLAN_COPY: Record<
     ctaHint: "Adds adaptive steering plus higher bit depth."
   },
   pro_studio_monthly: {
-    positioning: "Studios, small labels, or anyone mastering in batches.",
+    positioning:
+      "For serious creators who need the highest-quality exports, priority processing, and more premium tools each month.",
     features: (plan) => [
       "Unlimited MP3 downloads",
       formatMonthlyWavLimitLabel(plan.monthlyMastersLimit),
@@ -87,6 +89,26 @@ const PLAN_COPY: Record<
 };
 
 const PRICING_FAQ_ITEMS = [
+  {
+    question: "Which plan do I need for WAV?",
+    answer:
+      "Every plan includes WAV exports. Free includes one full WAV download (16-bit). Creator adds a monthly WAV allowance at 24-bit. Pro Studio unlocks 32-bit float WAV and the highest export cap."
+  },
+  {
+    question: "What is 32-bit float?",
+    answer:
+      "32-bit float WAV preserves more headroom and detail in the export file — useful when you need maximum fidelity for downstream editing, archival, or professional release workflows. Pro Studio includes 32-bit float exports."
+  },
+  {
+    question: "Can I use a reference track?",
+    answer:
+      "Yes. Reference-guided mastering is available on every plan — upload a song you love or name an artist to steer tone and loudness before you preview or export."
+  },
+  {
+    question: "Does Hit Analyzer predict hits?",
+    answer:
+      "No. Hit Analyzer delivers an A&R-style release readiness report with improvement opportunities — it does not predict chart success or guarantee a hit."
+  },
   {
     question: "What actually uses my monthly allowance?",
     answer: "Each finished, full-quality WAV download. Generating previews, switching genres, or A/B listening does not."
@@ -382,8 +404,9 @@ export function PricingSection() {
         Clear plans. Pay for finished exports.
       </h2>
       <p style={subtitleStyle}>
-        Free tier proves the sound with unlimited A/B previews. Paid tiers add higher export caps, adaptive customization,
-        and deeper WAV formats — you are never charged for listening.
+        Preview masters freely on every plan — you are never charged for listening. Free lets you try the full workflow
+        with limited exports. Creator and Pro Studio add higher WAV caps, reference-guided and adaptive mastering, and
+        deeper bit-depth formats when you are ready to ship.
       </p>
       <div style={reassuranceBarStyle} aria-label="Pricing fairness highlights">
         <span style={reassuranceItemStyle}>Listen all you want</span>
@@ -517,15 +540,29 @@ export function PricingSection() {
         ))}
       </div>
       <div style={adaptiveCopyCardStyle}>
-        <p style={adaptiveCopyTitleStyle}>Adaptive customization</p>
+        <p style={adaptiveCopyTitleStyle}>Premium mastering features</p>
         <p style={adaptiveCopyBodyStyle}>
-          Add a short written brief and the engine reshapes loudness, tone, and punch around your mix — still previewed with
-          the same A/B player before you spend an export.
+          <strong style={{ color: "#dbe5ff" }}>Reference-guided mastering</strong> — upload a reference or name an
+          artist to steer tone and loudness. <strong style={{ color: "#dbe5ff" }}>Adaptive customization</strong> — add a
+          short written brief and preview how the engine reshapes punch, tone, and dynamics.{" "}
+          <strong style={{ color: "#dbe5ff" }}>32-bit float WAV</strong> on Pro Studio preserves extra headroom for
+          serious release workflows.
         </p>
         <p style={adaptiveCopySubtleStyle}>
-          Recommended masters remain the fast default on every plan; adaptive is an optional layer when you want hands-on
-          direction without building a plugin chain.
+          Recommended masters remain the fast default on every plan. Paid tiers add export capacity, adaptive steering,
+          and higher bit depth — explained in plain language above, with no surprise charges for previews.
         </p>
+      </div>
+      <div style={pricingCrossLinkStyle}>
+        <p style={pricingCrossLinkHeadingStyle}>Explore the full toolkit</p>
+        <div style={pricingCrossLinkRowStyle}>
+          <Link href="/ar-ai" style={pricingCrossLinkPrimaryStyle}>
+            Try Hit Analyzer
+          </Link>
+          <Link href="/song-architect" style={pricingCrossLinkSecondaryStyle}>
+            Try Song Architect
+          </Link>
+        </div>
       </div>
       {modalOpen ? (
         <div style={backdropStyle} onClick={closeModal}>
@@ -984,6 +1021,56 @@ const adaptiveCopySubtleStyle: React.CSSProperties = {
   margin: "8px 0 0",
   color: "#8fa3d6",
   fontSize: "0.84rem"
+};
+
+const pricingCrossLinkStyle: React.CSSProperties = {
+  marginTop: "14px",
+  border: "1px solid rgba(118, 136, 210, 0.35)",
+  borderRadius: "16px",
+  padding: "16px",
+  background: "linear-gradient(145deg, rgba(22, 28, 52, 0.92), rgba(12, 18, 36, 0.88))",
+  textAlign: "center"
+};
+
+const pricingCrossLinkHeadingStyle: React.CSSProperties = {
+  margin: "0 0 12px",
+  color: "#c9d4f5",
+  fontWeight: 600,
+  fontSize: "0.95rem"
+};
+
+const pricingCrossLinkRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  flexWrap: "wrap",
+  gap: "10px"
+};
+
+const pricingCrossLinkPrimaryStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  borderRadius: "999px",
+  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)",
+  color: "#ffffff",
+  fontWeight: 700,
+  fontSize: "0.9rem",
+  padding: "11px 20px"
+};
+
+const pricingCrossLinkSecondaryStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  borderRadius: "999px",
+  border: "1px solid rgba(136, 154, 212, 0.5)",
+  color: "#d6defa",
+  fontWeight: 600,
+  fontSize: "0.9rem",
+  padding: "10px 18px",
+  background: "rgba(13, 21, 40, 0.65)"
 };
 
 const backdropStyle: React.CSSProperties = {

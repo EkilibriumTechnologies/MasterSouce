@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import "@/components/brand/mastersauce-brand-header.css";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER, MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import { trackSongArchitectFunnelEvent } from "@/lib/song-architect/analytics";
 import type { SongArchitectClientPayload } from "@/lib/song-architect/premium-output";
@@ -332,6 +334,29 @@ const songLengthCardDescStyle: React.CSSProperties = {
   lineHeight: 1.45
 };
 
+const SONG_ARCHITECT_BENEFITS = [
+  {
+    title: "Build stronger hooks",
+    body: "Clarify the line listeners remember — before you generate, record, or master."
+  },
+  {
+    title: "Improve structure and momentum",
+    body: "Shape verse/chorus flow and emotional arc so the song keeps moving forward."
+  },
+  {
+    title: "Refine lyrics without losing your voice",
+    body: "Tighten phrasing and imagery while keeping the idea authentically yours."
+  },
+  {
+    title: "Shape songs for a specific genre or audience",
+    body: "Dial in genre fit, vocal style, and reference direction for a clearer target sound."
+  },
+  {
+    title: "Use it before generating, recording, or mastering",
+    body: "Start with a blueprint, then move into Suno, Udio, your DAW, and MasterSauce mastering."
+  }
+] as const;
+
 export default function SongArchitectPage() {
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -498,27 +523,40 @@ export default function SongArchitectPage() {
   return (
     <main style={mainStyle}>
       <nav aria-label="Song Architect" style={topNavStyle}>
-        <div style={brandWrapStyle}>
-          <span style={brandMarkStyle}>♫</span>
-          <div>
-            <p style={brandTextStyle}>MasterSauce</p>
-            <p style={brandSubStyle}>Song Architect Workspace</p>
-          </div>
-        </div>
+        <Link href="/" style={brandWrapStyle}>
+          <Image
+            src="/mastersauce-logo.png"
+            alt="MasterSauce"
+            width={466}
+            height={381}
+            className="mastersauce-brand-nav__logo"
+            sizes="(max-width: 639px) 108px, 148px"
+            style={navLogoStyle}
+          />
+        </Link>
         <Link href="/" style={backLinkStyle}>
           Back to Mastering
         </Link>
       </nav>
 
       <section style={compactIntroStyle} aria-labelledby="song-architect-heading">
-        <p style={eyebrowStyle}>Workspace</p>
+        <p style={eyebrowStyle}>Song Architect</p>
         <h1 id="song-architect-heading" style={titleStyle}>
-          Write better Suno and Udio prompts — in seconds.
+          Turn rough ideas into stronger, more structured songs.
         </h1>
         <p style={introBodyStyle}>
-          Stop guessing what to type. Song Architect builds your complete creative blueprint — genre, lyrics, hooks, style
-          prompt, and a ready-to-paste Suno or Udio export prompt. One pass. No blank page.
+          Song Architect helps you turn rough ideas, lyrics, hooks, or song concepts into stronger, more structured
+          songs. It can help with verse/chorus structure, emotional arc, hook clarity, genre fit, and release-ready
+          songwriting decisions — a creative decision tool, not a hit guarantee.
         </p>
+        <div style={benefitsGridStyle} aria-label="What Song Architect helps with">
+          {SONG_ARCHITECT_BENEFITS.map((item) => (
+            <article key={item.title} style={benefitCardStyle}>
+              <p style={benefitTitleStyle}>{item.title}</p>
+              <p style={benefitBodyStyle}>{item.body}</p>
+            </article>
+          ))}
+        </div>
         <div style={howItWorksGridStyle} aria-label="How Song Architect works">
           <article style={howItWorksStepStyle}>
             <p style={howItWorksTitleStyle}>Step 1 — 🎚️ Pick a preset or build custom</p>
@@ -848,13 +886,16 @@ export default function SongArchitectPage() {
           )}
         </aside>
       </section>
-      <section style={bottomCtaWrapStyle} aria-label="MasterSauce mastering call to action">
-        <p style={bottomCtaTextStyle}>
-          Track ready? Master it free on MasterSauce{" "}
-          <a href="https://www.mastersauce.ai/#master" style={bottomCtaLinkStyle}>
-            →
-          </a>
-        </p>
+      <section style={bottomCtaWrapStyle} aria-label="Next steps after Song Architect">
+        <p style={bottomCtaTextStyle}>Track blueprint ready?</p>
+        <div style={bottomCtaRowStyle}>
+          <Link href="/" style={bottomCtaPrimaryStyle}>
+            Master this song
+          </Link>
+          <Link href="/ar-ai" style={bottomCtaSecondaryStyle}>
+            Analyze release readiness
+          </Link>
+        </div>
       </section>
       {showEmailVerifyModal ? (
         <div style={modalBackdropStyle}>
@@ -924,31 +965,12 @@ const topNavStyle: React.CSSProperties = {
 const brandWrapStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: "8px"
+  textDecoration: "none"
 };
 
-const brandMarkStyle: React.CSSProperties = {
-  width: "28px",
-  height: "28px",
-  borderRadius: "8px",
-  display: "grid",
-  placeItems: "center",
-  color: "#fff",
-  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)"
-};
-
-const brandTextStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#e7edff",
-  fontWeight: 700,
-  lineHeight: 1.1
-};
-
-const brandSubStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#95a4d2",
-  fontSize: "0.76rem",
-  lineHeight: 1.2
+const navLogoStyle: React.CSSProperties = {
+  width: "min(100%, clamp(120px, 20vw, 148px))",
+  height: "auto"
 };
 
 const backLinkStyle: React.CSSProperties = {
@@ -1019,6 +1041,35 @@ const howItWorksBodyStyle: React.CSSProperties = {
   margin: "6px 0 0",
   color: "#a7b6dc",
   fontSize: "0.83rem",
+  lineHeight: 1.5
+};
+
+const benefitsGridStyle: React.CSSProperties = {
+  marginTop: "14px",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  gap: "10px"
+};
+
+const benefitCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(110, 128, 190, 0.24)",
+  borderRadius: "12px",
+  background: "rgba(14, 21, 38, 0.68)",
+  padding: "10px 12px"
+};
+
+const benefitTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#d7e3ff",
+  fontWeight: 700,
+  fontSize: "0.84rem",
+  lineHeight: 1.35
+};
+
+const benefitBodyStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#a7b6dc",
+  fontSize: "0.82rem",
   lineHeight: 1.5
 };
 
@@ -1336,17 +1387,47 @@ const bottomCtaWrapStyle: React.CSSProperties = {
   border: "1px solid rgba(142, 155, 209, 0.2)",
   borderRadius: "14px",
   background: "linear-gradient(145deg, rgba(22, 29, 48, 0.88), rgba(12, 17, 30, 0.88))",
-  padding: "12px 14px"
+  padding: "16px",
+  textAlign: "center"
 };
 
 const bottomCtaTextStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#b2c0e6",
-  lineHeight: 1.5
+  margin: "0 0 12px",
+  color: "#c9d4f5",
+  fontWeight: 600,
+  fontSize: "0.95rem"
 };
 
-const bottomCtaLinkStyle: React.CSSProperties = {
-  color: "#8de8cb",
+const bottomCtaRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  flexWrap: "wrap",
+  gap: "10px"
+};
+
+const bottomCtaPrimaryStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   textDecoration: "none",
-  fontWeight: 700
+  borderRadius: "999px",
+  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)",
+  color: "#ffffff",
+  fontWeight: 700,
+  fontSize: "0.9rem",
+  padding: "11px 20px"
+};
+
+const bottomCtaSecondaryStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  borderRadius: "999px",
+  border: "1px solid rgba(136, 154, 212, 0.5)",
+  color: "#d6defa",
+  fontWeight: 600,
+  fontSize: "0.9rem",
+  padding: "10px 18px",
+  background: "rgba(13, 21, 40, 0.65)"
 };

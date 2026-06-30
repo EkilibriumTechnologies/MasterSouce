@@ -1,0 +1,62 @@
+.mastersauce-brand-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(84, 100, 148, 0.32);
+  border-radius: 16px;
+  background: linear-gradient(140deg, rgba(17, 24, 44, 0.78), rgba(10, 16, 31, 0.82));
+  box-shadow: 0 12px 24px rgba(2, 5, 14, 0.34);
+  padding: 10px 14px;
+  margin-bottom: clamp(18px, 3vw, 28px);
+}
+
+.mastersauce-brand-nav__home {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.mastersauce-brand-nav__logo {
+  width: min(100%, clamp(120px, 22vw, 168px));
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+.mastersauce-brand-nav__back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 10px 8px 4px;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+  color: rgba(142, 160, 208, 0.88);
+}
+
+.mastersauce-brand-nav__back:hover {
+  color: #dce4ff;
+}
+
+.mastersauce-brand-hero-logo {
+  width: min(100%, clamp(140px, 28vw, 220px));
+  height: auto;
+  display: block;
+  margin: 0 auto clamp(12px, 2vw, 20px);
+  object-fit: contain;
+}
+
+@media (max-width: 639px) {
+  .mastersauce-brand-nav__logo {
+    width: min(108px, 42vw);
+  }
+
+  .mastersauce-brand-hero-logo {
+    width: min(148px, 58vw);
+  }
+}

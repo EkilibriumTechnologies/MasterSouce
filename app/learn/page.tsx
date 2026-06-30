@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { MasterSauceBrandHeroLogo, MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
 import { buildPageMetadata } from "@/lib/seo/page-metadata";
 
 import {
@@ -12,31 +13,38 @@ import {
   articleCardStyle,
   articleCardTitleLinkStyle,
   articleCardTitleStyle,
-  backLinkStyle,
   ctaBodyStyle,
   ctaHeadingStyle,
   ctaPrimaryStyle,
   ctaRowStyle,
   ctaSecondaryStyle,
   ctaSectionStyle,
+  ctaTertiaryStyle,
+  disclaimerBoxStyle,
+  disclaimerTextStyle,
   eyebrowStyle,
   featuredPillStyle,
   h1Style,
   h2Style,
   heroStyle,
-  introStyle,
+  inlineLinkStyle,
   mainStyle,
-  topNavStyle
+  topicCardBodyStyle,
+  topicCardStyle,
+  topicCardTitleStyle,
+  topicGridStyle,
+  topicSectionStyle
 } from "./learn-styles";
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "Music Mastering Guides",
+  title: "Learn MasterSauce | AI Music Mastering Guides",
   description:
-    "Explore practical guides on streaming readiness, AI music mastering, loudness, and preparing tracks for release.",
-  path: "/learn"
+    "Guides for making AI-generated and independent music sound more professional, release-ready, and competitive — mastering, loudness, Song Architect, and Hit Analyzer.",
+  path: "/learn",
+  absoluteTitle: true
 });
 
-const hubIntroStyle = { ...introStyle, textAlign: "center" as const };
+const hubIntroStyle = { margin: "0 auto", maxWidth: "56ch", fontSize: "1.0625rem", lineHeight: 1.68, color: "#9ca8cc", textAlign: "center" as const };
 
 type LearnArticleCard = {
   title: string;
@@ -47,6 +55,33 @@ type LearnArticleCard = {
   cta: string;
   featured?: boolean;
 };
+
+const TOPIC_SECTIONS = [
+  {
+    title: "What mastering does",
+    body: "Mastering is the final polish pass before release. It balances loudness, tone, and dynamics so your track feels cohesive on headphones, speakers, and streaming platforms — without undoing the creative mix you already built."
+  },
+  {
+    title: "How reference-guided mastering works",
+    body: "Upload a reference track or name an artist whose tone you admire. MasterSauce uses that direction to steer EQ, loudness, and punch — a creative shortcut when you know the vibe but not the technical chain."
+  },
+  {
+    title: "How to prepare your track before upload",
+    body: "Export a clean stereo mix with headroom (avoid clipping), skip heavy limiting on the mix bus, and choose WAV when possible. A well-prepared upload gives the engine more room to shape a professional-sounding master."
+  },
+  {
+    title: "How to read loudness, dynamics, and bit depth",
+    body: "Integrated LUFS tells you how loud a track feels on streaming. Crest factor reflects punch and breathing room. Bit depth (16-, 24-, or 32-bit float WAV) affects export fidelity — higher tiers unlock deeper formats for serious releases."
+  },
+  {
+    title: "How Song Architect helps improve lyrics and structure",
+    body: "Song Architect turns rough ideas into structured blueprints — hooks, verse/chorus flow, genre fit, and ready-to-paste prompts for Suno or Udio. Use it before you generate or record to make stronger songwriting decisions."
+  },
+  {
+    title: "How Hit Analyzer evaluates release readiness",
+    body: "Hit Analyzer delivers an A&R-style release readiness report based on audio features, commercial songwriting principles, and streaming behavior. It highlights strengths, gaps, and improvement opportunities — not hit prediction."
+  }
+] as const;
 
 const articles: LearnArticleCard[] = [
   {
@@ -89,20 +124,37 @@ const articles: LearnArticleCard[] = [
 export default function LearnHubPage() {
   return (
     <main style={mainStyle}>
-      <nav style={topNavStyle} aria-label="Site">
-        <Link href="/" style={backLinkStyle}>
-          ← Back to MasterSauce
-        </Link>
-      </nav>
+      <MasterSauceBrandNav backHref="/" backLabel="Master a song" />
 
       <header style={heroStyle}>
-        <p style={eyebrowStyle}>Resources</p>
-        <h1 style={h1Style}>Music Mastering Guides</h1>
+        <MasterSauceBrandHeroLogo priority />
+        <p style={eyebrowStyle}>Learn</p>
+        <h1 style={h1Style}>Learn MasterSauce</h1>
         <p style={hubIntroStyle}>
-          Learn more about what makes a track feel ready for release. These short guides cover streaming readiness, AI music
-          mastering, loudness, and practical topics that help creators make stronger release decisions.
+          Guides for making AI-generated and independent music sound more professional, release-ready, and competitive.
         </p>
       </header>
+
+      <section style={topicSectionStyle} aria-labelledby="learn-topics-heading">
+        <h2 id="learn-topics-heading" style={h2Style}>
+          Core concepts
+        </h2>
+        <div style={topicGridStyle}>
+          {TOPIC_SECTIONS.map((topic) => (
+            <article key={topic.title} style={topicCardStyle}>
+              <h3 style={topicCardTitleStyle}>{topic.title}</h3>
+              <p style={topicCardBodyStyle}>{topic.body}</p>
+            </article>
+          ))}
+        </div>
+        <div style={disclaimerBoxStyle}>
+          <p style={disclaimerTextStyle}>
+            <strong style={{ color: "#e4e9ff" }}>Why MasterSauce does not promise hits.</strong> No tool can guarantee
+            chart success. MasterSauce helps you make better creative and release decisions — clearer masters, stronger
+            song structure, and A&R-style feedback you can act on before you ship.
+          </p>
+        </div>
+      </section>
 
       <section aria-labelledby="learn-articles-heading">
         <h2 id="learn-articles-heading" style={h2Style}>
@@ -148,15 +200,27 @@ export default function LearnHubPage() {
         <h2 id="learn-hub-cta-heading" style={ctaHeadingStyle}>
           Put these ideas into practice
         </h2>
-        <p style={ctaBodyStyle}>Analyze your track and hear how it responds before you release.</p>
+        <p style={ctaBodyStyle}>
+          Master a track, shape a stronger song, or get release readiness feedback — all part of the same workflow.
+        </p>
         <div style={ctaRowStyle}>
-          <Link href="/#master" style={ctaPrimaryStyle}>
-            Analyze your track
+          <Link href="/" style={ctaPrimaryStyle}>
+            Master a Song
           </Link>
-          <Link href="/pricing" style={ctaSecondaryStyle}>
-            View pricing
+          <Link href="/song-architect" style={ctaSecondaryStyle}>
+            Try Song Architect
+          </Link>
+          <Link href="/ar-ai" style={ctaTertiaryStyle}>
+            Try Hit Analyzer
           </Link>
         </div>
+        <p style={{ ...ctaBodyStyle, marginTop: "18px", marginBottom: 0, fontSize: "0.92rem" }}>
+          Compare plans on the{" "}
+          <Link href="/pricing" style={inlineLinkStyle}>
+            pricing page
+          </Link>
+          .
+        </p>
       </section>
     </main>
   );

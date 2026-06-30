@@ -263,3 +263,60 @@ export const featuredPillStyle: CSSProperties = {
   textTransform: "uppercase",
   padding: "4px 9px"
 };
+
+export const topicSectionStyle: CSSProperties = {
+  display: "grid",
+  gap: "14px",
+  marginBottom: "clamp(36px, 6vw, 52px)"
+};
+
+export const topicGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: "14px",
+  marginTop: "8px"
+};
+
+export const topicCardStyle: CSSProperties = {
+  borderRadius: "16px",
+  border: "1px solid rgba(74, 90, 150, 0.28)",
+  background: "linear-gradient(155deg, rgba(19, 28, 52, 0.72), rgba(12, 19, 37, 0.78))",
+  padding: "18px 18px 16px",
+  boxShadow: "0 10px 28px rgba(2, 4, 12, 0.32)"
+};
+
+export const topicCardTitleStyle: CSSProperties = {
+  margin: "0 0 8px",
+  fontSize: "1.02rem",
+  fontWeight: 700,
+  fontFamily: "Outfit, Work Sans, system-ui, sans-serif",
+  color: "#e8ecff"
+};
+
+export const topicCardBodyStyle: CSSProperties = {
+  margin: 0,
+  fontSize: "0.94rem",
+  lineHeight: 1.65,
+  color: "#9ca8cc"
+};
+
+export const disclaimerBoxStyle: CSSProperties = {
+  marginTop: "8px",
+  padding: "16px 18px",
+  borderRadius: "14px",
+  border: "1px solid rgba(118, 136, 210, 0.35)",
+  background: "rgba(12, 19, 36, 0.64)"
+};
+
+export const disclaimerTextStyle: CSSProperties = {
+  margin: 0,
+  fontSize: "0.96rem",
+  lineHeight: 1.68,
+  color: "#b9c2e6"
+};
+
+export const ctaTertiaryStyle: CSSProperties = {
+  ...ctaSecondaryStyle,
+  fontSize: "0.92rem",
+  padding: "13px 22px"
+};

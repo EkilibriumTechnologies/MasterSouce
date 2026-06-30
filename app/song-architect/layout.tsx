@@ -4,10 +4,11 @@ import type { ReactNode } from "react";
 import { buildPageMetadata } from "@/lib/seo/page-metadata";
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "Suno Prompt Generator — Song Architect by MasterSauce",
+  title: "Song Architect | Improve Lyrics, Hooks, and Song Structure",
   description:
-    "Generate Suno and Udio-ready lyrics, hooks, and style prompts in seconds. Pick a preset or build your own direction — free to try.",
-  path: "/song-architect"
+    "Turn rough ideas, lyrics, and song concepts into stronger, more structured songs. Build hooks, refine structure, and shape release-ready blueprints for Suno and Udio.",
+  path: "/song-architect",
+  absoluteTitle: true
 });
 
 export default function SongArchitectLayout({ children }: { children: ReactNode }) {

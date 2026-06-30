@@ -8,6 +8,8 @@ export type PageMetaInput = {
   description: string;
   /** Path including leading slash, e.g. "/about" */
   path: string;
+  /** When true, use the title verbatim (skips root `title.template`). */
+  absoluteTitle?: boolean;
   /** Set true only for pages that must not be indexed */
   noIndex?: boolean;
 };
@@ -16,14 +18,21 @@ export type PageMetaInput = {
  * Page-level metadata with canonical, Open Graph, and Twitter defaults.
  * Relies on root `metadataBase` and `title.template`.
  */
-export function buildPageMetadata({ title, description, path, noIndex }: PageMetaInput): Metadata {
+export function buildPageMetadata({
+  title,
+  description,
+  path,
+  absoluteTitle,
+  noIndex
+}: PageMetaInput): Metadata {
   const url = absoluteUrl(path);
+  const socialTitle = absoluteTitle ? title : `${title} | ${SITE_NAME}`;
   return {
-    title,
+    title: absoluteTitle ? { absolute: title } : title,
     description,
     alternates: { canonical: path },
     openGraph: {
-      title: `${title} | ${SITE_NAME}`,
+      title: socialTitle,
       description,
       url,
       siteName: SITE_NAME,
@@ -32,7 +41,7 @@ export function buildPageMetadata({ title, description, path, noIndex }: PageMet
     },
     twitter: {
       card: "summary_large_image",
-      title: `${title} | ${SITE_NAME}`,
+      title: socialTitle,
       description
     },
     ...(noIndex ? { robots: { index: false, follow: false } } : {})
