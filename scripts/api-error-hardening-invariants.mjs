@@ -45,7 +45,7 @@ function runSharedHardeningTests() {
   assertIncludes(helper, "stack: error.stack", "shared helper captures stack only for redacted internal log summary");
   assertExcludes(helper, "diagnostics:", "shared error responses never include diagnostics objects");
 
-  const funnel = read("lib/analytics/mastering-funnel.ts");
+  const funnel = read("lib/analytics/mastering-funnel-server.ts");
   assertIncludes(funnel, "maskEmail(normalized)", "server funnel logs mask normalized email");
   assertIncludes(funnel, 'out.file_id = "<redacted-temp-id>"', "server funnel logs redact temp file IDs");
 

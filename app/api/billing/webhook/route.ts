@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { trackGa4PurchaseFromCheckoutSession, trackGa4PurchaseFromPaidSubscriptionInvoice } from "@/lib/analytics/stripe-ga4-purchase";
 import { appendCreditPackLedgerEntry, hasProcessedStripeEvent, persistStripeBillingEvent } from "@/lib/billing/store";
-import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel";
+import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel-server";
 import { reconcileStripeSubscription } from "@/lib/billing/stripe-reconcile";
 import { getStripeClient, getStripeWebhookSecret } from "@/lib/stripe/server";
 

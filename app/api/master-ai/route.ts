@@ -27,7 +27,7 @@ import {
   logMasteringFunnelEvent,
   masteringFunnelBillingSnapshot,
   normalizeEmailForFunnelLog
-} from "@/lib/analytics/mastering-funnel";
+} from "@/lib/analytics/mastering-funnel-server";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import {
   logWavExportEntitlementResolution,

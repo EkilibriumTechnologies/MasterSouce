@@ -32,7 +32,7 @@ import {
   logMasteringFunnelEvent,
   masteringFunnelBillingSnapshot,
   normalizeEmailForFunnelLog
-} from "@/lib/analytics/mastering-funnel";
+} from "@/lib/analytics/mastering-funnel-server";
 
 type DownloadRateKeyType = "user" | "session" | "ip" | "fallback";
 

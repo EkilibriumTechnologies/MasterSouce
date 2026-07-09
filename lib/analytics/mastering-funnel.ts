@@ -1,6 +1,5 @@
 import { trackEvent, type AbEventParams } from "@/lib/analytics/ab-comparison";
 import { normalizeBillingEmail } from "@/lib/billing/email";
-import { maskEmail } from "@/lib/security/abuse-guard";
 import type { PlanId } from "@/lib/subscriptions/types";
 
 export const MASTERING_SOURCE_FLOW = "mastering" as const;
@@ -22,18 +21,6 @@ export type MasteringFunnelClientEvent =
   | "mastering_subscription_cta_clicked"
   | "mastering_checkout_started";
 
-export type MasteringFunnelServerEvent =
-  | "mastering_preview_api_started"
-  | "mastering_preview_api_succeeded"
-  | "mastering_preview_api_failed"
-  | "mastering_download_allowed"
-  | "mastering_download_blocked"
-  | "mastering_checkout_session_created"
-  | "mastering_credit_pack_purchase_completed"
-  | "mastering_credit_consumed"
-  | "mastering_subscription_detected"
-  | "mastering_user_has_unused_credits";
-
 export type MasteringFunnelMetadata = {
   source_component?: string;
   source_flow?: string;
@@ -51,24 +38,6 @@ export type MasteringFunnelMetadata = {
   mastering_mode?: string;
   page_path?: string;
 };
-
-const FORBIDDEN_LOG_KEYS = new Set([
-  "audioUrl",
-  "audio_url",
-  "downloadUrl",
-  "download_url",
-  "filePath",
-  "file_path",
-  "stripePayload",
-  "payment_intent",
-  "clientSecret",
-  "cookie",
-  "sessionToken",
-  "ip",
-  "ipAddress"
-]);
-
-const URL_LIKE_KEY = /url|path|payload|secret|token|cookie/i;
 
 function resolvePagePath(): string | undefined {
   if (typeof window === "undefined") return undefined;
@@ -122,36 +91,4 @@ export function trackMasteringFunnelEvent(
   params: MasteringFunnelMetadata = {}
 ): void {
   trackEvent(eventName, toTrackParams(params));
-}
-
-function sanitizeServerLogDetails(details: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(details)) {
-    if (FORBIDDEN_LOG_KEYS.has(key)) continue;
-    if (URL_LIKE_KEY.test(key) && typeof value === "string" && (value.includes("/api/download") || value.startsWith("http"))) {
-      continue;
-    }
-    if (key === "normalized_email" && typeof value === "string") {
-      const normalized = normalizeEmailForFunnelLog(value);
-      if (normalized) out.normalized_email = maskEmail(normalized);
-      continue;
-    }
-    if (key === "file_id" && typeof value === "string") {
-      out.file_id = "<redacted-temp-id>";
-      continue;
-    }
-    if (value !== undefined) out[key] = value;
-  }
-  return out;
-}
-
-export function logMasteringFunnelEvent(
-  eventName: MasteringFunnelServerEvent,
-  details: Record<string, unknown> = {}
-): void {
-  console.info("[mastering] funnel_event", {
-    event: eventName,
-    source_flow: MASTERING_SOURCE_FLOW,
-    ...sanitizeServerLogDetails(details)
-  });
 }

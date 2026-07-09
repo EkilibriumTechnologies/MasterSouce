@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getAdaptiveEntitlementByEmail } from "@/lib/billing/store";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { getStripeClient, getStripeCreditPackPriceId, getStripePriceIdForPlan } from "@/lib/stripe/server";
-import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel";
+import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel-server";
 
 const optionalGaClientId = z.preprocess((val) => {
   if (val == null) return undefined;

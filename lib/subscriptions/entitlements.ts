@@ -15,7 +15,7 @@ import {
 } from "@/lib/subscriptions/billing-store";
 import { applyAdminEntitlementOverride, isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
 import { resolveMasterWavExportPlanOverride } from "@/lib/subscriptions/master-wav-export-allowlist";
-import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel";
+import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel-server";
 import { UserProfile } from "@/lib/users/user-profile";
 
 /** @deprecated Use FREE_WAV_DOWNLOADS_PER_MONTH from download-quota-policy. */

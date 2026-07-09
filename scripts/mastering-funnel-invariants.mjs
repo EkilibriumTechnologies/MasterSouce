@@ -76,12 +76,72 @@ const FORBIDDEN_LOG_SNIPPETS = [
 
 function runAnalyticsModuleTests() {
   const analytics = read("lib/analytics/mastering-funnel.ts");
-  for (const event of [...CLIENT_EVENTS, ...SERVER_EVENTS]) {
-    assertIncludes(analytics, `"${event}"`, "mastering-funnel event union");
+  for (const event of CLIENT_EVENTS) {
+    assertIncludes(analytics, `"${event}"`, "client mastering-funnel event union");
   }
   assertIncludes(analytics, "normalizeBillingEmail", "email uses trim+lower via normalizeBillingEmail");
-  assertIncludes(analytics, "FORBIDDEN_LOG_KEYS", "sanitizer blocks sensitive keys");
   assertIncludes(analytics, "MASTERING_SOURCE_FLOW", "source_flow convention");
+
+  const serverAnalytics = read("lib/analytics/mastering-funnel-server.ts");
+  for (const event of SERVER_EVENTS) {
+    assertIncludes(serverAnalytics, `"${event}"`, "server mastering-funnel event union");
+  }
+  assertIncludes(serverAnalytics, "FORBIDDEN_LOG_KEYS", "server sanitizer blocks sensitive keys");
+  assertIncludes(serverAnalytics, "logMasteringFunnelEvent", "server module owns funnel logging");
+  assertIncludes(serverAnalytics, "maskEmail", "server logging masks emails");
+}
+
+/**
+ * Client/server bundling boundary: the client-facing analytics module must not
+ * pull in Node-only crypto/net (via abuse-guard) or the server-only logger, or
+ * the production build breaks with `node:crypto` / `node:net` resolution errors.
+ */
+function runClientServerBoundaryTests() {
+  const analytics = read("lib/analytics/mastering-funnel.ts");
+  assertExcludes(analytics, "abuse-guard", "client funnel must not import abuse-guard");
+  assertExcludes(analytics, "node:crypto", "client funnel must not import node:crypto");
+  assertExcludes(analytics, "node:net", "client funnel must not import node:net");
+  assertExcludes(analytics, 'import "server-only"', "client funnel must not be server-only");
+  assertExcludes(analytics, "logMasteringFunnelEvent", "client funnel must not expose server logger");
+
+  const serverAnalytics = read("lib/analytics/mastering-funnel-server.ts");
+  assertIncludes(serverAnalytics, 'import "server-only"', "server funnel module is server-only");
+  assertIncludes(serverAnalytics, "@/lib/security/abuse-guard", "server funnel owns abuse-guard dependency");
+
+  // pricing-section must only import the client-safe module, never the server logger.
+  const pricing = read("components/pricing-section.tsx");
+  assertIncludes(pricing, '@/lib/analytics/mastering-funnel"', "pricing imports client funnel module");
+  assertExcludes(pricing, "mastering-funnel-server", "pricing must not import server funnel logger");
+  assertExcludes(pricing, "abuse-guard", "pricing must not import abuse-guard");
+
+  // Every client component that emits funnel events must stay on the client module.
+  const clientFunnelComponents = [
+    "components/pricing-section.tsx",
+    "components/download-limit-modal.tsx",
+    "components/email-capture-form.tsx",
+    "components/audio-compare.tsx",
+    "components/adaptive-export-gate.tsx",
+    "components/upload-form.tsx"
+  ];
+  for (const rel of clientFunnelComponents) {
+    const source = read(rel);
+    assertExcludes(source, "mastering-funnel-server", `${rel} must not import server funnel logger`);
+    assertExcludes(source, "@/lib/security/abuse-guard", `${rel} must not import abuse-guard`);
+  }
+
+  // Server routes must retain sanitized server-side logging via the server module.
+  const serverFunnelConsumers = [
+    "app/api/master/route.ts",
+    "app/api/master-ai/route.ts",
+    "app/api/download/route.ts",
+    "app/api/billing/checkout/route.ts",
+    "app/api/billing/webhook/route.ts",
+    "lib/subscriptions/entitlements.ts"
+  ];
+  for (const rel of serverFunnelConsumers) {
+    const source = read(rel);
+    assertIncludes(source, "@/lib/analytics/mastering-funnel-server", `${rel} logs via server funnel module`);
+  }
 }
 
 function runClientInstrumentationTests() {
@@ -146,8 +206,10 @@ function runBillingUnchangedTests() {
 
 function runNoSensitiveLoggingTests() {
   const analytics = read("lib/analytics/mastering-funnel.ts");
+  const serverAnalytics = read("lib/analytics/mastering-funnel-server.ts");
   for (const snippet of FORBIDDEN_LOG_SNIPPETS) {
-    assertExcludes(analytics, snippet, "analytics module must not log sensitive fields");
+    assertExcludes(analytics, snippet, "client analytics module must not log sensitive fields");
+    assertExcludes(serverAnalytics, snippet, "server analytics module must not log sensitive fields");
   }
   const download = read("app/api/download/route.ts");
   assertIncludes(download, "logMasteringDownloadBlocked", "download uses safe funnel helpers");
@@ -156,6 +218,7 @@ function runNoSensitiveLoggingTests() {
 
 function run() {
   runAnalyticsModuleTests();
+  runClientServerBoundaryTests();
   runClientInstrumentationTests();
   runServerInstrumentationTests();
   runBillingUnchangedTests();

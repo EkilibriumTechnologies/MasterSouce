@@ -28,7 +28,7 @@ import {
   logMasteringFunnelEvent,
   masteringFunnelBillingSnapshot,
   normalizeEmailForFunnelLog
-} from "@/lib/analytics/mastering-funnel";
+} from "@/lib/analytics/mastering-funnel-server";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 
 const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"]);
