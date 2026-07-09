@@ -248,6 +248,432 @@ type PreMasterAnalysisResponse = {
   source?: SourceUploadRef;
 };
 
+type MasteringAnalyticsContext = ReturnType<typeof buildMasteringAnalyticsContext>;
+
+type OwnerTestingPanelProps = {
+  ownerBypassDraft: string;
+  ownerOverrideArmed: boolean;
+  ownerSessionToken: string;
+  onOwnerBypassDraftChange: (value: string) => void;
+  onApplyOwnerBypass: () => void;
+  onClearOwnerBypass: () => void;
+};
+
+function OwnerTestingPanel({
+  ownerBypassDraft,
+  ownerOverrideArmed,
+  ownerSessionToken,
+  onOwnerBypassDraftChange,
+  onApplyOwnerBypass,
+  onClearOwnerBypass
+}: OwnerTestingPanelProps) {
+  return (
+    <div style={ownerTestingPanelStyle}>
+      <p style={ownerTestingTitleStyle}>Local owner testing only</p>
+      <p style={ownerTestingHintStyle}>
+        Stored only in this browser session. Not sent to analytics. Paste an owner token to add both{" "}
+        <code style={ownerTestingCodeStyle}>x-master-admin-bypass</code> header on GET{" "}
+        <code style={ownerTestingCodeStyle}>/api/download</code> quota checks and{" "}
+        <code style={ownerTestingCodeStyle}>x-master-owner-token</code> for strict validation.
+      </p>
+      <label htmlFor="owner-bypass-token" style={ownerTestingLabelStyle}>
+        Token (hidden field)
+      </label>
+      <input
+        id="owner-bypass-token"
+        type="password"
+        autoComplete="off"
+        value={ownerBypassDraft}
+        onChange={(e) => onOwnerBypassDraftChange(e.target.value)}
+        placeholder="Paste token"
+        style={ownerTestingInputStyle}
+      />
+      <p style={ownerTestingTokenHelperStyle}>A valid saved token is required before override can arm.</p>
+      <div style={ownerTestingActionsStyle}>
+        <button type="button" style={ownerTestingPrimaryStyle} onClick={onApplyOwnerBypass}>
+          Save to session
+        </button>
+        <button type="button" style={ownerTestingSecondaryStyle} onClick={onClearOwnerBypass}>
+          Remove
+        </button>
+      </div>
+      <div
+        style={ownerOverrideArmed ? ownerOverrideStatusArmedStyle : ownerOverrideStatusUnarmedStyle}
+        role="status"
+        aria-live="polite"
+      >
+        {ownerOverrideArmed ? "Override armed (valid session token present)" : "Override not armed"}
+      </div>
+      <p style={ownerTestingDebugLineStyle}>
+        Bypass available for final export: {ownerSessionToken ? "yes" : "no"}
+      </p>
+    </div>
+  );
+}
+
+type StandardMasterPanelProps = {
+  loading: boolean;
+  adaptiveProcessing: boolean;
+  onRunStandard: () => void;
+  onOpenAdaptive: () => void;
+};
+
+function StandardMasterPanel({
+  loading,
+  adaptiveProcessing,
+  onRunStandard,
+  onOpenAdaptive
+}: StandardMasterPanelProps) {
+  return (
+    <div style={analysisActionRowStyle}>
+      <button
+        type="button"
+        disabled={loading}
+        style={buttonStyle}
+        aria-busy={loading}
+        aria-label={
+          loading
+            ? "Applying recommended master"
+            : "Use recommended master — fast preset mastering from your genre and loudness"
+        }
+        onClick={onRunStandard}
+      >
+        {loading ? "Applying recommended master…" : "Preset Master — instant result"}
+      </button>
+      <button
+        type="button"
+        disabled={adaptiveProcessing || loading}
+        style={secondaryActionStyle}
+        aria-label="Adaptive customization — add written direction, then run a free preview"
+        onClick={onOpenAdaptive}
+      >
+        Prompt Master — describe your sound
+      </button>
+    </div>
+  );
+}
+
+type AdaptivePromptPanelProps = {
+  adaptiveIntent: string;
+  adaptiveProcessing: boolean;
+  adaptiveSectionRef: React.RefObject<HTMLDivElement>;
+  advancedControlsOpen: boolean;
+  loading: boolean;
+  referenceArtist: string;
+  referenceTrackFile: File | null;
+  referenceTrackInputRef: React.RefObject<HTMLInputElement>;
+  referenceTrackNotice: string | null;
+  onAdaptiveIntentChange: (value: string) => void;
+  onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
+  onReferenceArtistChange: (value: string) => void;
+  onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
+  onRunAdaptive: () => void;
+};
+
+function AdaptivePromptPanel({
+  adaptiveIntent,
+  adaptiveProcessing,
+  adaptiveSectionRef,
+  advancedControlsOpen,
+  loading,
+  referenceArtist,
+  referenceTrackFile,
+  referenceTrackInputRef,
+  referenceTrackNotice,
+  onAdaptiveIntentChange,
+  onAdvancedControlsOpenChange,
+  onReferenceArtistChange,
+  onReferenceTrackSelection,
+  onRunAdaptive
+}: AdaptivePromptPanelProps) {
+  return (
+    <div ref={adaptiveSectionRef} style={adaptivePlaceholderStyle}>
+      <p style={{ margin: 0, color: "#c4d1f5" }}>
+        Adaptive previews are free. Downloading the adaptive WAV needs Creator or Pro Studio (same billing email you
+        use at checkout).
+      </p>
+      <label htmlFor="adaptive-intent" style={adaptiveIntentLabelStyle}>
+        Notes for the adaptive engine (optional but helpful)
+      </label>
+      <textarea
+        id="adaptive-intent"
+        value={adaptiveIntent}
+        onChange={(event) => onAdaptiveIntentChange(event.target.value)}
+        placeholder="More punch for clubs, warmer vocals, cleaner low end, loud and modern for streaming..."
+        rows={4}
+        style={adaptiveIntentTextareaStyle}
+      />
+      <p style={adaptiveIntentHintStyle}>
+        Short phrases work best — think “warmer vocal,” “tighter low end,” or “more club energy.”
+      </p>
+      <div style={advancedControlsSectionStyle}>
+        <button
+          type="button"
+          style={advancedControlsToggleStyle}
+          aria-expanded={advancedControlsOpen}
+          aria-controls="adaptive-advanced-controls"
+          onClick={() => onAdvancedControlsOpenChange((open) => !open)}
+        >
+          <span>Advanced Controls</span>
+          <span aria-hidden="true" style={advancedControlsChevronStyle}>
+            {advancedControlsOpen ? "▾" : "▸"}
+          </span>
+        </button>
+        {advancedControlsOpen ? (
+          <div id="adaptive-advanced-controls" style={advancedControlsPanelStyle}>
+            <div style={referenceTrackSectionStyle}>
+              <p style={adaptiveIntentLabelStyle}>Reference Track (Optional)</p>
+              <p style={adaptiveIntentHintStyle}>
+                Want a specific sound? Upload a song you love and MasterSauce will use its tone, loudness, and
+                balance as guidance while preserving your original mix.
+              </p>
+              <p style={referenceTrackExamplesStyle}>
+                <span style={referenceTrackExamplesLabelStyle}>Examples:</span>
+                <span style={referenceTrackExamplesListStyle}>The Prodigy • Linkin Park • Don Omar • Bad Bunny</span>
+              </p>
+              <label htmlFor="reference-artist" style={referenceTrackFieldLabelStyle}>
+                Reference Artist (Optional)
+              </label>
+              <input
+                id="reference-artist"
+                type="text"
+                value={referenceArtist}
+                onChange={(event) => onReferenceArtistChange(event.target.value)}
+                placeholder="The Prodigy, Don Omar, Linkin Park..."
+                style={referenceArtistInputStyle}
+              />
+              <p style={referenceArtistHelpStyle}>
+                Don&apos;t have a reference file? Tell us an artist or sound you&apos;re aiming for.
+              </p>
+              {referenceTrackFile ? (
+                <div style={referenceTrackLoadedStyle}>
+                  <p style={referenceTrackLoadedTitleStyle}>✓ Reference Loaded</p>
+                  <p style={referenceTrackFilenameStyle}>{referenceTrackFile.name}</p>
+                  <p style={referenceTrackConfidenceStyle}>
+                    Reference tracks guide the master but never replace your original mix.
+                  </p>
+                  <button
+                    type="button"
+                    style={referenceTrackChooseStyle}
+                    aria-label="Change reference track file"
+                    onClick={() => referenceTrackInputRef.current?.click()}
+                  >
+                    Change Reference Track
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  style={referenceTrackChooseStyle}
+                  aria-label="Choose reference track file"
+                  onClick={() => referenceTrackInputRef.current?.click()}
+                >
+                  Choose Reference Track
+                </button>
+              )}
+              <input
+                ref={referenceTrackInputRef}
+                id="reference-track"
+                type="file"
+                accept=".wav,.mp3"
+                onChange={(event) => onReferenceTrackSelection(event.target.files?.[0] ?? null, event.currentTarget)}
+                style={inputStyle}
+              />
+              {referenceTrackNotice ? (
+                <p style={referenceTrackNoticeStyle} role="status">
+                  {referenceTrackNotice}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        disabled={adaptiveProcessing || loading}
+        style={buttonStyle}
+        aria-busy={adaptiveProcessing}
+        aria-label={adaptiveProcessing ? "Shaping adaptive preview" : "Run free adaptive preview"}
+        onClick={onRunAdaptive}
+      >
+        {adaptiveProcessing ? "Shaping adaptive preview…" : "Run free adaptive preview"}
+      </button>
+      <p style={analysisContinueHintStyle}>
+        Need Creator or Pro for adaptive exports?{" "}
+        <a href={buildAdaptivePricingLink()} style={{ color: "#9eb7ff", textDecoration: "underline" }}>
+          See plans with adaptive
+        </a>
+      </p>
+    </div>
+  );
+}
+
+type AnalysisSummaryPanelProps = {
+  adaptiveIntent: string;
+  adaptiveProcessing: boolean;
+  adaptiveSectionRef: React.RefObject<HTMLDivElement>;
+  advancedControlsOpen: boolean;
+  confirmedContinueWithStandard: boolean;
+  isProduction: boolean;
+  loading: boolean;
+  preMasterAnalysis: PreMasterAnalysisResponse["analysis"];
+  preMasterDebug: PreMasterAnalysisResponse["debug"] | null;
+  referenceArtist: string;
+  referenceTrackFile: File | null;
+  referenceTrackInputRef: React.RefObject<HTMLInputElement>;
+  referenceTrackNotice: string | null;
+  showAdaptivePlaceholder: boolean;
+  onAdaptiveIntentChange: (value: string) => void;
+  onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
+  onOpenAdaptive: () => void;
+  onReferenceArtistChange: (value: string) => void;
+  onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
+  onRunAdaptive: () => void;
+  onRunStandard: () => void;
+};
+
+function AnalysisSummaryPanel({
+  adaptiveIntent,
+  adaptiveProcessing,
+  adaptiveSectionRef,
+  advancedControlsOpen,
+  confirmedContinueWithStandard,
+  isProduction,
+  loading,
+  preMasterAnalysis,
+  preMasterDebug,
+  referenceArtist,
+  referenceTrackFile,
+  referenceTrackInputRef,
+  referenceTrackNotice,
+  showAdaptivePlaceholder,
+  onAdaptiveIntentChange,
+  onAdvancedControlsOpenChange,
+  onOpenAdaptive,
+  onReferenceArtistChange,
+  onReferenceTrackSelection,
+  onRunAdaptive,
+  onRunStandard
+}: AnalysisSummaryPanelProps) {
+  return (
+    <div style={analysisCardStyle}>
+      <h3 style={analysisHeadingStyle}>Mix analysis</h3>
+      <p style={analysisVerdictStyle}>{preMasterAnalysis.verdict}</p>
+      <div style={analysisMetricsGridStyle}>
+        <div style={analysisMetricItemStyle}>
+          <p style={analysisMetricLabelStyle}>Loudness</p>
+          <p style={analysisMetricValueStyle}>
+            {preMasterAnalysis.loudness.valueLufs !== null ? `${preMasterAnalysis.loudness.valueLufs} LUFS` : "N/A"}
+          </p>
+          <p style={analysisMetricHintStyle}>{preMasterAnalysis.loudness.status}</p>
+        </div>
+        <div style={analysisMetricItemStyle}>
+          <p style={analysisMetricLabelStyle}>Peak safety</p>
+          <p style={analysisMetricValueStyle}>
+            {preMasterAnalysis.peakSafety.valueDb !== null ? `${preMasterAnalysis.peakSafety.valueDb} dB` : "N/A"}
+          </p>
+          <p style={analysisMetricHintStyle}>{preMasterAnalysis.peakSafety.status}</p>
+        </div>
+        <div style={analysisMetricItemStyle}>
+          <p style={analysisMetricLabelStyle}>Dynamic control</p>
+          <p style={analysisMetricValueStyle}>
+            {preMasterAnalysis.dynamicControl.valueDb !== null
+              ? `${preMasterAnalysis.dynamicControl.valueDb} dB crest`
+              : "N/A"}
+          </p>
+          <p style={analysisMetricHintStyle}>{preMasterAnalysis.dynamicControl.status}</p>
+        </div>
+      </div>
+      <p style={analysisRecommendationStyle}>{preMasterAnalysis.recommendation}</p>
+      {!isProduction && preMasterDebug ? (
+        <div style={analysisDebugBoxStyle}>
+          <p style={analysisDebugTitleStyle}>Debug (development only)</p>
+          <p style={analysisDebugLineStyle}>filename: {preMasterDebug.filename ?? "N/A"}</p>
+          <p style={analysisDebugLineStyle}>integratedLufs: {preMasterDebug.rawMetrics?.integratedLufs ?? "N/A"}</p>
+          <p style={analysisDebugLineStyle}>peakDb: {preMasterDebug.rawMetrics?.peakDb ?? "N/A"}</p>
+          <p style={analysisDebugLineStyle}>crestDb: {preMasterDebug.rawMetrics?.crestDb ?? "N/A"}</p>
+          <p style={analysisDebugLineStyle}>verdict: {preMasterAnalysis.verdict}</p>
+        </div>
+      ) : null}
+      <StandardMasterPanel
+        loading={loading}
+        adaptiveProcessing={adaptiveProcessing}
+        onRunStandard={onRunStandard}
+        onOpenAdaptive={onOpenAdaptive}
+      />
+      {!showAdaptivePlaceholder ? (
+        <p style={analysisContinueHintStyle}>
+          Optional reference track lives in Prompt Master — upload a song you love as tonal guidance.
+        </p>
+      ) : null}
+      {showAdaptivePlaceholder ? (
+        <AdaptivePromptPanel
+          adaptiveIntent={adaptiveIntent}
+          adaptiveProcessing={adaptiveProcessing}
+          adaptiveSectionRef={adaptiveSectionRef}
+          advancedControlsOpen={advancedControlsOpen}
+          loading={loading}
+          referenceArtist={referenceArtist}
+          referenceTrackFile={referenceTrackFile}
+          referenceTrackInputRef={referenceTrackInputRef}
+          referenceTrackNotice={referenceTrackNotice}
+          onAdaptiveIntentChange={onAdaptiveIntentChange}
+          onAdvancedControlsOpenChange={onAdvancedControlsOpenChange}
+          onReferenceArtistChange={onReferenceArtistChange}
+          onReferenceTrackSelection={onReferenceTrackSelection}
+          onRunAdaptive={onRunAdaptive}
+        />
+      ) : null}
+      {confirmedContinueWithStandard ? (
+        <p style={analysisContinueHintStyle}>
+          Applying the recommended master using your genre and loudness picks — previews stay free.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+type ExportPanelProps = {
+  adaptiveModeActive: boolean;
+  masteringAnalyticsContext: MasteringAnalyticsContext;
+  result: MasterResponse;
+  wavDownloadUrl: string | null;
+  mp3DownloadUrl: string | null;
+  onAdaptiveUnlocked: (url: string) => void;
+  onStandardUnlocked: (urls: { wav: string; mp3: string }) => void;
+};
+
+function ExportPanel({
+  adaptiveModeActive,
+  masteringAnalyticsContext,
+  result,
+  wavDownloadUrl,
+  mp3DownloadUrl,
+  onAdaptiveUnlocked,
+  onStandardUnlocked
+}: ExportPanelProps) {
+  if (wavDownloadUrl || mp3DownloadUrl) return null;
+
+  return adaptiveModeActive ? (
+    <AdaptiveExportGate
+      jobId={result.jobId}
+      fileId={result.download.fileId}
+      analyticsContext={masteringAnalyticsContext}
+      pendingCheckoutSnapshot={{
+        v: 1,
+        jobId: result.jobId,
+        fileId: result.download.fileId,
+        previews: result.previews,
+        analysis: result.analysis,
+        quota: result.quota
+      }}
+      onUnlocked={onAdaptiveUnlocked}
+    />
+  ) : (
+    <EmailCaptureForm jobId={result.jobId} fileId={result.download.fileId} onUnlocked={onStandardUnlocked} />
+  );
+}
+
 export function UploadForm() {
   const isProduction = process.env.NODE_ENV === "production";
   const preMasterAnalysisEnabled = true;
@@ -908,46 +1334,14 @@ export function UploadForm() {
   return (
     <section id="master" style={panelStyle}>
       {ownerTestingPanel ? (
-        <div style={ownerTestingPanelStyle}>
-          <p style={ownerTestingTitleStyle}>Local owner testing only</p>
-          <p style={ownerTestingHintStyle}>
-            Stored only in this browser session. Not sent to analytics. Paste an owner token to add both{" "}
-            <code style={ownerTestingCodeStyle}>x-master-admin-bypass</code> header on GET{" "}
-            <code style={ownerTestingCodeStyle}>/api/download</code> quota checks and{" "}
-            <code style={ownerTestingCodeStyle}>x-master-owner-token</code> for strict validation.
-          </p>
-          <label htmlFor="owner-bypass-token" style={ownerTestingLabelStyle}>
-            Token (hidden field)
-          </label>
-          <input
-            id="owner-bypass-token"
-            type="password"
-            autoComplete="off"
-            value={ownerBypassDraft}
-            onChange={(e) => setOwnerBypassDraft(e.target.value)}
-            placeholder="Paste token"
-            style={ownerTestingInputStyle}
-          />
-          <p style={ownerTestingTokenHelperStyle}>A valid saved token is required before override can arm.</p>
-          <div style={ownerTestingActionsStyle}>
-            <button type="button" style={ownerTestingPrimaryStyle} onClick={applyOwnerBypassFromDraft}>
-              Save to session
-            </button>
-            <button type="button" style={ownerTestingSecondaryStyle} onClick={clearOwnerBypass}>
-              Remove
-            </button>
-          </div>
-          <div
-            style={ownerOverrideArmed ? ownerOverrideStatusArmedStyle : ownerOverrideStatusUnarmedStyle}
-            role="status"
-            aria-live="polite"
-          >
-            {ownerOverrideArmed ? "Override armed (valid session token present)" : "Override not armed"}
-          </div>
-          <p style={ownerTestingDebugLineStyle}>
-            Bypass available for final export: {ownerSessionToken ? "yes" : "no"}
-          </p>
-        </div>
+        <OwnerTestingPanel
+          ownerBypassDraft={ownerBypassDraft}
+          ownerOverrideArmed={ownerOverrideArmed}
+          ownerSessionToken={ownerSessionToken}
+          onOwnerBypassDraftChange={setOwnerBypassDraft}
+          onApplyOwnerBypass={applyOwnerBypassFromDraft}
+          onClearOwnerBypass={clearOwnerBypass}
+        />
       ) : null}
       <div style={headingRowStyle}>
         <p style={eyebrowStyle}>Mastering workspace</p>
@@ -1035,222 +1429,40 @@ export function UploadForm() {
       </form>
 
       {preMasterAnalysisEnabled && preMasterAnalysis ? (
-        <div style={analysisCardStyle}>
-          <h3 style={analysisHeadingStyle}>Mix analysis</h3>
-          <p style={analysisVerdictStyle}>{preMasterAnalysis.verdict}</p>
-          <div style={analysisMetricsGridStyle}>
-            <div style={analysisMetricItemStyle}>
-              <p style={analysisMetricLabelStyle}>Loudness</p>
-              <p style={analysisMetricValueStyle}>
-                {preMasterAnalysis.loudness.valueLufs !== null ? `${preMasterAnalysis.loudness.valueLufs} LUFS` : "N/A"}
-              </p>
-              <p style={analysisMetricHintStyle}>{preMasterAnalysis.loudness.status}</p>
-            </div>
-            <div style={analysisMetricItemStyle}>
-              <p style={analysisMetricLabelStyle}>Peak safety</p>
-              <p style={analysisMetricValueStyle}>
-                {preMasterAnalysis.peakSafety.valueDb !== null ? `${preMasterAnalysis.peakSafety.valueDb} dB` : "N/A"}
-              </p>
-              <p style={analysisMetricHintStyle}>{preMasterAnalysis.peakSafety.status}</p>
-            </div>
-            <div style={analysisMetricItemStyle}>
-              <p style={analysisMetricLabelStyle}>Dynamic control</p>
-              <p style={analysisMetricValueStyle}>
-                {preMasterAnalysis.dynamicControl.valueDb !== null
-                  ? `${preMasterAnalysis.dynamicControl.valueDb} dB crest`
-                  : "N/A"}
-              </p>
-              <p style={analysisMetricHintStyle}>{preMasterAnalysis.dynamicControl.status}</p>
-            </div>
-          </div>
-          <p style={analysisRecommendationStyle}>{preMasterAnalysis.recommendation}</p>
-          {!isProduction && preMasterDebug ? (
-            <div style={analysisDebugBoxStyle}>
-              <p style={analysisDebugTitleStyle}>Debug (development only)</p>
-              <p style={analysisDebugLineStyle}>filename: {preMasterDebug.filename ?? "N/A"}</p>
-              <p style={analysisDebugLineStyle}>
-                integratedLufs: {preMasterDebug.rawMetrics?.integratedLufs ?? "N/A"}
-              </p>
-              <p style={analysisDebugLineStyle}>peakDb: {preMasterDebug.rawMetrics?.peakDb ?? "N/A"}</p>
-              <p style={analysisDebugLineStyle}>crestDb: {preMasterDebug.rawMetrics?.crestDb ?? "N/A"}</p>
-              <p style={analysisDebugLineStyle}>verdict: {preMasterAnalysis.verdict}</p>
-            </div>
-          ) : null}
-          <div style={analysisActionRowStyle}>
-            <button
-              type="button"
-              disabled={loading}
-              style={buttonStyle}
-              aria-busy={loading}
-              aria-label={
-                loading
-                  ? "Applying recommended master"
-                  : "Use recommended master — fast preset mastering from your genre and loudness"
-              }
-              onClick={() => {
-                setConfirmedContinueWithStandard(true);
-                void runStandardMastering();
-              }}
-            >
-              {loading ? "Applying recommended master…" : "Preset Master — instant result"}
-            </button>
-            <button
-              type="button"
-              disabled={adaptiveProcessing || loading}
-              style={secondaryActionStyle}
-              aria-label="Adaptive customization — add written direction, then run a free preview"
-              onClick={() => {
-                debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
-                setShowAdaptivePlaceholder(true);
-                setAdvancedControlsOpen(true);
-                setError(null);
-                setStatus("Adaptive customization — add a short note about the sound you want, then run the free preview.");
-              }}
-            >
-              Prompt Master — describe your sound
-            </button>
-          </div>
-          {!showAdaptivePlaceholder ? (
-            <p style={analysisContinueHintStyle}>
-              Optional reference track lives in Prompt Master — upload a song you love as tonal guidance.
-            </p>
-          ) : null}
-          {showAdaptivePlaceholder ? (
-            <div ref={adaptiveSectionRef} style={adaptivePlaceholderStyle}>
-              <p style={{ margin: 0, color: "#c4d1f5" }}>
-                Adaptive previews are free. Downloading the adaptive WAV needs Creator or Pro Studio (same billing email you
-                use at checkout).
-              </p>
-              <label htmlFor="adaptive-intent" style={adaptiveIntentLabelStyle}>
-                Notes for the adaptive engine (optional but helpful)
-              </label>
-              <textarea
-                id="adaptive-intent"
-                value={adaptiveIntent}
-                onChange={(event) => setAdaptiveIntent(event.target.value)}
-                placeholder="More punch for clubs, warmer vocals, cleaner low end, loud and modern for streaming..."
-                rows={4}
-                style={adaptiveIntentTextareaStyle}
-              />
-              <p style={adaptiveIntentHintStyle}>
-                Short phrases work best — think “warmer vocal,” “tighter low end,” or “more club energy.”
-              </p>
-              <div style={advancedControlsSectionStyle}>
-                <button
-                  type="button"
-                  style={advancedControlsToggleStyle}
-                  aria-expanded={advancedControlsOpen}
-                  aria-controls="adaptive-advanced-controls"
-                  onClick={() => setAdvancedControlsOpen((open) => !open)}
-                >
-                  <span>Advanced Controls</span>
-                  <span aria-hidden="true" style={advancedControlsChevronStyle}>
-                    {advancedControlsOpen ? "▾" : "▸"}
-                  </span>
-                </button>
-                {advancedControlsOpen ? (
-                  <div id="adaptive-advanced-controls" style={advancedControlsPanelStyle}>
-                    <div style={referenceTrackSectionStyle}>
-                      <p style={adaptiveIntentLabelStyle}>Reference Track (Optional)</p>
-                      <p style={adaptiveIntentHintStyle}>
-                        Want a specific sound? Upload a song you love and MasterSauce will use its tone, loudness, and
-                        balance as guidance while preserving your original mix.
-                      </p>
-                      <p style={referenceTrackExamplesStyle}>
-                        <span style={referenceTrackExamplesLabelStyle}>Examples:</span>
-                        <span style={referenceTrackExamplesListStyle}>
-                          The Prodigy • Linkin Park • Don Omar • Bad Bunny
-                        </span>
-                      </p>
-                      <label htmlFor="reference-artist" style={referenceTrackFieldLabelStyle}>
-                        Reference Artist (Optional)
-                      </label>
-                      <input
-                        id="reference-artist"
-                        type="text"
-                        value={referenceArtist}
-                        onChange={(event) => setReferenceArtist(event.target.value)}
-                        placeholder="The Prodigy, Don Omar, Linkin Park..."
-                        style={referenceArtistInputStyle}
-                      />
-                      <p style={referenceArtistHelpStyle}>
-                        Don&apos;t have a reference file? Tell us an artist or sound you&apos;re aiming for.
-                      </p>
-                      {referenceTrackFile ? (
-                        <div style={referenceTrackLoadedStyle}>
-                          <p style={referenceTrackLoadedTitleStyle}>✓ Reference Loaded</p>
-                          <p style={referenceTrackFilenameStyle}>{referenceTrackFile.name}</p>
-                          <p style={referenceTrackConfidenceStyle}>
-                            Reference tracks guide the master but never replace your original mix.
-                          </p>
-                          <button
-                            type="button"
-                            style={referenceTrackChooseStyle}
-                            aria-label="Change reference track file"
-                            onClick={() => referenceTrackInputRef.current?.click()}
-                          >
-                            Change Reference Track
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          style={referenceTrackChooseStyle}
-                          aria-label="Choose reference track file"
-                          onClick={() => referenceTrackInputRef.current?.click()}
-                        >
-                          Choose Reference Track
-                        </button>
-                      )}
-                      <input
-                        ref={referenceTrackInputRef}
-                        id="reference-track"
-                        type="file"
-                        accept=".wav,.mp3"
-                        onChange={(event) =>
-                          handleReferenceTrackSelection(event.target.files?.[0] ?? null, event.currentTarget)
-                        }
-                        style={inputStyle}
-                      />
-                      {referenceTrackNotice ? (
-                        <p style={referenceTrackNoticeStyle} role="status">
-                          {referenceTrackNotice}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                disabled={adaptiveProcessing || loading}
-                style={buttonStyle}
-                aria-busy={adaptiveProcessing}
-                aria-label={
-                  adaptiveProcessing
-                    ? "Shaping adaptive preview"
-                    : "Run free adaptive preview"
-                }
-                onClick={() => {
-                  void runAdaptiveMastering();
-                }}
-              >
-                {adaptiveProcessing ? "Shaping adaptive preview…" : "Run free adaptive preview"}
-              </button>
-              <p style={analysisContinueHintStyle}>
-                Need Creator or Pro for adaptive exports?{" "}
-                <a href={buildAdaptivePricingLink()} style={{ color: "#9eb7ff", textDecoration: "underline" }}>
-                  See plans with adaptive
-                </a>
-              </p>
-            </div>
-          ) : null}
-          {confirmedContinueWithStandard ? (
-            <p style={analysisContinueHintStyle}>
-              Applying the recommended master using your genre and loudness picks — previews stay free.
-            </p>
-          ) : null}
-        </div>
+        <AnalysisSummaryPanel
+          adaptiveIntent={adaptiveIntent}
+          adaptiveProcessing={adaptiveProcessing}
+          adaptiveSectionRef={adaptiveSectionRef}
+          advancedControlsOpen={advancedControlsOpen}
+          confirmedContinueWithStandard={confirmedContinueWithStandard}
+          isProduction={isProduction}
+          loading={loading}
+          preMasterAnalysis={preMasterAnalysis}
+          preMasterDebug={preMasterDebug}
+          referenceArtist={referenceArtist}
+          referenceTrackFile={referenceTrackFile}
+          referenceTrackInputRef={referenceTrackInputRef}
+          referenceTrackNotice={referenceTrackNotice}
+          showAdaptivePlaceholder={showAdaptivePlaceholder}
+          onAdaptiveIntentChange={setAdaptiveIntent}
+          onAdvancedControlsOpenChange={setAdvancedControlsOpen}
+          onOpenAdaptive={() => {
+            debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
+            setShowAdaptivePlaceholder(true);
+            setAdvancedControlsOpen(true);
+            setError(null);
+            setStatus("Adaptive customization — add a short note about the sound you want, then run the free preview.");
+          }}
+          onReferenceArtistChange={setReferenceArtist}
+          onReferenceTrackSelection={handleReferenceTrackSelection}
+          onRunAdaptive={() => {
+            void runAdaptiveMastering();
+          }}
+          onRunStandard={() => {
+            setConfirmedContinueWithStandard(true);
+            void runStandardMastering();
+          }}
+        />
       ) : null}
 
       {error ? (
@@ -1622,37 +1834,22 @@ export function UploadForm() {
               </div>
             }
           />
-          {!wavDownloadUrl && !mp3DownloadUrl ? (
-            adaptiveModeActive ? (
-              <AdaptiveExportGate
-                jobId={result.jobId}
-                fileId={result.download.fileId}
-                analyticsContext={masteringAnalyticsContext}
-                pendingCheckoutSnapshot={{
-                  v: 1,
-                  jobId: result.jobId,
-                  fileId: result.download.fileId,
-                  previews: result.previews,
-                  analysis: result.analysis,
-                  quota: result.quota
-                }}
-                onUnlocked={(url) => {
-                  console.log("[ADAPTIVE_UI] export unlocked from gate");
-                  setWavDownloadUrl(url);
-                  setMp3DownloadUrl(buildMp3DownloadUrl(result.download.fileId, result.jobId));
-                }}
-              />
-            ) : (
-              <EmailCaptureForm
-                jobId={result.jobId}
-                fileId={result.download.fileId}
-                onUnlocked={({ wav, mp3 }) => {
-                  setWavDownloadUrl(wav);
-                  setMp3DownloadUrl(mp3);
-                }}
-              />
-            )
-          ) : null}
+          <ExportPanel
+            adaptiveModeActive={adaptiveModeActive}
+            masteringAnalyticsContext={masteringAnalyticsContext}
+            result={result}
+            wavDownloadUrl={wavDownloadUrl}
+            mp3DownloadUrl={mp3DownloadUrl}
+            onAdaptiveUnlocked={(url) => {
+              console.log("[ADAPTIVE_UI] export unlocked from gate");
+              setWavDownloadUrl(url);
+              setMp3DownloadUrl(buildMp3DownloadUrl(result.download.fileId, result.jobId));
+            }}
+            onStandardUnlocked={({ wav, mp3 }) => {
+              setWavDownloadUrl(wav);
+              setMp3DownloadUrl(mp3);
+            }}
+          />
         </div>
       ) : null}
       <DownloadLimitModal
