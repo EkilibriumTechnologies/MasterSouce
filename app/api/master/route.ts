@@ -8,10 +8,11 @@ import {
   getFfmpegExecutablePath,
   getFfmpegResolutionDiagnostics
 } from "@/lib/audio/ffmpeg-bin";
+import { API_ERROR_CODES, apiErrorResponse, logApiError, sanitizeLogDetails } from "@/lib/api/error-responses";
 import { GENRE_PRESETS, LOUDNESS_MODES } from "@/lib/genre-presets";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
-import { cleanupExpiredTempFiles, getTempRoot, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
+import { cleanupExpiredTempFiles, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import {
   logWavExportEntitlementResolution,
@@ -79,9 +80,9 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    console.log("[MASTER_DEBUG] temp:cleanup:before", { tempRoot: getTempRoot() });
+    console.log("[MASTER_DEBUG] temp:cleanup:before");
     await cleanupExpiredTempFiles();
-    console.log("[MASTER_DEBUG] temp:cleanup:after", { tempRoot: getTempRoot() });
+    console.log("[MASTER_DEBUG] temp:cleanup:after");
 
     const sessionPrep = prepareSessionForRequest(request);
     const user = buildApiUser(request, sessionPrep.sessionId);
@@ -95,9 +96,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (formErr) {
       const name = formErr instanceof Error ? formErr.name : "Error";
-      const message = formErr instanceof Error ? formErr.message : String(formErr);
-      const stack = formErr instanceof Error ? formErr.stack : undefined;
-      console.log("[MASTER_DEBUG] formData:error", { name, message, stack });
+      console.log("[MASTER_DEBUG] formData:error", sanitizeLogDetails({ name, error: formErr }));
       throw formErr;
     }
 
@@ -207,7 +206,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[MASTER_DEBUG] temp:write:before", {
-      tempRoot: getTempRoot(),
       jobId,
       extension: normalizedExt,
       byteLength: file.size
@@ -220,19 +218,14 @@ export async function POST(request: NextRequest) {
       mime: normalizedExt === "wav" ? "audio/wav" : "audio/mpeg",
       jobId
     });
-    console.log("[MASTER_DEBUG] temp:write:after", {
-      inputFilePath: uploadRecord.filePath,
-      tempRoot: getTempRoot()
-    });
+    console.log("[MASTER_DEBUG] temp:write:after", { jobId, kind: uploadRecord.kind });
 
     const resolution = getFfmpegResolutionDiagnostics();
     const execPath = resolution.resolvedPath || getFfmpegExecutablePath();
 
     console.log("[MASTER_DEBUG] ffmpeg:start", {
       phase: "preflight",
-      executablePath: execPath,
-      inputPath: uploadRecord.filePath,
-      outputPath: "(probe only)"
+      executableResolved: Boolean(execPath)
     });
 
     const asyncProbe = await probeFfmpegSpawnVersion(resolution.resolvedPath);
@@ -242,15 +235,12 @@ export async function POST(request: NextRequest) {
     if (!spawnOk) {
       console.log("[MASTER_DEBUG] ffmpeg:error", {
         phase: "preflight",
-        message: asyncProbe.spawnError ?? "preflight spawn failed or non-zero exit",
         exitCode: asyncProbe.exitCode,
-        timedOut: asyncProbe.timedOut,
-        stderrSnippet: asyncProbe.stderrSummary
+        timedOut: asyncProbe.timedOut
       });
     } else {
       console.log("[MASTER_DEBUG] ffmpeg:success", {
         phase: "preflight",
-        executablePath: execPath,
         exitCode: asyncProbe.exitCode
       });
     }
@@ -259,24 +249,21 @@ export async function POST(request: NextRequest) {
       "[api/master] ffmpeg preflight",
       JSON.stringify({
         jobId,
-        resolvedPath: resolution.resolvedPath,
         fileExists: resolution.fileExists,
         platform: resolution.platform,
         nodeEnv: resolution.nodeEnv,
         asyncSpawnOk: spawnOk,
         asyncProbeExitCode: asyncProbe.exitCode,
-        asyncProbeSpawnError: asyncProbe.spawnError,
         asyncProbeTimedOut: asyncProbe.timedOut,
-        stderrSummary: asyncProbe.stderrSummary,
-        stdoutSummary: asyncProbe.stdoutSummary
+        asyncProbeSpawnError: asyncProbe.spawnError ? "present" : null,
+        stderrSummary: asyncProbe.stderrSummary ? "present" : null,
+        stdoutSummary: asyncProbe.stdoutSummary ? "present" : null
       })
     );
 
     console.log("[MASTER_DEBUG] ffmpeg:start", {
       phase: "pipeline",
-      executablePath: execPath,
-      inputPath: uploadRecord.filePath,
-      outputPath: "(mastered wav + previews under temp root)"
+      executableResolved: Boolean(execPath)
     });
 
     let result: Awaited<ReturnType<typeof runMasteringPipeline>>;
@@ -290,27 +277,19 @@ export async function POST(request: NextRequest) {
         jobId
       });
     } catch (pipeErr) {
-      const msg = pipeErr instanceof Error ? pipeErr.message : String(pipeErr);
-      const stderrSnippet = msg.includes("stderr:") ? msg.slice(-800) : msg.slice(-800);
       console.log("[MASTER_DEBUG] ffmpeg:error", {
         phase: "pipeline",
-        message: msg,
-        exitCode: parseFfmpegExitCodeFromMessage(msg),
-        stderrSnippet
+        exitCode: parseFfmpegExitCodeFromMessage(pipeErr instanceof Error ? pipeErr.message : String(pipeErr))
       });
       throw pipeErr;
     }
 
     console.log("[MASTER_DEBUG] ffmpeg:success", {
       phase: "pipeline",
-      executablePath: execPath,
-      inputPath: uploadRecord.filePath,
-      masteredPath: result.masteredPath,
-      previewPath: result.previewPath,
-      inputPreviewPath: result.inputPreviewPath
+      executableResolved: Boolean(execPath)
     });
 
-    console.log("[MASTER_DEBUG] temp:register:before", { tempRoot: getTempRoot() });
+    console.log("[MASTER_DEBUG] temp:register:before", { jobId });
     const masteredRecord = await registerExistingFile({
       filePath: result.masteredPath,
       kind: "mastered",
@@ -330,9 +309,10 @@ export async function POST(request: NextRequest) {
       jobId
     });
     console.log("[MASTER_DEBUG] temp:register:after", {
-      masteredId: masteredRecord.id,
-      originalPreviewId: originalPreviewRecord.id,
-      masteredPreviewId: masteredPreviewRecord.id
+      jobId,
+      masteredRegistered: Boolean(masteredRecord.id),
+      originalPreviewRegistered: Boolean(originalPreviewRecord.id),
+      masteredPreviewRegistered: Boolean(masteredPreviewRecord.id)
     });
 
     const nextEntitlements = await getEntitlementsForUser(user, billingResolution.billingContext);
@@ -445,64 +425,37 @@ export async function POST(request: NextRequest) {
     attachSessionCookieIfNeeded(response, sessionPrep);
     return response;
   } catch (error) {
-    const name = error instanceof Error ? error.name : "Error";
-    const message = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
-    console.log("[MASTER_DEBUG] catch:error", { name, message, stack });
+    const errorCode =
+      error instanceof FfmpegBinaryMissingError ? API_ERROR_CODES.ffmpegUnavailable : API_ERROR_CODES.masteringFailed;
+    console.log("[MASTER_DEBUG] catch:error", sanitizeLogDetails({ code: errorCode, error }));
     logMasteringFunnelEvent("mastering_preview_api_failed", {
       source_component: "api_master",
-      error_code: error instanceof FfmpegBinaryMissingError ? "ffmpeg_missing" : "mastering_failed"
+      error_code: errorCode
     });
 
     const errSession = prepareSessionForRequest(request);
-    const errStack = error instanceof Error ? error.stack ?? error.message : String(error);
-    console.error(
-      "[api/master] caught error",
-      errStack,
-      ffmpegRuntimePreflight ? JSON.stringify(ffmpegRuntimePreflight) : "no ffmpeg preflight (failed earlier)"
-    );
+    logApiError("api/master", errorCode, error, {
+      ffmpegPreflightAvailable: Boolean(ffmpegRuntimePreflight),
+      ffmpegSpawnOk:
+        ffmpegRuntimePreflight?.asyncProbe.spawnError === null &&
+        ffmpegRuntimePreflight?.asyncProbe.exitCode === 0 &&
+        !ffmpegRuntimePreflight?.asyncProbe.timedOut
+    });
 
     if (error instanceof FfmpegBinaryMissingError) {
-      const res = NextResponse.json(
-        {
-          error: error.message,
-          code: error.code,
-          candidatesTried: error.candidatesTried,
-          ...(process.env.NODE_ENV !== "production"
-            ? {
-                diagnostics: {
-                  errorStack: errStack,
-                  ffmpegRuntimePreflight
-                }
-              }
-            : {})
-        },
-        { status: 503 }
-      );
+      const res = apiErrorResponse({
+        status: 503,
+        code: API_ERROR_CODES.ffmpegUnavailable,
+        message: "Mastering is temporarily unavailable. Please try again."
+      });
       attachSessionCookieIfNeeded(res, errSession);
       return res;
     }
-    const detail = error instanceof Error ? error.message : "Unknown mastering error.";
-    const messageOut = detail.includes("Supabase")
-      ? detail
-      : `Mastering failed. Ensure ffmpeg is installed and available. Detail: ${detail}`;
-    const res = NextResponse.json(
-      {
-        error: messageOut,
-        code: detail.includes("Supabase") ? "SUPABASE_ERROR" : "MASTERING_FAILED",
-        detail,
-        ...(process.env.NODE_ENV !== "production"
-          ? {
-              diagnostics: {
-                errorStack: errStack,
-                ffmpegRuntimePreflight,
-                stderrHintFromMessage: detail.includes("ffmpeg failed") ? detail.slice(-1200) : undefined
-              }
-            }
-          : {})
-      },
-      { status: 500 }
-    );
+    const res = apiErrorResponse({
+      status: 500,
+      code: API_ERROR_CODES.masteringFailed,
+      message: "Mastering failed. Please try again."
+    });
     attachSessionCookieIfNeeded(res, errSession);
     return res;
   }

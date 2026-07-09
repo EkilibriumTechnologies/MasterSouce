@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { API_ERROR_CODES, apiErrorResponse, logApiError } from "@/lib/api/error-responses";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
 import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { toPublicMetrics } from "@/lib/audio/public-analysis";
@@ -246,8 +247,7 @@ export async function POST(request: NextRequest) {
       try {
         referenceAnalysis = await resolveReferenceAnalysis(referenceFile, jobId);
       } catch (referenceError) {
-        const detail = referenceError instanceof Error ? referenceError.message : String(referenceError);
-        console.warn("[master-ai] reference_track_skipped", { jobId, detail });
+        logApiError("master-ai", API_ERROR_CODES.trackAnalysisFailed, referenceError, { jobId }, "warn");
       }
     }
 
@@ -399,47 +399,38 @@ export async function POST(request: NextRequest) {
           model: error.debug?.model ?? null,
           hasOpenAIApiKey: error.debug?.hasOpenAIApiKey ?? Boolean(process.env.OPENAI_API_KEY?.trim()),
           timeoutMs: error.debug?.timeoutMs ?? diag.resolvedTimeoutMs,
-          requestBody: error.debug?.requestBody ?? null,
+          requestBodyPresent: Boolean(error.debug?.requestBody),
           openAiHttpStatus: error.debug?.openAiHttpStatus ?? null,
-          openAiErrorPayload: error.debug?.openAiErrorPayload ?? null
+          openAiErrorPayloadPresent: Boolean(error.debug?.openAiErrorPayload)
         });
         console.error("[MASTER_AI_DEBUG] adaptive_503_failure_classification", error.code);
       }
       if (error.code === "timeout") {
         console.error("[master-ai] Unexpected AdaptiveOpenAI timeout at route boundary (should be handled in pipeline).");
-        return NextResponse.json(
-          {
-            error: "adaptive_mastering_unexpected",
-            message: "Adaptive preview failed unexpectedly. Please retry."
-          },
-          { status: 500 }
-        );
+        return apiErrorResponse({
+          status: 500,
+          code: API_ERROR_CODES.adaptiveMasteringUnexpected,
+          message: "Adaptive preview failed unexpectedly. Please retry."
+        });
       }
       if (!isAdaptiveMasteringOpenAiFatalError(error)) {
-        return NextResponse.json(
-          {
-            error: "adaptive_mastering_unexpected",
-            message: "Adaptive preview failed unexpectedly. Please retry."
-          },
-          { status: 500 }
-        );
+        return apiErrorResponse({
+          status: 500,
+          code: API_ERROR_CODES.adaptiveMasteringUnexpected,
+          message: "Adaptive preview failed unexpectedly. Please retry."
+        });
       }
-      return NextResponse.json(
-        {
-          error: "adaptive_ai_unavailable",
-          code: "adaptive_ai_unavailable",
-          message: "Adaptive AI decisions are currently unavailable. Please retry in a moment.",
-          detail: error.code
-        },
-        { status: 503 }
-      );
+      return apiErrorResponse({
+        status: 503,
+        code: API_ERROR_CODES.adaptiveAiUnavailable,
+        message: "Adaptive AI decisions are currently unavailable. Please retry in a moment."
+      });
     }
-    const detail = error instanceof Error ? error.message : "Unknown adaptive mastering error.";
-    return NextResponse.json(
-      {
-        error: `Adaptive mastering failed. Detail: ${detail}`
-      },
-      { status: 500 }
-    );
+    logApiError("api/master-ai", API_ERROR_CODES.adaptiveMasteringFailed, error);
+    return apiErrorResponse({
+      status: 500,
+      code: API_ERROR_CODES.adaptiveMasteringFailed,
+      message: "Adaptive mastering failed. Please retry."
+    });
   }
 }

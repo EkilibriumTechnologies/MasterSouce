@@ -1,5 +1,6 @@
 import { trackEvent, type AbEventParams } from "@/lib/analytics/ab-comparison";
 import { normalizeBillingEmail } from "@/lib/billing/email";
+import { maskEmail } from "@/lib/security/abuse-guard";
 import type { PlanId } from "@/lib/subscriptions/types";
 
 export const MASTERING_SOURCE_FLOW = "mastering" as const;
@@ -131,7 +132,12 @@ function sanitizeServerLogDetails(details: Record<string, unknown>): Record<stri
       continue;
     }
     if (key === "normalized_email" && typeof value === "string") {
-      out.normalized_email = normalizeEmailForFunnelLog(value);
+      const normalized = normalizeEmailForFunnelLog(value);
+      if (normalized) out.normalized_email = maskEmail(normalized);
+      continue;
+    }
+    if (key === "file_id" && typeof value === "string") {
+      out.file_id = "<redacted-temp-id>";
       continue;
     }
     if (value !== undefined) out[key] = value;

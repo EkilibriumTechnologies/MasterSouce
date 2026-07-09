@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { API_ERROR_CODES, apiErrorResponse, logApiError } from "@/lib/api/error-responses";
 import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
 import { createJobId } from "@/lib/jobs/job-id";
@@ -98,12 +99,11 @@ export async function POST(request: NextRequest) {
       ...(debug ? { debug } : {})
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown analysis error.";
-    return NextResponse.json(
-      {
-        error: `Track analysis failed. Detail: ${detail}`
-      },
-      { status: 500 }
-    );
+    logApiError("api/analyze-track", API_ERROR_CODES.trackAnalysisFailed, error);
+    return apiErrorResponse({
+      status: 500,
+      code: API_ERROR_CODES.trackAnalysisFailed,
+      message: "Track analysis failed. Please try again."
+    });
   }
 }

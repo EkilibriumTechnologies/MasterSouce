@@ -8,6 +8,7 @@
     "start": "node scripts/start-standalone.js",
     "typecheck": "tsc --noEmit",
     "favicon": "node scripts/generate-favicon.mjs",
+    "test:api-hardening": "node scripts/api-error-hardening-invariants.mjs",
     "test:anti-abuse": "node scripts/anti-abuse-invariants.mjs",
     "test:wav-export": "node scripts/wav-export-format-test.mjs",
     "test:wav-entitlement": "node scripts/wav-export-entitlement-invariants.mjs",
@@ -24,7 +25,7 @@
     "test:ar-ai": "node scripts/ar-ai-invariants.mjs",
     "test:hit-analyzer-access": "node scripts/hit-analyzer-access-test.mjs",
     "test:seo-metadata": "node scripts/seo-metadata-invariants.mjs",
-    "test": "npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-source-audio && npm run test:adaptive-openai-reasoning && npm run test:admin-quality-override && npm run test:song-architect-funnel && npm run test:mastering-funnel && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
+    "test": "npm run test:api-hardening && npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-source-audio && npm run test:adaptive-openai-reasoning && npm run test:admin-quality-override && npm run test:song-architect-funnel && npm run test:mastering-funnel && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
     "inspect:wav": "node scripts/inspect-wav-format.mjs"
   },
   "dependencies": {

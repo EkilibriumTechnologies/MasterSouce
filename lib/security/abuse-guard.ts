@@ -96,8 +96,24 @@ export function maskEmail(email: string): string {
   return `${localMasked}@${domainMasked}${tld ? `.${tld}` : ""}`;
 }
 
+function sanitizeAbuseGuardMeta(meta: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (typeof value === "string" && /email/i.test(key)) {
+      sanitized[key] = maskEmail(value);
+      continue;
+    }
+    if (typeof value === "string" && /^fileId$/i.test(key)) {
+      sanitized[key] = "<redacted-temp-id>";
+      continue;
+    }
+    sanitized[key] = value;
+  }
+  return sanitized;
+}
+
 export function logAbuseGuard(event: AbuseGuardEvent, meta: Record<string, unknown>): void {
-  console.warn(`[ABUSE_GUARD] ${event}`, meta);
+  console.warn(`[ABUSE_GUARD] ${event}`, sanitizeAbuseGuardMeta(meta));
 }
 
 export function consumeRateLimit(input: ConsumeRateLimitInput): RateLimitResult {

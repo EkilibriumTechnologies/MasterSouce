@@ -12,6 +12,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { API_ERROR_CODES, logApiError, sanitizeLogDetails } from "@/lib/api/error-responses";
 import { isAdaptiveBillingAllowlisted } from "@/lib/billing/adaptive-billing-allowlist";
 import { resolveAdaptiveEntitlementForEmail } from "@/lib/billing/adaptive-resolve";
 import { isAdaptiveDevBypassEnabled } from "@/lib/billing/adaptive-dev-bypass";
@@ -99,10 +100,10 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
-  console.log("[adaptive-export] adaptive export requested", {
+  console.log("[adaptive-export] adaptive export requested", sanitizeLogDetails({
     jobId: parsed.data.jobId,
     fileId: parsed.data.fileId
-  });
+  }));
 
   if (!parsed.data.jobId.startsWith("adaptive_")) {
     console.log("[adaptive-export] rejected: not an adaptive job", { jobId: parsed.data.jobId });
@@ -121,10 +122,10 @@ export async function POST(request: NextRequest) {
 
   const hintedRecord = await resolveTempRecord(parsed.data.fileId);
   if (!hintedRecord || hintedRecord.jobId !== parsed.data.jobId || hintedRecord.kind !== "mastered") {
-    console.log("[adaptive-export] rejected: temp token mismatch", {
+    console.log("[adaptive-export] rejected: temp token mismatch", sanitizeLogDetails({
       jobId: parsed.data.jobId,
       fileId: parsed.data.fileId
-    });
+    }));
     const res = NextResponse.json(
       {
         error: "Invalid or expired adaptive master. Run Adaptive preview again.",
@@ -256,14 +257,11 @@ export async function POST(request: NextRequest) {
           })
         );
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "unknown";
-        console.error(
-          JSON.stringify({
-            scope: "adaptive_export",
-            event: "checkout_session_reconcile_error",
-            jobId: parsed.data.jobId,
-            detail
-          })
+        logApiError(
+          "adaptive_export",
+          API_ERROR_CODES.adaptiveExportReconcileFailed,
+          error,
+          { event: "checkout_session_reconcile_error", jobId: parsed.data.jobId }
         );
       }
     } else {
@@ -349,6 +347,7 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json(
       {
         error: "Export unlock is temporarily unavailable.",
+        code: "adaptive_export_supabase_unconfigured",
         entitled: false,
         requiresCheckout: false,
         checkoutUrl: null as string | null,
@@ -366,6 +365,7 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json(
       {
         error: "Server misconfiguration.",
+        code: "adaptive_export_misconfigured",
         entitled: false,
         requiresCheckout: false,
         checkoutUrl: null as string | null,
@@ -386,8 +386,10 @@ export async function POST(request: NextRequest) {
       emailVerifiedAt: new Date().toISOString()
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown error";
-    console.error("[adaptive-export] master_job_unlocks upsert failed", { detail });
+    logApiError("adaptive-export", API_ERROR_CODES.adaptiveExportUnlockFailed, error, {
+      event: "master_job_unlocks_upsert_failed",
+      jobId: parsed.data.jobId
+    });
     if (isLocalDev) {
       markJobDownloadUnlocked(parsed.data.jobId);
       const res = NextResponse.json({
@@ -405,6 +407,7 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json(
       {
         error: "Unable to unlock export right now. Please try again.",
+        code: API_ERROR_CODES.adaptiveExportUnlockFailed,
         entitled: false,
         requiresCheckout: false,
         checkoutUrl: null as string | null,
@@ -419,12 +422,15 @@ export async function POST(request: NextRequest) {
   try {
     await upsertLeadInSupabase({ email: emailNorm });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown error";
-    console.error("[adaptive-export] lead upsert failed", { detail });
+    logApiError("adaptive-export", API_ERROR_CODES.adaptiveExportLeadFailed, error, {
+      event: "lead_upsert_failed",
+      jobId: parsed.data.jobId
+    });
     if (!isLocalDev) {
       const res = NextResponse.json(
         {
           error: "Unable to save email right now. Please try again.",
+          code: API_ERROR_CODES.adaptiveExportLeadFailed,
           entitled: false,
           requiresCheckout: false,
           checkoutUrl: null as string | null,

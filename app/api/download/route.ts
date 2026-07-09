@@ -2,6 +2,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
+import { API_ERROR_CODES, apiErrorResponse, logApiError, sanitizeLogDetails } from "@/lib/api/error-responses";
 import { isJobUnlocked } from "@/lib/email/capture-email";
 import { getMasterJobUnlock, type MasterJobUnlockRow } from "@/lib/downloads/master-job-unlocks";
 import { recordMasteredDownloadAttempt } from "@/lib/downloads/record-mastered-download";
@@ -126,9 +127,12 @@ export async function GET(request: NextRequest) {
         try {
           masteredUnlock = await getMasterJobUnlock(resolvedJobId);
         } catch (error) {
-          const detail = error instanceof Error ? error.message : "Unknown error";
-          console.error("[api/download] master_job_unlocks lookup failed", { jobId: resolvedJobId, detail });
-          return NextResponse.json({ error: "Download verification failed." }, { status: 500 });
+          logApiError("api/download", API_ERROR_CODES.downloadVerificationFailed, error, { jobId: resolvedJobId });
+          return apiErrorResponse({
+            status: 500,
+            code: API_ERROR_CODES.downloadVerificationFailed,
+            message: "Download verification failed."
+          });
         }
         if (!masteredUnlock || masteredUnlock.fileId !== wavRecord.id) {
           if (isJobUnlocked(resolvedJobId)) {
@@ -192,13 +196,15 @@ export async function GET(request: NextRequest) {
             });
           }
         } catch (error) {
-          const detail = error instanceof Error ? error.message : "Unknown error";
-          console.error("[api/download] wav finalize before mp3 export failed", {
+          logApiError("api/download", API_ERROR_CODES.downloadPrepareFailed, error, {
             jobId: resolvedJobId,
-            fileId: wavRecord.id,
-            detail
+            fileId: wavRecord.id
           });
-          return NextResponse.json({ error: "Unable to prepare your master for download." }, { status: 500 });
+          return apiErrorResponse({
+            status: 500,
+            code: API_ERROR_CODES.downloadPrepareFailed,
+            message: "Unable to prepare your master for download."
+          });
         }
       }
 
@@ -208,13 +214,15 @@ export async function GET(request: NextRequest) {
           wavSourcePath: wavRecord.filePath
         });
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "Unknown error";
-        console.error("[api/download] mp3 master lazy export failed", {
+        logApiError("api/download", API_ERROR_CODES.downloadPrepareFailed, error, {
           jobId: resolvedJobId,
-          fileId: wavRecord.id,
-          detail
+          fileId: wavRecord.id
         });
-        return NextResponse.json({ error: "Unable to prepare MP3 master for download." }, { status: 500 });
+        return apiErrorResponse({
+          status: 500,
+          code: API_ERROR_CODES.downloadPrepareFailed,
+          message: "Unable to prepare MP3 master for download."
+        });
       }
     }
 
@@ -231,9 +239,12 @@ export async function GET(request: NextRequest) {
         try {
           masteredUnlock = await getMasterJobUnlock(record.jobId);
         } catch (error) {
-          const detail = error instanceof Error ? error.message : "Unknown error";
-          console.error("[api/download] master_job_unlocks lookup failed", { jobId: record.jobId, detail });
-          return NextResponse.json({ error: "Download verification failed." }, { status: 500 });
+          logApiError("api/download", API_ERROR_CODES.downloadVerificationFailed, error, { jobId: record.jobId });
+          return apiErrorResponse({
+            status: 500,
+            code: API_ERROR_CODES.downloadVerificationFailed,
+            message: "Download verification failed."
+          });
         }
         if (!masteredUnlock || (isMasteredWavAsset && masteredUnlock.fileId !== record.id)) {
           if (isJobUnlocked(record.jobId)) {
@@ -364,7 +375,7 @@ export async function GET(request: NextRequest) {
               }
               if (!entitlements.canDownload) {
                 console.log(
-                  JSON.stringify({
+                  JSON.stringify(sanitizeLogDetails({
                     scope: "download_authorization",
                     event: "denied_quota",
                     userId: user.id,
@@ -386,7 +397,7 @@ export async function GET(request: NextRequest) {
                       !entitlements.canDownload &&
                       (entitlements.planId === "free" || !entitlements.stripeSubscriptionId),
                     reason: "getEntitlementsForUser_returned_canDownload_false"
-                  })
+                  }))
                 );
                 logMasteringDownloadBlocked({
                   job_id: record.jobId,
@@ -403,9 +414,14 @@ export async function GET(request: NextRequest) {
             }
           }
         } catch (error) {
-          const detail = error instanceof Error ? error.message : "Unknown error";
-          console.error("[api/download] download entitlement check failed", { jobId: record.jobId, detail });
-          return NextResponse.json({ error: "Unable to verify download allowance." }, { status: 500 });
+          logApiError("api/download", API_ERROR_CODES.downloadEntitlementCheckFailed, error, {
+            jobId: record.jobId
+          });
+          return apiErrorResponse({
+            status: 500,
+            code: API_ERROR_CODES.downloadEntitlementCheckFailed,
+            message: "Unable to verify download allowance."
+          });
         }
       } else if (isJobUnlocked(record.jobId) && enforceWavQuota) {
         const { allowed } = tryConsumeLocalBillableDownload(
@@ -446,13 +462,15 @@ export async function GET(request: NextRequest) {
           });
         }
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "Unknown error";
-        console.error("[api/download] wav delivery finalize fallback failed", {
+        logApiError("api/download", API_ERROR_CODES.downloadPrepareFailed, error, {
           jobId: record.jobId,
-          fileId: record.id,
-          detail
+          fileId: record.id
         });
-        return NextResponse.json({ error: "Unable to prepare your master for download." }, { status: 500 });
+        return apiErrorResponse({
+          status: 500,
+          code: API_ERROR_CODES.downloadPrepareFailed,
+          message: "Unable to prepare your master for download."
+        });
       }
     }
 
@@ -496,13 +514,15 @@ export async function GET(request: NextRequest) {
           await incrementProductMetric("downloads");
         }
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "Unknown error";
-        console.error("[api/download] record_mastered_download_attempt failed", {
+        logApiError("api/download", API_ERROR_CODES.downloadRecordFailed, error, {
           jobId: record.jobId,
-          fileId: record.id,
-          detail
+          fileId: record.id
         });
-        const res = NextResponse.json({ error: "Unable to record download. Please try again." }, { status: 500 });
+        const res = apiErrorResponse({
+          status: 500,
+          code: API_ERROR_CODES.downloadRecordFailed,
+          message: "Unable to record download. Please try again."
+        });
         attachSessionCookieIfNeeded(res, sessionPrep);
         return res;
       }
@@ -531,7 +551,11 @@ export async function GET(request: NextRequest) {
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown download error.";
-    return NextResponse.json({ error: `Unable to download file. ${detail}` }, { status: 500 });
+    logApiError("api/download", API_ERROR_CODES.downloadFailed, error);
+    return apiErrorResponse({
+      status: 500,
+      code: API_ERROR_CODES.downloadFailed,
+      message: "Unable to download file."
+    });
   }
 }
