@@ -6,6 +6,7 @@ import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { toPublicMetrics } from "@/lib/audio/public-analysis";
 import { runAdaptiveMasteringPipeline } from "@/lib/audio/adaptive-mastering-pipeline";
 import { combineAdaptiveUserIntent } from "@/lib/audio/combine-adaptive-user-intent";
+import { resolveAdaptiveSourceAudio } from "@/lib/audio/resolve-adaptive-source-audio";
 import {
   formDataToFieldRecord,
   normalizeAdaptiveNotes,
@@ -19,7 +20,7 @@ import {
   isAdaptiveMasteringOpenAiFatalError
 } from "@/lib/openai/adaptive-mastering";
 import { createJobId } from "@/lib/jobs/job-id";
-import { cleanupExpiredTempFiles, registerExistingFile, resolveTempRecord, saveTempFile } from "@/lib/storage/temp-files";
+import { cleanupExpiredTempFiles, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
 import { incrementProductMetric } from "@/lib/product-metrics";
 import {
   logMasteringFunnelEvent,
@@ -40,8 +41,8 @@ const ACCEPTED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-
 const ACCEPTED_EXT = new Set(["wav", "mp3"]);
 
 const CoreBodySchema = z.object({
-  standardMasterFileId: z.string().min(8),
-  standardMasterJobId: z.string().min(4),
+  standardMasterFileId: z.string().min(8).optional(),
+  standardMasterJobId: z.string().min(4).optional(),
   preset: z.enum(["pop", "hiphop", "edm", "rock", "reggaeton", "rnb", "lofi"]).optional(),
   loudnessMode: z.enum(["clean", "balanced", "loud"]).optional()
 });
@@ -49,6 +50,7 @@ const CoreBodySchema = z.object({
 type ParsedMasterAiRequest = {
   data: z.infer<typeof CoreBodySchema>;
   billingEmailHint?: string;
+  inlineAudio: File | null;
   referenceFile: File | null;
   adaptiveNotes: string;
   referenceArtist?: string;
@@ -72,15 +74,17 @@ async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterA
 
     const fieldRecord = formDataToFieldRecord(formData);
     const parsed = CoreBodySchema.safeParse({
-      standardMasterFileId: formData.get("standardMasterFileId"),
-      standardMasterJobId: formData.get("standardMasterJobId"),
+      standardMasterFileId: formData.get("standardMasterFileId") || undefined,
+      standardMasterJobId: formData.get("standardMasterJobId") || undefined,
       preset: formData.get("preset") || undefined,
       loudnessMode: formData.get("loudnessMode") || undefined
     });
     if (!parsed.success) return "invalid_payload";
+    const inlineAudioField = formData.get("audio");
     return {
       data: parsed.data,
       billingEmailHint,
+      inlineAudio: inlineAudioField instanceof File && inlineAudioField.size > 0 ? inlineAudioField : null,
       referenceFile,
       adaptiveNotes: normalizeAdaptiveNotes(fieldRecord),
       referenceArtist: normalizeReferenceArtist(fieldRecord)
@@ -106,6 +110,7 @@ async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterA
   return {
     data: parsed.data,
     billingEmailHint,
+    inlineAudio: null,
     referenceFile: null,
     adaptiveNotes: normalizeAdaptiveNotes(fieldRecord),
     referenceArtist: normalizeReferenceArtist(fieldRecord)
@@ -172,7 +177,7 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    const { data: parsed, billingEmailHint, referenceFile, adaptiveNotes, referenceArtist } = parsedRequest;
+    const { data: parsed, billingEmailHint, inlineAudio, referenceFile, adaptiveNotes, referenceArtist } = parsedRequest;
 
     const billingResolution = resolveEntitlementBillingContext(request, user, { billingEmailHint });
 
@@ -180,18 +185,19 @@ export async function POST(request: NextRequest) {
 
     await cleanupExpiredTempFiles();
 
-    const standardRecord = await resolveTempRecord(parsed.standardMasterFileId);
-    if (
-      !standardRecord ||
-      standardRecord.kind !== "mastered" ||
-      standardRecord.jobId !== parsed.standardMasterJobId
-    ) {
-      const res = NextResponse.json({ error: "Standard master reference is missing or expired." }, { status: 404 });
+    const jobId = createJobId("adaptive");
+    const sourceAudio = await resolveAdaptiveSourceAudio({
+      inlineAudio,
+      fileId: parsed.standardMasterFileId,
+      jobId: parsed.standardMasterJobId,
+      inlineJobId: jobId
+    });
+    if (!sourceAudio.ok) {
+      const res = NextResponse.json({ error: sourceAudio.error, code: sourceAudio.code }, { status: sourceAudio.status });
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
 
-    const jobId = createJobId("adaptive");
     logMasteringFunnelEvent("mastering_preview_api_started", {
       source_component: "api_master_ai",
       job_id: jobId,
@@ -220,6 +226,8 @@ export async function POST(request: NextRequest) {
     console.log("[master-ai] adaptive_preview:start", {
       standardJobId: parsed.standardMasterJobId,
       adaptiveJobId: jobId,
+      sourceResolvedBy: sourceAudio.resolvedBy,
+      sourceJobId: sourceAudio.source.jobId,
       hasReferenceTrack: Boolean(referenceFile)
     });
     // Safe preflight before adaptive OpenAI path (no secrets, no audio payloads).
@@ -246,7 +254,7 @@ export async function POST(request: NextRequest) {
     const userIntent = combineAdaptiveUserIntent(adaptiveNotes || undefined, referenceArtist);
 
     const adaptive = await runAdaptiveMasteringPipeline({
-      inputPath: standardRecord.filePath,
+      inputPath: sourceAudio.record.filePath,
       jobId,
       genre: parsed.preset,
       loudnessMode: parsed.loudnessMode,

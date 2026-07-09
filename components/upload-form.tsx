@@ -214,6 +214,11 @@ type MasterResponse = {
   };
 };
 
+type SourceUploadRef = {
+  fileId: string;
+  jobId: string;
+};
+
 type PreMasterAnalysisResponse = {
   analysis: {
     verdict: "Streaming-ready" | "Almost ready" | "Not fully streaming-ready";
@@ -240,6 +245,7 @@ type PreMasterAnalysisResponse = {
       crestDb?: number | null;
     };
   };
+  source?: SourceUploadRef;
 };
 
 export function UploadForm() {
@@ -259,6 +265,7 @@ export function UploadForm() {
   const [status, setStatus] = useState("Choose a file to begin.");
   const [preMasterAnalysis, setPreMasterAnalysis] = useState<PreMasterAnalysisResponse["analysis"] | null>(null);
   const [preMasterDebug, setPreMasterDebug] = useState<PreMasterAnalysisResponse["debug"] | null>(null);
+  const [sourceUploadRef, setSourceUploadRef] = useState<SourceUploadRef | null>(null);
   const [showAdaptivePlaceholder, setShowAdaptivePlaceholder] = useState(false);
   const [adaptiveIntent, setAdaptiveIntent] = useState("");
   const [advancedControlsOpen, setAdvancedControlsOpen] = useState(false);
@@ -490,6 +497,7 @@ export function UploadForm() {
     latestAnalysisRequestIdRef.current += 1;
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
+    setSourceUploadRef(null);
     setShowAdaptivePlaceholder(false);
     setAdaptiveIntent("");
     setAdvancedControlsOpen(false);
@@ -659,28 +667,27 @@ export function UploadForm() {
     setAdaptiveProcessing(true);
     setError(null);
     setAdaptiveAiNotice(null);
-    setStatus("Preparing your recommended baseline for adaptive…");
+    setStatus("Preparing your original mix for adaptive…");
     trackMasteringFunnelEvent("mastering_preview_started", {
       source_component: "upload_form",
       mastering_mode: "adaptive"
     });
 
     try {
-      let standard = lastStandardResult;
-      if (!standard) {
-        standard = await runStandardMastering(true);
+      if (!file) {
+        throw new Error("Please upload a WAV or MP3 file first.");
       }
-      if (!standard) {
-        throw new Error("Run the recommended master first, then try adaptive customization.");
-      }
+      const standard = lastStandardResult;
+      const adaptiveSourceRef: Partial<SourceUploadRef> | null = standard ? { jobId: standard.jobId } : sourceUploadRef;
 
       setStatus("Shaping your adaptive preview (free)…");
       const billingEmail = readStoredBillingEmail();
       let response: Response;
-      if (referenceTrackFile) {
+      if (referenceTrackFile || !adaptiveSourceRef) {
         const formData = new FormData();
-        formData.append("standardMasterFileId", standard.download.fileId);
-        formData.append("standardMasterJobId", standard.jobId);
+        if (adaptiveSourceRef?.fileId) formData.append("standardMasterFileId", adaptiveSourceRef.fileId);
+        if (adaptiveSourceRef?.jobId) formData.append("standardMasterJobId", adaptiveSourceRef.jobId);
+        if (!adaptiveSourceRef) formData.append("audio", file);
         formData.append("preset", genre);
         formData.append("loudnessMode", loudness);
         const intent = adaptiveIntent.trim();
@@ -688,7 +695,7 @@ export function UploadForm() {
         if (intent) formData.append("user_intent", intent);
         if (artist) formData.append("referenceArtist", artist);
         if (billingEmail) formData.append("billingEmail", billingEmail.trim().toLowerCase());
-        formData.append("referenceTrack", referenceTrackFile);
+        if (referenceTrackFile) formData.append("referenceTrack", referenceTrackFile);
         response = await fetch("/api/master-ai", {
           method: "POST",
           credentials: "include",
@@ -704,8 +711,8 @@ export function UploadForm() {
             ...masteringBillingHeaders()
           },
           body: JSON.stringify({
-            standardMasterFileId: standard.download.fileId,
-            standardMasterJobId: standard.jobId,
+            ...(adaptiveSourceRef.fileId ? { standardMasterFileId: adaptiveSourceRef.fileId } : {}),
+            ...(adaptiveSourceRef.jobId ? { standardMasterJobId: adaptiveSourceRef.jobId } : {}),
             preset: genre,
             loudnessMode: loudness,
             user_intent: adaptiveIntent.trim() || undefined,
@@ -731,7 +738,7 @@ export function UploadForm() {
       const mergedResult: MasterResponse = {
         jobId: adaptive.jobId,
         previews: {
-          original: standard.previews.original,
+          original: standard?.previews.original ?? adaptive.previews.standard,
           mastered: adaptive.previews.adaptive
         },
         download: adaptive.download,
@@ -792,6 +799,7 @@ export function UploadForm() {
     setShowAdaptivePlaceholder(false);
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
+    setSourceUploadRef(null);
     setConfirmedContinueWithStandard(false);
     setStatus("Analyzing your mix (a few seconds)…");
     const requestId = latestAnalysisRequestIdRef.current + 1;
@@ -833,6 +841,7 @@ export function UploadForm() {
       }
       setPreMasterAnalysis(parsed.analysis);
       setPreMasterDebug(parsed.debug ?? null);
+      setSourceUploadRef(parsed.source ?? null);
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
       setAdaptiveAiNotice(null);
@@ -981,6 +990,7 @@ export function UploadForm() {
                   latestAnalysisRequestIdRef.current += 1;
                   setPreMasterAnalysis(null);
                   setPreMasterDebug(null);
+                  setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
                   setConfirmedContinueWithStandard(false);
                 }}
@@ -1004,6 +1014,7 @@ export function UploadForm() {
                   latestAnalysisRequestIdRef.current += 1;
                   setPreMasterAnalysis(null);
                   setPreMasterDebug(null);
+                  setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
                   setConfirmedContinueWithStandard(false);
                 }}

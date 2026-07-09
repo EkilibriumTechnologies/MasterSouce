@@ -91,6 +91,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       analysis: readiness,
+      source: {
+        fileId: uploadRecord.id,
+        jobId: uploadRecord.jobId
+      },
       ...(debug ? { debug } : {})
     });
   } catch (error) {

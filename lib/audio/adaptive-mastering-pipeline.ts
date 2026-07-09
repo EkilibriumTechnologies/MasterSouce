@@ -349,7 +349,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
   );
   let { instructionSummary, adaptiveAiFallback, adaptiveAiFallbackReason, adaptiveAiFallbackMessage } = generated;
   const referenceTrackApplied = Boolean(request.referenceAnalysis);
-  if (request.referenceAnalysis && instructionSummary.source === "heuristic") {
+  if (request.referenceAnalysis) {
     instructionSummary = applyReferenceTrackGuidance(
       instructionSummary,
       baselineAnalysis,

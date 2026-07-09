@@ -16,6 +16,7 @@
     "test:promo": "node scripts/fathers-day-promo-test.mjs",
     "test:subscription-buttons": "node scripts/subscription-button-invariants.mjs",
     "test:adaptive-reference-artist": "node scripts/adaptive-reference-artist-test.mjs",
+    "test:adaptive-source-audio": "node scripts/adaptive-source-audio-invariants.mjs",
     "test:adaptive-openai-reasoning": "node scripts/adaptive-openai-reasoning-effort-test.mjs",
     "test:admin-quality-override": "node scripts/admin-quality-override-test.mjs",
     "test:song-architect-funnel": "node scripts/song-architect-premium-funnel-invariants.mjs",
@@ -23,7 +24,7 @@
     "test:ar-ai": "node scripts/ar-ai-invariants.mjs",
     "test:hit-analyzer-access": "node scripts/hit-analyzer-access-test.mjs",
     "test:seo-metadata": "node scripts/seo-metadata-invariants.mjs",
-    "test": "npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-openai-reasoning && npm run test:admin-quality-override && npm run test:song-architect-funnel && npm run test:mastering-funnel && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
+    "test": "npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-source-audio && npm run test:adaptive-openai-reasoning && npm run test:admin-quality-override && npm run test:song-architect-funnel && npm run test:mastering-funnel && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
     "inspect:wav": "node scripts/inspect-wav-format.mjs"
   },
   "dependencies": {
