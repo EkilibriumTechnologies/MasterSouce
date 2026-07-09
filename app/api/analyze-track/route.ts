@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { API_ERROR_CODES, apiErrorResponse, logApiError } from "@/lib/api/error-responses";
-import { analyzeTrack } from "@/lib/audio/analyze-track";
+import { analyzeTrackWithV2 } from "@/lib/audio/analyze-track-combined";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
+import { resolveTrackAnalysisV2Enablement } from "@/lib/features/track-analysis-v2";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { createJobId } from "@/lib/jobs/job-id";
 import { cleanupExpiredTempFiles, saveTempFile } from "@/lib/storage/temp-files";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
@@ -59,8 +61,33 @@ export async function POST(request: NextRequest) {
       jobId
     });
 
-    const analysis = await analyzeTrack(uploadRecord.filePath);
+    // TrackAnalysisV2 is DISABLED BY DEFAULT behind a server-side feature flag.
+    //
+    // Disabled (default production behavior): only the required existing analysis
+    // runs — no V2 FFmpeg subprocesses are spawned and `analysisV2` is not
+    // returned, preserving the exact existing response.
+    //
+    // Enabled (experimental): the required existing analysis and the additive,
+    // fail-open V2 analysis run concurrently from the same upload (no duplicate
+    // read / no second copy). Existing analysis semantics are unchanged; V2 is
+    // omitted if it fails or times out and never delays/affects the existing
+    // response beyond its bound.
+    const trackAnalysisV2Enabled = resolveTrackAnalysisV2Enablement(() =>
+      isMasterAdminBypassGranted(request)
+    );
+    const { analysis, analysisV2 } = await analyzeTrackWithV2(uploadRecord.filePath, {
+      enableV2: trackAnalysisV2Enabled,
+      onV2Error: (v2Error) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(
+            "[analyze-track] analysisV2 unavailable:",
+            v2Error instanceof Error ? v2Error.message : v2Error
+          );
+        }
+      }
+    });
     const readiness = evaluateTrackReadiness(analysis);
+
     const debug =
       process.env.NODE_ENV !== "production"
         ? {
@@ -96,6 +123,7 @@ export async function POST(request: NextRequest) {
         fileId: uploadRecord.id,
         jobId: uploadRecord.jobId
       },
+      ...(analysisV2 ? { analysisV2 } : {}),
       ...(debug ? { debug } : {})
     });
   } catch (error) {

@@ -116,7 +116,7 @@ function flow1_standardMasterHappyPath() {
     assertIncludes(masterRoute, "mastered-preview.mp3", "standard mastered preview filename");
 
     const analyzeRoute = read("app/api/analyze-track/route.ts");
-    assertIncludes(analyzeRoute, "analyzeTrack(uploadRecord.filePath)", "analyze route analyzes upload");
+    assertIncludes(analyzeRoute, "analyzeTrackWithV2(uploadRecord.filePath", "analyze route analyzes upload");
     assertNotIncludes(analyzeRoute, "runMasteringPipeline", "analyze route does not master");
 
     console.log("flow1_standardMasterHappyPath: ok", { ffmpeg, durationSec: duration });
