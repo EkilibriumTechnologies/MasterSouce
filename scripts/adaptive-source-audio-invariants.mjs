@@ -107,7 +107,7 @@ function runSourceInvariantTests() {
 
   const pipeline = read("lib/audio/adaptive-mastering-pipeline.ts");
   assertIncludes(pipeline, "inputPath: string", "adaptive pipeline accepts source input path");
-  assertIncludes(pipeline, "const baselineAnalysis = await analyzeTrack(request.inputPath)", "adaptive pipeline analyzes resolved premaster");
+  assertIncludes(pipeline, "const baselineResult = await analyzeForAdaptive(request.inputPath)", "adaptive pipeline analyzes resolved premaster through selected analyzer");
   assertIncludes(pipeline, "if (request.referenceAnalysis) {", "reference guidance applies for AI and heuristic summaries");
   assertNotIncludes(pipeline, 'instructionSummary.source === "heuristic"', "reference guidance is not limited to heuristic fallback");
 

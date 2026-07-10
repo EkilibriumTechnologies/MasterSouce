@@ -182,7 +182,11 @@ export async function POST(request: NextRequest) {
       entitlements.quality,
       billingResolution.emailSource,
       billingResolution.normalizedEmail,
-      { planIdBeforeOverride: entitlements.planId, billingEmailHint }
+      {
+        planIdBeforeOverride: entitlements.planId,
+        billingEmailHint,
+        adminOverrideAllowed: billingResolution.adminOverrideAllowed
+      }
     );
     const outputCodec = resolveCodecForQuality(outputQuality);
     const deliveryCodec = resolveCodecForQuality(entitlements.quality);
@@ -194,7 +198,8 @@ export async function POST(request: NextRequest) {
       emailSource: billingResolution.emailSource,
       planId: entitlements.planId,
       outputQuality,
-      outputCodec
+      outputCodec,
+      adminOverrideGranted: billingResolution.adminOverrideGranted
     });
     if (billingResolution.emailSource === "none") {
       console.log("[MASTER_DEBUG] wav:deferred_delivery_codec", {

@@ -187,6 +187,15 @@ function masteringBillingHeaders(): HeadersInit {
   return { [MASTERSOUCE_BILLING_EMAIL_HEADER]: billingEmail.trim().toLowerCase() };
 }
 
+function ownerBypassHeaders(ownerTestingPanel: boolean): HeadersInit {
+  const trimmedToken = resolveOwnerSessionToken(ownerTestingPanel);
+  if (!trimmedToken) return {};
+  return {
+    "x-master-admin-bypass": "1",
+    "x-master-owner-token": trimmedToken
+  };
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -1125,7 +1134,10 @@ export function UploadForm() {
         response = await fetch("/api/master-ai", {
           method: "POST",
           credentials: "include",
-          headers: masteringBillingHeaders(),
+          headers: {
+            ...masteringBillingHeaders(),
+            ...ownerBypassHeaders(ownerTestingPanel)
+          },
           body: formData
         });
       } else {
@@ -1134,7 +1146,8 @@ export function UploadForm() {
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            ...masteringBillingHeaders()
+            ...masteringBillingHeaders(),
+            ...ownerBypassHeaders(ownerTestingPanel)
           },
           body: JSON.stringify({
             ...(adaptiveSourceRef.fileId ? { standardMasterFileId: adaptiveSourceRef.fileId } : {}),
@@ -1246,7 +1259,11 @@ export function UploadForm() {
         });
       }
 
-      const response = await fetch("/api/analyze-track", { method: "POST", body: formData });
+      const response = await fetch("/api/analyze-track", {
+        method: "POST",
+        headers: ownerBypassHeaders(ownerTestingPanel),
+        body: formData
+      });
       const payload = await readResponsePayload(response);
 
       if (!response.ok) {

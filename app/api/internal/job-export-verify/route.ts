@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
       outputQuality: record.outputQuality,
       outputCodec: record.outputCodec,
       emailSource: record.emailSource,
+      trustedIdentitySource: record.trustedIdentitySource,
+      adminOverrideGranted: record.adminOverrideGranted,
       codecVerifiedAfterExport: record.codecVerifiedAfterExport,
       maskedEmail: record.maskedEmail,
       endpoint: record.endpoint,

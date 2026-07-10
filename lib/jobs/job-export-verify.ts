@@ -1,6 +1,5 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { maskEmail } from "@/lib/security/abuse-guard";
 import { ensureTempRoot, getTempRoot } from "@/lib/storage/temp-files";
 import type { EntitlementEmailSource } from "@/lib/subscriptions/resolve-entitlement-billing-context";
 
@@ -15,6 +14,8 @@ export type JobExportVerifyRecord = {
   outputCodec: string;
   emailSource: EntitlementEmailSource;
   maskedEmail: string | null;
+  trustedIdentitySource: EntitlementEmailSource;
+  adminOverrideGranted: boolean;
   codecVerifiedAfterExport: string | null;
   recordedAt: number;
   verifiedAt: number | null;
@@ -24,6 +25,19 @@ export type JobExportVerifyRecord = {
 function verifyMetaPath(jobId: string): string {
   const safe = jobId.replace(/[^a-zA-Z0-9_-]/g, "_");
   return path.join(getTempRoot(), "job_export_verify", `${safe}.json`);
+}
+
+function maskEmail(email: string): string {
+  const trimmed = email.trim().toLowerCase();
+  const [local, domain] = trimmed.split("@");
+  if (!local || !domain) return "<invalid-email>";
+  const localMasked =
+    local.length <= 2 ? `${local[0] ?? "*"}*` : `${local.slice(0, 2)}***${local.slice(-1)}`;
+  const domainParts = domain.split(".");
+  const root = domainParts[0] ?? "";
+  const tld = domainParts.slice(1).join(".");
+  const domainMasked = root.length <= 2 ? `${root[0] ?? "*"}*` : `${root.slice(0, 2)}***`;
+  return `${localMasked}@${domainMasked}${tld ? `.${tld}` : ""}`;
 }
 
 async function writeRecord(record: JobExportVerifyRecord): Promise<void> {
@@ -66,6 +80,8 @@ function logJobExportVerifyEvent(
     | "outputCodec"
     | "emailSource"
     | "maskedEmail"
+    | "trustedIdentitySource"
+    | "adminOverrideGranted"
     | "codecVerifiedAfterExport"
   >
 ): void {
@@ -80,6 +96,8 @@ function logJobExportVerifyEvent(
       outputCodec: record.outputCodec,
       emailSource: record.emailSource,
       maskedEmail: record.maskedEmail,
+      trustedIdentitySource: record.trustedIdentitySource,
+      adminOverrideGranted: record.adminOverrideGranted,
       codecVerifiedAfterExport: record.codecVerifiedAfterExport
     })
   );
@@ -93,6 +111,7 @@ export async function recordJobExportEncodeResolution(params: {
   outputCodec: string;
   emailSource: EntitlementEmailSource;
   normalizedEmail: string | null;
+  adminOverrideGranted?: boolean;
 }): Promise<void> {
   const now = Date.now();
   const record: JobExportVerifyRecord = {
@@ -103,6 +122,8 @@ export async function recordJobExportEncodeResolution(params: {
     outputCodec: params.outputCodec,
     emailSource: params.emailSource,
     maskedEmail: params.normalizedEmail ? maskEmail(params.normalizedEmail) : null,
+    trustedIdentitySource: params.emailSource,
+    adminOverrideGranted: params.adminOverrideGranted === true,
     codecVerifiedAfterExport: null,
     recordedAt: now,
     verifiedAt: null,
@@ -112,12 +133,17 @@ export async function recordJobExportEncodeResolution(params: {
   logJobExportVerifyEvent("encode_time_resolution", record);
 }
 
-export async function markJobExportCodecVerified(jobId: string, codec: string): Promise<void> {
+export async function markJobExportCodecVerified(
+  jobId: string,
+  codec: string,
+  outputQuality?: string
+): Promise<void> {
   const existing = await readRecord(jobId);
   if (!existing) return;
 
   const updated: JobExportVerifyRecord = {
     ...existing,
+    ...(outputQuality ? { outputQuality, outputCodec: codec } : {}),
     codecVerifiedAfterExport: codec,
     verifiedAt: Date.now()
   };

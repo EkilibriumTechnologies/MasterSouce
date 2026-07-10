@@ -22,6 +22,7 @@ function probeStream(filePath) {
   const result = spawnSync(FFMPEG, ["-hide_banner", "-i", filePath], { encoding: "utf8" });
   const line = result.stderr.split(/\r?\n/).find((row) => row.includes("Audio:"));
   assert.ok(line, `missing Audio stream line for ${filePath}`);
+  const parts = line.split(",").map((part) => part.trim().toLowerCase());
   const codecMatch = line.match(/Audio:\s*([^\s,]+)/);
   const rateMatch = line.match(/,\s*(\d+)\s*Hz,/);
   const channelMatch = line.match(/Hz,\s*([^,]+),/);
@@ -33,6 +34,7 @@ function probeStream(filePath) {
     codec: codecMatch[1],
     sampleRate: Number(rateMatch[1]),
     channels: channelMatch[1].trim().toLowerCase(),
+    sampleFmt: parts.find((part) => part === "s16" || part.startsWith("s32") || part === "flt")?.split(/\s+/)[0] ?? null,
     bits: bitMatch ? Number(bitMatch[1]) : codecMatchBits,
     raw: line.trim()
   };
@@ -123,12 +125,14 @@ try {
   assert.equal(probe16.codec, "pcm_s16le");
   assert.equal(probe16.sampleRate, 44100);
   assert.ok(isStereoChannels(probe16.channels));
+  assert.equal(probe16.sampleFmt, "s16");
   assert.equal(probe16.bits, 16);
 
   const probe24 = probeStream(wav24);
   assert.equal(probe24.codec, "pcm_s24le");
   assert.equal(probe24.sampleRate, 44100);
   assert.ok(isStereoChannels(probe24.channels));
+  assert.equal(probe24.sampleFmt, "s32");
   assert.equal(probe24.bits, 24);
 
   const wav32 = path.join(workDir, "export_32bit.wav");
@@ -152,6 +156,7 @@ try {
   assert.equal(probe32.codec, "pcm_f32le");
   assert.equal(probe32.sampleRate, 44100);
   assert.ok(isStereoChannels(probe32.channels));
+  assert.equal(probe32.sampleFmt, "flt");
   assert.equal(probe32.bits, 32);
 
   const probeMp3 = probeStream(previewMp3);

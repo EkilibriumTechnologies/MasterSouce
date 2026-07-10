@@ -19,7 +19,10 @@
     "test:adaptive-reference-artist": "node scripts/adaptive-reference-artist-test.mjs",
     "test:adaptive-source-audio": "node scripts/adaptive-source-audio-invariants.mjs",
     "test:adaptive-openai-reasoning": "node scripts/adaptive-openai-reasoning-effort-test.mjs",
+    "test:adaptive-stereo-width": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/adaptive-stereo-width-regression-test.mjs",
     "test:admin-quality-override": "node scripts/admin-quality-override-test.mjs",
+    "test:job-export-verify": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/job-export-verify-test.mjs",
+    "test:owner-adaptive-codec": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/owner-adaptive-codec-test.mjs",
     "test:song-architect-funnel": "node scripts/song-architect-premium-funnel-invariants.mjs",
     "test:mastering-funnel": "node scripts/mastering-funnel-invariants.mjs",
     "test:upload-form-refactor": "node scripts/upload-form-refactor-invariants.mjs",
@@ -30,7 +33,7 @@
     "test:track-analysis-v2": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/track-analysis-v2-test.mjs",
     "test:track-analysis-v2-flag": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/track-analysis-v2-feature-flag-test.mjs",
     "bench:track-analysis-v2": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/track-analysis-v2-benchmark.mjs",
-    "test": "npm run test:api-hardening && npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-source-audio && npm run test:adaptive-openai-reasoning && npm run test:admin-quality-override && npm run test:song-architect-funnel && npm run test:mastering-funnel && npm run test:upload-form-refactor && npm run test:mastering-journey && npm run test:track-analysis-v2 && npm run test:track-analysis-v2-flag && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
+    "test": "npm run test:api-hardening && npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-source-audio && npm run test:adaptive-openai-reasoning && npm run test:adaptive-stereo-width && npm run test:admin-quality-override && npm run test:job-export-verify && npm run test:owner-adaptive-codec && npm run test:song-architect-funnel && npm run test:mastering-funnel && npm run test:upload-form-refactor && npm run test:mastering-journey && npm run test:track-analysis-v2 && npm run test:track-analysis-v2-flag && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
     "inspect:wav": "node scripts/inspect-wav-format.mjs"
   },
   "dependencies": {

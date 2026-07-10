@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { analyzeTrack, type TrackAnalysis } from "@/lib/audio/analyze-track";
+import type { AdaptiveAnalysisDiagnostics, AdaptiveTrackAnalyzer } from "@/lib/audio/adaptive-track-analysis";
 import { getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
 import { getPreviewStartSeconds, getSafePreviewDurationSeconds } from "@/lib/audio/preview-segment";
 import type { AdaptiveDecision } from "@/lib/openai/adaptive-mastering";
@@ -14,6 +15,13 @@ import { resolveCodecForQuality, WAV_EXPORT_CHANNELS, WAV_EXPORT_SAMPLE_RATE } f
 import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
 import type { PlanQuality } from "@/lib/subscriptions/types";
+import {
+  classifyAdaptiveStereoIntent,
+  mapAdaptiveStereoWidth,
+  resolveAdaptiveStereoWidthMultiplier,
+  shouldApplyAdaptiveStereoWidthFilter,
+  type AdaptiveStereoIntent
+} from "@/lib/audio/adaptive-stereo-width";
 
 export type AdaptiveMasteringRequest = {
   inputPath: string;
@@ -23,6 +31,7 @@ export type AdaptiveMasteringRequest = {
   userIntent?: string;
   referenceAnalysis?: TrackAnalysis;
   outputQuality: PlanQuality;
+  analyzeForAdaptive?: AdaptiveTrackAnalyzer;
 };
 
 export type AdaptiveInstructionSettings = {
@@ -62,10 +71,33 @@ export type AdaptiveMasteringResult = {
     correctivePasses: number;
     warnings: string[];
   };
+  analysisDiagnostics: {
+    baseline: AdaptiveAnalysisDiagnostics;
+    adaptive: AdaptiveAnalysisDiagnostics | null;
+  };
   adaptiveAiFallback?: boolean;
   adaptiveAiFallbackReason?: "timeout";
   adaptiveAiFallbackMessage?: string;
 };
+
+function defaultV1Diagnostics(): AdaptiveAnalysisDiagnostics {
+  return {
+    requestedAnalysisVersion: "v1",
+    ownerEligible: false,
+    featureFlagMode: "off",
+    featureFlagValue: null,
+    actualImplementation: "v1",
+    fallbackOccurred: false,
+    fallbackReason: null
+  };
+}
+
+async function analyzeAdaptiveDefault(inputPath: string) {
+  return {
+    analysis: await analyzeTrack(inputPath),
+    diagnostics: defaultV1Diagnostics()
+  };
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -156,10 +188,8 @@ function mapSaturationAmount(amount: "none" | "low" | "medium"): number {
   return 0;
 }
 
-function mapStereoWidth(width: "narrow" | "moderate" | "wide"): number {
-  if (width === "wide") return 1.1;
-  if (width === "narrow") return 0.96;
-  return 1.02;
+function mapStereoWidth(width: "narrow" | "moderate" | "wide", intent: AdaptiveStereoIntent): number {
+  return mapAdaptiveStereoWidth(width, intent);
 }
 
 function mapTransientEmphasis(value: "low" | "medium" | "high"): AdaptiveInstructionSettings["transientHandling"] {
@@ -168,7 +198,11 @@ function mapTransientEmphasis(value: "low" | "medium" | "high"): AdaptiveInstruc
   return "balanced";
 }
 
-function mapAiDecisionToInstructionSummary(decision: AdaptiveDecision, baseline: TrackAnalysis): AdaptiveInstructionSummary {
+function mapAiDecisionToInstructionSummary(
+  decision: AdaptiveDecision,
+  baseline: TrackAnalysis,
+  stereoIntent: AdaptiveStereoIntent
+): AdaptiveInstructionSummary {
   const highBand = mapHighEqActionToDb(decision.eq_high_action);
   const isHarshTrack = baseline.notes.some((note) => note.includes("reduce potential harshness"));
   const subtlePresenceLiftDb = decision.eq_high_action === "add_presence" && !isHarshTrack ? 0.3 : 0;
@@ -186,7 +220,7 @@ function mapAiDecisionToInstructionSummary(decision: AdaptiveDecision, baseline:
       },
       compressionIntensity: mapCompressionAmountToIntensity(decision.compression_amount),
       saturationAmount: clamp(mapSaturationAmount(decision.saturation_amount), 0, 1),
-      stereoWidth: clamp(mapStereoWidth(decision.stereo_width), 0.9, 1.2),
+      stereoWidth: clamp(mapStereoWidth(decision.stereo_width, stereoIntent), 0.35, 1.2),
       targetLufs: clamp(decision.target_lufs, -14, -8.8),
       limiterCeilingDb: clamp(decision.limiter_ceiling_db, -2, -0.1),
       transientHandling: mapTransientEmphasis(decision.transient_emphasis),
@@ -199,7 +233,8 @@ function mapAiDecisionToInstructionSummary(decision: AdaptiveDecision, baseline:
 function buildHeuristicAdaptiveInstructionSummary(
   baseline: TrackAnalysis,
   genre: keyof typeof GENRE_PRESETS | undefined,
-  loudnessMode: LoudnessMode | undefined
+  loudnessMode: LoudnessMode | undefined,
+  stereoIntent: AdaptiveStereoIntent
 ): AdaptiveInstructionSummary {
   const presetKey: keyof typeof GENRE_PRESETS =
     genre !== undefined && Object.prototype.hasOwnProperty.call(GENRE_PRESETS, genre) ? genre : "pop";
@@ -269,7 +304,7 @@ function buildHeuristicAdaptiveInstructionSummary(
       eqDirection,
       compressionIntensity,
       saturationAmount: clamp(preset.saturation ? 0.35 : 0, 0, 1),
-      stereoWidth: clamp(1.02, 0.9, 1.2),
+      stereoWidth: clamp(mapStereoWidth("moderate", stereoIntent), 0.35, 1.2),
       targetLufs,
       limiterCeilingDb,
       transientHandling,
@@ -297,13 +332,14 @@ async function generateAdaptiveInstructions(
     userIntent,
     referenceAnalysis
   });
+  const stereoIntent = classifyAdaptiveStereoIntent(userIntent);
 
   if (tryResult.ok) {
-    return { instructionSummary: mapAiDecisionToInstructionSummary(tryResult.decision, baseline) };
+    return { instructionSummary: mapAiDecisionToInstructionSummary(tryResult.decision, baseline, stereoIntent) };
   }
 
   return {
-    instructionSummary: buildHeuristicAdaptiveInstructionSummary(baseline, genre, loudnessMode),
+    instructionSummary: buildHeuristicAdaptiveInstructionSummary(baseline, genre, loudnessMode, stereoIntent),
     adaptiveAiFallback: true,
     adaptiveAiFallbackReason: "timeout",
     adaptiveAiFallbackMessage:
@@ -320,7 +356,7 @@ function buildAdaptiveFilterChain(settings: AdaptiveInstructionSettings): string
   // This is the primary translation point from AI `target_lufs` into render gain.
   // It is only an initial estimate; validation passes may adjust final loudness.
   const preGain = clamp((settings.targetLufs + 11.4) * 0.7, -1.2, 2.8);
-  const extraStereo = clamp((settings.stereoWidth - 1) * 2.2, 0, 0.5);
+  const stereoWidthMultiplier = resolveAdaptiveStereoWidthMultiplier(settings.stereoWidth);
 
   return [
     `equalizer=f=85:width_type=o:width=1.2:g=${toFixedDb(settings.eqDirection.lowEnd)}`,
@@ -331,7 +367,9 @@ function buildAdaptiveFilterChain(settings: AdaptiveInstructionSettings): string
     ...(settings.saturationAmount > 0.2
       ? [`asoftclip=type=tanh:threshold=${toFixedDb(clamp(0.97 - settings.saturationAmount * 0.12, 0.84, 0.97))}`]
       : []),
-    ...(extraStereo > 0 ? [`extrastereo=m=${toFixedDb(extraStereo)}`] : []),
+    ...(shouldApplyAdaptiveStereoWidthFilter(settings.stereoWidth)
+      ? [`extrastereo=m=${toFixedDb(stereoWidthMultiplier)}`]
+      : []),
     `volume=${toFixedDb(preGain)}dB`,
     `alimiter=limit=${Math.pow(10, limiterCeiling / 20).toFixed(4)}:attack=5:release=80:level=disabled`
   ].join(",");
@@ -339,7 +377,20 @@ function buildAdaptiveFilterChain(settings: AdaptiveInstructionSettings): string
 
 export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringRequest): Promise<AdaptiveMasteringResult> {
   await fs.mkdir(getTempRoot(), { recursive: true });
-  const baselineAnalysis = await analyzeTrack(request.inputPath);
+  const analyzeForAdaptive = request.analyzeForAdaptive ?? analyzeAdaptiveDefault;
+  const baselineResult = await analyzeForAdaptive(request.inputPath);
+  const baselineAnalysis = baselineResult.analysis;
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[ADAPTIVE_ANALYSIS_DEBUG] baseline", {
+      requestedAnalysisVersion: baselineResult.diagnostics.requestedAnalysisVersion,
+      ownerEligible: baselineResult.diagnostics.ownerEligible,
+      featureFlagMode: baselineResult.diagnostics.featureFlagMode,
+      featureFlagValue: baselineResult.diagnostics.featureFlagValue,
+      actualImplementation: baselineResult.diagnostics.actualImplementation,
+      fallbackOccurred: baselineResult.diagnostics.fallbackOccurred,
+      fallbackReason: baselineResult.diagnostics.fallbackReason
+    });
+  }
   const generated = await generateAdaptiveInstructions(
     baselineAnalysis,
     request.genre,
@@ -348,6 +399,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     request.referenceAnalysis
   );
   let { instructionSummary, adaptiveAiFallback, adaptiveAiFallbackReason, adaptiveAiFallbackMessage } = generated;
+  const stereoIntent = classifyAdaptiveStereoIntent(request.userIntent);
   const referenceTrackApplied = Boolean(request.referenceAnalysis);
   if (request.referenceAnalysis) {
     instructionSummary = applyReferenceTrackGuidance(
@@ -366,6 +418,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
   let correctivePasses = 0;
   const maxCorrectivePasses = 2;
   const filterChain = buildAdaptiveFilterChain(instructionSummary.settings);
+  const finalStereoWidthMultiplier = resolveAdaptiveStereoWidthMultiplier(instructionSummary.settings.stereoWidth);
   const competitiveLufsGapMax = 1.5;
   const safePeakForBoostDb = -0.4;
   const correctiveLimiterCeilingDb = clamp(instructionSummary.settings.limiterCeilingDb - 0.25, -1.2, -0.65);
@@ -390,8 +443,11 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
   await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });
 
   let adaptiveAnalysis: TrackAnalysis | null = null;
+  let adaptiveAnalysisDiagnostics: AdaptiveAnalysisDiagnostics | null = null;
   try {
-    adaptiveAnalysis = await analyzeTrack(adaptiveMasteredPath);
+    const firstAdaptiveResult = await analyzeForAdaptive(adaptiveMasteredPath);
+    adaptiveAnalysis = firstAdaptiveResult.analysis;
+    adaptiveAnalysisDiagnostics = firstAdaptiveResult.diagnostics;
     while (adaptiveAnalysis && correctivePasses < maxCorrectivePasses) {
       const peakUnsafe = adaptiveAnalysis.peakDb !== null && adaptiveAnalysis.peakDb > -0.3;
       const tooQuietVsTarget =
@@ -427,7 +483,9 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
         gainDb: correctiveGain,
         limiterCeilingDb: correctiveLimiterCeilingDb
       });
-      adaptiveAnalysis = await analyzeTrack(adaptiveMasteredPath);
+      const correctedResult = await analyzeForAdaptive(adaptiveMasteredPath);
+      adaptiveAnalysis = correctedResult.analysis;
+      adaptiveAnalysisDiagnostics = correctedResult.diagnostics;
     }
 
     // Final competitiveness guard: if still materially below both target and baseline guard,
@@ -452,7 +510,9 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
         gainDb: extraGain,
         limiterCeilingDb: correctiveLimiterCeilingDb
       });
-      adaptiveAnalysis = await analyzeTrack(adaptiveMasteredPath);
+      const finalCorrectedResult = await analyzeForAdaptive(adaptiveMasteredPath);
+      adaptiveAnalysis = finalCorrectedResult.analysis;
+      adaptiveAnalysisDiagnostics = finalCorrectedResult.diagnostics;
       warnings.push("Applied a final micro-correction pass to better align adaptive loudness safely.");
     }
     if (correctivePasses > 0) {
@@ -474,7 +534,18 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
         targetLufs: instructionSummary.settings.targetLufs,
         limiterCeilingDb: instructionSummary.settings.limiterCeilingDb,
         compressionIntensity: instructionSummary.settings.compressionIntensity,
-        correctivePasses
+        stereoIntent,
+        parsedStereoWidth: instructionSummary.settings.stereoWidth,
+        finalStereoWidthMultiplier,
+        stereoWidthFilterApplied: shouldApplyAdaptiveStereoWidthFilter(instructionSummary.settings.stereoWidth),
+        monoCompatibilityActivated: false,
+        lowFrequencyMonoActivated: false,
+        artistProfileWidthValue: null,
+        correctivePasses,
+        analysisDiagnostics: {
+          baseline: baselineResult.diagnostics,
+          adaptive: adaptiveAnalysisDiagnostics
+        }
       });
     }
   } catch {
@@ -538,6 +609,10 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     validation: {
       correctivePasses,
       warnings
+    },
+    analysisDiagnostics: {
+      baseline: baselineResult.diagnostics,
+      adaptive: adaptiveAnalysisDiagnostics
     },
     ...(adaptiveAiFallback === true
       ? {

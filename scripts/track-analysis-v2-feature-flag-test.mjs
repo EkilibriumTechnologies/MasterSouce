@@ -27,6 +27,11 @@ import {
   resolveTrackAnalysisV2Enablement
 } from "@/lib/features/track-analysis-v2";
 import { analyzeTrackWithV2 } from "@/lib/audio/analyze-track-combined";
+import {
+  adaptTrackAnalysisV2ToTrackAnalysis,
+  createAdaptiveTrackAnalyzer,
+  resolveAdaptiveAnalysisRouting
+} from "@/lib/audio/adaptive-track-analysis";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relPath) => readFileSync(path.join(REPO_ROOT, relPath), "utf8");
@@ -46,6 +51,79 @@ const stubAnalysis = Object.freeze({
 });
 
 const v2Summary = Object.freeze({ schemaVersion: 2, activeFlags: ["low_end_excess"] });
+
+const metric = (value) => ({ value });
+const stubTrackAnalysisV2 = Object.freeze({
+  measured: {
+    loudness: {
+      integratedLufs: metric(-12.4),
+      loudnessRangeLu: metric(5.1),
+      shortTermMaxLufs: metric(-10.8),
+      momentaryMaxLufs: metric(-9.9),
+      shortTermRangeLu: metric(4.2)
+    },
+    peaks: {
+      samplePeakDb: metric(-1.2),
+      truePeakDb: metric(-0.9)
+    },
+    dynamics: {
+      crestFactorDb: metric(9.8),
+      rmsLevelDb: metric(-19.2),
+      rmsPeakDb: metric(-13.5),
+      rmsTroughDb: metric(-28.4),
+      dynamicRangeDb: metric(12),
+      flatFactor: metric(1.2),
+      zeroCrossingRate: metric(0.07)
+    },
+    spectrumBands: {
+      subBassDb: metric(-28),
+      bassDb: metric(-25),
+      lowMidDb: metric(-24),
+      midDb: metric(-27),
+      upperMidDb: metric(-28),
+      presenceDb: metric(-29),
+      brillianceDb: metric(-31)
+    },
+    stereo: {
+      midRmsDb: metric(-18),
+      sideRmsDb: metric(-28),
+      lowMidRmsDb: metric(-19),
+      lowSideRmsDb: metric(-35)
+    },
+    integrity: {
+      durationSec: metric(180),
+      sampleRateHz: metric(44100),
+      bitDepth: metric(24),
+      codec: metric("pcm_s24le"),
+      channelCount: metric(2),
+      channelMode: metric("stereo"),
+      dcOffset: metric(0),
+      leftRmsDb: metric(-18.2),
+      rightRmsDb: metric(-18.3),
+      clippingSampleCount: metric(0),
+      leadingSilenceSec: metric(0)
+    }
+  },
+  derived: {},
+  flags: {
+    low_end_excess: false,
+    low_end_weak: false,
+    harsh_upper_mids: false,
+    excessive_sibilance: false,
+    overly_compressed: false,
+    excessive_dynamic_range: false,
+    clipping_risk: false,
+    narrow_stereo: false,
+    phase_risk: false,
+    low_end_stereo_risk: false,
+    excessive_leading_silence: false,
+    channel_imbalance: false
+  },
+  meta: {
+    analyzedStereo: true,
+    subprocessCount: 4
+  }
+});
 
 async function run() {
   // 1) Flag defaults to disabled with explicit, safe parsing.
@@ -239,24 +317,37 @@ async function run() {
     console.log("test no-client-exposure-of-flag: ok");
   }
 
-  // 8) No mastering pipeline consumes V2 (DSP path is untouched).
+  // 8) Adaptive consumes V2 through an explicit selector; Standard/Instant still
+  //    do not import the V2 analyzer or combined V2 orchestrator.
   {
-    const pipelineFiles = [
-      "lib/audio/mastering-pipeline.ts",
-      "lib/audio/adaptive-mastering-pipeline.ts"
-    ];
-    for (const rel of pipelineFiles) {
-      const src = read(rel);
-      assert.ok(!/track-analysis-v2/.test(src), `${rel} must not import TrackAnalysisV2`);
-      assert.ok(!/analyze-track-combined/.test(src), `${rel} must not import the V2 orchestrator`);
-      assert.ok(!/analyzeTrackWithV2|analyzeTrackV2/.test(src), `${rel} must not call V2 analyzers`);
-    }
-    // Mastering + AR-AI routes still use the plain existing analyzer, not V2.
-    for (const rel of ["app/api/master-ai/route.ts", "app/api/ar-ai/route.ts"]) {
+    const standardPipeline = read("lib/audio/mastering-pipeline.ts");
+    assert.ok(!/track-analysis-v2/.test(standardPipeline), "standard pipeline must not import TrackAnalysisV2");
+    assert.ok(!/analyze-track-combined/.test(standardPipeline), "standard pipeline must not import V2 orchestrator");
+    assert.ok(!/analyzeTrackWithV2|analyzeTrackV2/.test(standardPipeline), "standard pipeline must not call V2");
+
+    for (const rel of ["app/api/ar-ai/route.ts"]) {
       const src = read(rel);
       assert.ok(!/analyzeTrackWithV2/.test(src), `${rel} must not orchestrate V2`);
     }
-    console.log("test no-mastering-pipeline-consumes-V2: ok");
+    const masterAiRoute = read("app/api/master-ai/route.ts");
+    assert.ok(
+      masterAiRoute.includes("resolveAdaptiveAnalysisRouting"),
+      "master-ai route resolves Adaptive analysis V1/V2 routing"
+    );
+    assert.ok(
+      masterAiRoute.includes("createAdaptiveTrackAnalyzer"),
+      "master-ai route creates the Adaptive analyzer from resolved routing"
+    );
+    assert.ok(
+      masterAiRoute.includes("analyzeForAdaptive"),
+      "master-ai route passes the selected analyzer into Adaptive"
+    );
+    const adaptivePipeline = read("lib/audio/adaptive-mastering-pipeline.ts");
+    assert.ok(
+      adaptivePipeline.includes("analyzeForAdaptive"),
+      "adaptive pipeline uses injected analyzer instead of hardcoded V1"
+    );
+    console.log("test adaptive-v2-route-wiring: ok");
   }
 
   // 9) Route wiring: flag gates V2 and disabled response stays unchanged.
@@ -285,6 +376,76 @@ async function run() {
       "route still analyzes the upload via the combined orchestrator"
     );
     console.log("test route wiring + disabled response unchanged: ok");
+  }
+
+  // 10) Adaptive selector: flag false -> V1, flag true + eligible owner -> V2,
+  //     owner mode + ineligible -> gated V1, unusable V2 -> V1 fallback.
+  {
+    const adapted = adaptTrackAnalysisV2ToTrackAnalysis(stubTrackAnalysisV2);
+    assert.ok(adapted, "V2 fixture adapts to TrackAnalysis");
+    assert.equal(adapted.integratedLufs, -12.4, "V2 integrated LUFS feeds Adaptive");
+    assert.equal(adapted.peakDb, -1.2, "V2 sample peak feeds Adaptive peak");
+    assert.equal(adapted.crestDb, 9.8, "V2 crest feeds Adaptive dynamics");
+
+    let v1Calls = 0;
+    let v2Calls = 0;
+    const analyzeV1 = async () => {
+      v1Calls += 1;
+      return stubAnalysis;
+    };
+    const analyzeV2 = async () => {
+      v2Calls += 1;
+      return stubTrackAnalysisV2;
+    };
+
+    const offRouting = resolveAdaptiveAnalysisRouting({
+      ownerEligible: true,
+      env: { [TRACK_ANALYSIS_V2_ENV_VAR]: "false" }
+    });
+    let result = await createAdaptiveTrackAnalyzer(offRouting, { analyzeV1, analyzeV2 })("/fake.wav");
+    assert.equal(result.diagnostics.actualImplementation, "v1", "flag false -> Adaptive uses V1");
+    assert.equal(v1Calls, 1, "V1 called when flag disabled");
+    assert.equal(v2Calls, 0, "V2 not called when flag disabled");
+
+    const onOwnerRouting = resolveAdaptiveAnalysisRouting({
+      ownerEligible: true,
+      env: { [TRACK_ANALYSIS_V2_ENV_VAR]: "true" }
+    });
+    result = await createAdaptiveTrackAnalyzer(onOwnerRouting, { analyzeV1, analyzeV2 })("/fake.wav");
+    assert.equal(result.diagnostics.actualImplementation, "v2", "flag true + eligible owner -> Adaptive uses V2");
+    assert.equal(result.diagnostics.requestedAnalysisVersion, "v2", "diagnostics report requested V2");
+    assert.equal(result.diagnostics.fallbackOccurred, false, "diagnostics report no fallback");
+
+    const ownerModeIneligibleRouting = resolveAdaptiveAnalysisRouting({
+      ownerEligible: false,
+      env: { [TRACK_ANALYSIS_V2_ENV_VAR]: "owner" }
+    });
+    result = await createAdaptiveTrackAnalyzer(ownerModeIneligibleRouting, { analyzeV1, analyzeV2 })("/fake.wav");
+    assert.equal(result.diagnostics.actualImplementation, "v1", "owner mode + ineligible user -> gated V1");
+    assert.equal(result.diagnostics.requestedAnalysisVersion, "v1", "diagnostics report requested V1 when gated");
+
+    const missingCoreV2 = {
+      ...stubTrackAnalysisV2,
+      measured: {
+        ...stubTrackAnalysisV2.measured,
+        loudness: {
+          ...stubTrackAnalysisV2.measured.loudness,
+          integratedLufs: metric(null)
+        }
+      }
+    };
+    result = await createAdaptiveTrackAnalyzer(onOwnerRouting, {
+      analyzeV1,
+      analyzeV2: async () => missingCoreV2
+    })("/fake.wav");
+    assert.equal(result.diagnostics.actualImplementation, "v1_fallback", "unusable V2 -> V1 fallback");
+    assert.equal(result.diagnostics.fallbackOccurred, true, "diagnostics report fallback");
+    assert.equal(
+      result.diagnostics.fallbackReason,
+      "v2_missing_core_adaptive_metrics",
+      "diagnostics report exact fallback reason"
+    );
+    console.log("test adaptive selector routing + diagnostics: ok");
   }
 
   console.log("\ntrack-analysis-v2-feature-flag-test: ok");

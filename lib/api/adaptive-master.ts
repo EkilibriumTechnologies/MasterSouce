@@ -1,4 +1,5 @@
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
+import type { AdaptiveAnalysisDiagnostics } from "@/lib/audio/adaptive-track-analysis";
 import type { ReadinessVerdict } from "@/lib/audio/readiness";
 
 export type AdaptiveMasterSettingsSummary = {
@@ -50,4 +51,8 @@ export type MasterAiResponse = {
   adaptiveAiFallbackReason?: "timeout";
   adaptiveAiFallbackMessage?: string;
   referenceTrackApplied?: boolean;
+  analysisDiagnostics?: {
+    baseline: AdaptiveAnalysisDiagnostics;
+    adaptive: AdaptiveAnalysisDiagnostics | null;
+  };
 };

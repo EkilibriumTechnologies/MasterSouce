@@ -51,6 +51,11 @@ function runRouteInvariantTests() {
     "result = await runMasteringPipeline({",
     "master route: billing context before pipeline"
   );
+  assertIncludes(
+    masterRoute,
+    "adminOverrideAllowed: billingResolution.adminOverrideAllowed",
+    "master route only grants admin quality from trusted identity"
+  );
   assertBefore(
     masterRoute,
     "resolveEncodeOutputQuality(",
@@ -72,6 +77,16 @@ function runRouteInvariantTests() {
     "await runAdaptiveMasteringPipeline({",
     "master-ai route: billing context before adaptive pipeline"
   );
+  assertIncludes(
+    masterAiRoute,
+    "adminOverrideAllowed: billingResolution.adminOverrideAllowed",
+    "master-ai route only grants admin quality from trusted identity"
+  );
+  assertIncludes(
+    masterAiRoute,
+    "createAdaptiveTrackAnalyzer",
+    "master-ai route wires the selected Adaptive analyzer"
+  );
   assertBefore(
     masterAiRoute,
     "resolveEncodeOutputQuality(",
@@ -88,6 +103,8 @@ function runRouteInvariantTests() {
   const resolver = read("lib/subscriptions/resolve-entitlement-billing-context.ts");
   assertIncludes(resolver, "readVerifiedEmailState", "resolver uses verified email cookie");
   assertIncludes(resolver, "MASTERSOUCE_BILLING_EMAIL_HEADER", "resolver reads billing email header");
+  assertIncludes(resolver, "adminOverrideAllowed: false", "billing header/hint cannot activate admin quality");
+  assertIncludes(resolver, "isMasterAdminBypassGranted", "resolver supports server-verified owner bypass");
   assertExcludes(resolver, "PLAN_DEFINITIONS", "resolver must not map client plan directly");
   assertExcludes(resolver, 'get("planId")', "resolver must not read client planId");
 }

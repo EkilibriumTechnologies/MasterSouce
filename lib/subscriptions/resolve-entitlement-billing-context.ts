@@ -2,18 +2,25 @@ import type { NextRequest } from "next/server";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER } from "@/lib/billing/client-key";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { recordJobExportEncodeResolution } from "@/lib/jobs/job-export-verify";
-import { applyAdminQualityOverride } from "@/lib/subscriptions/admin-entitlement-override";
+import {
+  ADMIN_ENTITLEMENT_OVERRIDE_EMAIL,
+  applyAdminQualityOverride,
+  isAdminEntitlementOverrideEmail
+} from "@/lib/subscriptions/admin-entitlement-override";
 import type { EntitlementBillingContext } from "@/lib/subscriptions/entitlements";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { readVerifiedEmailState } from "@/lib/security/verified-email-state";
 import type { PlanQuality } from "@/lib/subscriptions/types";
 import type { UserProfile } from "@/lib/users/user-profile";
 
-export type EntitlementEmailSource = "user" | "verified_cookie" | "billing_header" | "none";
+export type EntitlementEmailSource = "user" | "owner_bypass" | "verified_cookie" | "billing_header" | "none";
 
 export type EntitlementBillingResolution = {
   billingContext: EntitlementBillingContext;
   normalizedEmail: string | null;
   emailSource: EntitlementEmailSource;
+  adminOverrideAllowed: boolean;
+  adminOverrideGranted: boolean;
 };
 
 /**
@@ -36,11 +43,26 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(userEmailRaw);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized },
+        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: true },
         normalizedEmail: normalized,
-        emailSource: "user"
+        emailSource: "user",
+        adminOverrideAllowed: true,
+        adminOverrideGranted: isAdminEntitlementOverrideEmail(normalized)
       };
     }
+  }
+
+  if (isMasterAdminBypassGranted(request)) {
+    return {
+      billingContext: {
+        normalizedEmail: ADMIN_ENTITLEMENT_OVERRIDE_EMAIL,
+        adminOverrideAllowed: true
+      },
+      normalizedEmail: ADMIN_ENTITLEMENT_OVERRIDE_EMAIL,
+      emailSource: "owner_bypass",
+      adminOverrideAllowed: true,
+      adminOverrideGranted: true
+    };
   }
 
   const verified = readVerifiedEmailState(request);
@@ -48,9 +70,11 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(verified.normalizedEmail);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized },
+        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: true },
         normalizedEmail: normalized,
-        emailSource: "verified_cookie"
+        emailSource: "verified_cookie",
+        adminOverrideAllowed: true,
+        adminOverrideGranted: isAdminEntitlementOverrideEmail(normalized)
       };
     }
   }
@@ -60,9 +84,11 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(headerRaw);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized },
+        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: false },
         normalizedEmail: normalized,
-        emailSource: "billing_header"
+        emailSource: "billing_header",
+        adminOverrideAllowed: false,
+        adminOverrideGranted: false
       };
     }
   }
@@ -72,9 +98,11 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(hintRaw);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized },
+        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: false },
         normalizedEmail: normalized,
-        emailSource: "billing_header"
+        emailSource: "billing_header",
+        adminOverrideAllowed: false,
+        adminOverrideGranted: false
       };
     }
   }
@@ -82,7 +110,9 @@ export function resolveEntitlementBillingContext(
   return {
     billingContext: {},
     normalizedEmail: null,
-    emailSource: "none"
+    emailSource: "none",
+    adminOverrideAllowed: true,
+    adminOverrideGranted: false
   };
 }
 
@@ -112,13 +142,14 @@ export function resolveEncodeOutputQuality(
   entitlementQuality: PlanQuality,
   emailSource: EntitlementEmailSource,
   normalizedEmail: string | null,
-  audit?: { planIdBeforeOverride?: string; billingEmailHint?: string | null }
+  audit?: { planIdBeforeOverride?: string; billingEmailHint?: string | null; adminOverrideAllowed?: boolean }
 ): PlanQuality {
   const base = resolveMasteringOutputQuality(entitlementQuality, emailSource);
   return applyAdminQualityOverride(normalizedEmail, base, {
     emailSource,
     planIdBeforeOverride: audit?.planIdBeforeOverride,
-    billingEmailHint: audit?.billingEmailHint
+    billingEmailHint: audit?.billingEmailHint,
+    adminOverrideAllowed: audit?.adminOverrideAllowed
   });
 }
 
@@ -146,6 +177,7 @@ export function logWavExportEntitlementResolution(params: {
   planId: string;
   outputQuality: string;
   outputCodec: string;
+  adminOverrideGranted?: boolean;
 }): void {
   void recordJobExportEncodeResolution({
     endpoint: params.endpoint,
@@ -154,6 +186,7 @@ export function logWavExportEntitlementResolution(params: {
     outputQuality: params.outputQuality,
     outputCodec: params.outputCodec,
     emailSource: params.emailSource,
-    normalizedEmail: params.normalizedEmail
+    normalizedEmail: params.normalizedEmail,
+    adminOverrideGranted: params.adminOverrideGranted === true
   });
 }

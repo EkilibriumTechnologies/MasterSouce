@@ -17,9 +17,10 @@ export const ADMIN_QUALITY_OVERRIDE_PLAN_ID = "pro_studio";
 export const ADMIN_QUALITY_OVERRIDE_QUALITY: PlanQuality = "32bit_float";
 
 export type AdminQualityOverrideAudit = {
-  emailSource?: "user" | "verified_cookie" | "billing_header" | "none";
+  emailSource?: "user" | "owner_bypass" | "verified_cookie" | "billing_header" | "none";
   planIdBeforeOverride?: string;
   billingEmailHint?: string | null;
+  adminOverrideAllowed?: boolean;
 };
 
 export function maskNormalizedEmailForLog(email: string): string {
@@ -104,6 +105,7 @@ export function applyAdminQualityOverride(
   const resolvedEmail = normalizeAdminOverrideEmail(normalizedEmail);
   const hintNormalized = normalizeAdminOverrideEmail(audit?.billingEmailHint);
   const qualityBeforeOverride = outputQuality;
+  const adminOverrideAllowed = audit?.adminOverrideAllowed !== false;
 
   console.log(
     JSON.stringify({
@@ -113,9 +115,26 @@ export function applyAdminQualityOverride(
       planIdBeforeOverride: audit?.planIdBeforeOverride ?? null,
       qualityBeforeOverride,
       billingEmailHintNormalized: hintNormalized,
+      adminOverrideAllowed,
       resolvedMatchesAdminConstant: resolvedEmail === ADMIN_ENTITLEMENT_OVERRIDE_EMAIL
     })
   );
+
+  if (!adminOverrideAllowed) {
+    console.log(
+      JSON.stringify({
+        event: "admin_quality_override_skipped",
+        reason: "untrusted_email_source",
+        normalizedEmail: resolvedEmail,
+        expectedEmail: ADMIN_ENTITLEMENT_OVERRIDE_EMAIL,
+        qualityBeforeOverride,
+        finalOutputQuality: outputQuality,
+        finalOutputCodec:
+          outputQuality === "32bit_float" ? "pcm_f32le" : outputQuality === "24bit" ? "pcm_s24le" : "pcm_s16le"
+      })
+    );
+    return outputQuality;
+  }
 
   if (!resolvedEmail || resolvedEmail !== ADMIN_ENTITLEMENT_OVERRIDE_EMAIL) {
     console.log(

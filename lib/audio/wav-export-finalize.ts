@@ -95,7 +95,7 @@ export async function finalizeMasteredWavDelivery(params: {
   const sourceCodec = probe.codec_name;
 
   if (sourceCodec === targetCodec) {
-    await markJobExportCodecVerified(params.jobId, targetCodec);
+    await markJobExportCodecVerified(params.jobId, targetCodec, deliveryQuality);
     return { outputCodec: targetCodec, finalized: false, sourceCodec };
   }
 
@@ -131,7 +131,7 @@ export async function finalizeMasteredWavDelivery(params: {
   const tempOut = await transcodeWavToCodec(params.sourcePath, targetCodec);
   await fs.rename(tempOut, params.sourcePath);
 
-  await markJobExportCodecVerified(params.jobId, targetCodec);
+  await markJobExportCodecVerified(params.jobId, targetCodec, deliveryQuality);
 
   console.log(
     JSON.stringify({

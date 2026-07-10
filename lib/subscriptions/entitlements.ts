@@ -26,6 +26,8 @@ export const FREE_MASTERS_PER_MONTH = FREE_WAV_DOWNLOADS_PER_MONTH;
 export type EntitlementBillingContext = {
   /** Lowercased email for Supabase download events; omit when unknown. */
   normalizedEmail?: string | null;
+  /** Admin override is only allowed for authenticated/trusted server-side identity. */
+  adminOverrideAllowed?: boolean;
 };
 
 export async function getEntitlementsForUser(
@@ -33,6 +35,7 @@ export async function getEntitlementsForUser(
   billing?: EntitlementBillingContext
 ): Promise<EntitlementSnapshot> {
   const emailForBilling = billing?.normalizedEmail ?? user.email?.trim().toLowerCase() ?? null;
+  const adminOverrideAllowed = billing?.adminOverrideAllowed !== false;
   let activePlanId: PlanId = "free";
   let stripeCustomerId: string | null = null;
   let stripeSubscriptionId: string | null = null;
@@ -104,7 +107,7 @@ export async function getEntitlementsForUser(
     entitlementReason = "supabase_not_configured_local_usage";
   } else if (!emailForBilling) {
     entitlementReason = "no_billing_email_context";
-  } else if (isAdminEntitlementOverrideEmail(emailForBilling)) {
+  } else if (adminOverrideAllowed && isAdminEntitlementOverrideEmail(emailForBilling)) {
     entitlementReason = "admin_entitlement_override";
   } else if (masterWavExportPlanOverride) {
     entitlementReason = "master_wav_export_allowlist";
@@ -138,7 +141,7 @@ export async function getEntitlementsForUser(
     customerPortalEligible: plan.canUseCustomerPortal && Boolean(stripeCustomerId)
   };
 
-  const resolved = applyAdminEntitlementOverride(snapshot, emailForBilling);
+  const resolved = adminOverrideAllowed ? applyAdminEntitlementOverride(snapshot, emailForBilling) : snapshot;
 
   const logEntitlements =
     process.env.BILLING_DIAGNOSTIC_LOGS === "1" ||

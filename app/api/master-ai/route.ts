@@ -6,6 +6,11 @@ import type { MasterAiResponse } from "@/lib/api/adaptive-master";
 import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { toPublicMetrics } from "@/lib/audio/public-analysis";
 import { runAdaptiveMasteringPipeline } from "@/lib/audio/adaptive-mastering-pipeline";
+import {
+  createAdaptiveTrackAnalyzer,
+  resolveAdaptiveAnalysisRouting,
+  type AdaptiveTrackAnalyzer
+} from "@/lib/audio/adaptive-track-analysis";
 import { combineAdaptiveUserIntent } from "@/lib/audio/combine-adaptive-user-intent";
 import { resolveAdaptiveSourceAudio } from "@/lib/audio/resolve-adaptive-source-audio";
 import {
@@ -35,6 +40,7 @@ import {
   resolveEncodeOutputQuality
 } from "@/lib/subscriptions/resolve-entitlement-billing-context";
 import { resolveCodecForQuality } from "@/lib/audio/wav-export-codec";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 
@@ -118,7 +124,7 @@ async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterA
   };
 }
 
-async function resolveReferenceAnalysis(referenceFile: File, jobId: string) {
+async function resolveReferenceAnalysis(referenceFile: File, jobId: string, analyzeForAdaptive: AdaptiveTrackAnalyzer) {
   const filename = referenceFile.name || "reference";
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";
   const mimeAccepted = ACCEPTED_MIME.has(referenceFile.type);
@@ -139,7 +145,11 @@ async function resolveReferenceAnalysis(referenceFile: File, jobId: string) {
     mime: normalizedExt === "wav" ? "audio/wav" : "audio/mpeg",
     jobId
   });
-  return analyzeTrack(uploadRecord.filePath);
+  const reference = await analyzeForAdaptive(uploadRecord.filePath);
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[ADAPTIVE_ANALYSIS_DEBUG] reference", reference.diagnostics);
+  }
+  return reference.analysis;
 }
 
 export async function POST(request: NextRequest) {
@@ -180,6 +190,10 @@ export async function POST(request: NextRequest) {
 
     const { data: parsed, billingEmailHint, inlineAudio, referenceFile, adaptiveNotes, referenceArtist } = parsedRequest;
 
+    const ownerEligible = isMasterAdminBypassGranted(request);
+    const adaptiveAnalysisRouting = resolveAdaptiveAnalysisRouting({ ownerEligible });
+    const analyzeForAdaptive = createAdaptiveTrackAnalyzer(adaptiveAnalysisRouting);
+
     const billingResolution = resolveEntitlementBillingContext(request, user, { billingEmailHint });
 
     const entitlements = await getEntitlementsForUser(user, billingResolution.billingContext);
@@ -210,7 +224,11 @@ export async function POST(request: NextRequest) {
       entitlements.quality,
       billingResolution.emailSource,
       billingResolution.normalizedEmail,
-      { planIdBeforeOverride: entitlements.planId, billingEmailHint }
+      {
+        planIdBeforeOverride: entitlements.planId,
+        billingEmailHint,
+        adminOverrideAllowed: billingResolution.adminOverrideAllowed
+      }
     );
     const outputCodec = resolveCodecForQuality(outputQuality);
     const deliveryCodec = resolveCodecForQuality(entitlements.quality);
@@ -222,8 +240,22 @@ export async function POST(request: NextRequest) {
       emailSource: billingResolution.emailSource,
       planId: entitlements.planId,
       outputQuality,
-      outputCodec
+      outputCodec,
+      adminOverrideGranted: billingResolution.adminOverrideGranted
     });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[MASTER_AI_DEBUG] trusted_identity_quality_resolution", {
+        jobId,
+        normalizedEmail: billingResolution.normalizedEmail,
+        emailSource: billingResolution.emailSource,
+        adminOverrideAllowed: billingResolution.adminOverrideAllowed,
+        adminOverrideGranted: billingResolution.adminOverrideGranted,
+        planId: entitlements.planId,
+        outputQuality,
+        outputCodec
+      });
+      console.log("[ADAPTIVE_ANALYSIS_DEBUG] route", adaptiveAnalysisRouting);
+    }
     console.log("[master-ai] adaptive_preview:start", {
       standardJobId: parsed.standardMasterJobId,
       adaptiveJobId: jobId,
@@ -245,7 +277,7 @@ export async function POST(request: NextRequest) {
     let referenceAnalysis: Awaited<ReturnType<typeof analyzeTrack>> | undefined;
     if (referenceFile) {
       try {
-        referenceAnalysis = await resolveReferenceAnalysis(referenceFile, jobId);
+        referenceAnalysis = await resolveReferenceAnalysis(referenceFile, jobId, analyzeForAdaptive);
       } catch (referenceError) {
         logApiError("master-ai", API_ERROR_CODES.trackAnalysisFailed, referenceError, { jobId }, "warn");
       }
@@ -260,7 +292,8 @@ export async function POST(request: NextRequest) {
       loudnessMode: parsed.loudnessMode,
       userIntent,
       referenceAnalysis,
-      outputQuality
+      outputQuality,
+      analyzeForAdaptive
     });
 
     const adaptiveMasterRecord = await registerExistingFile({
@@ -332,6 +365,7 @@ export async function POST(request: NextRequest) {
         : null,
       adaptiveSettings: adaptive.instructionSummary,
       validation: adaptive.validation,
+      ...(process.env.NODE_ENV !== "production" ? { analysisDiagnostics: adaptive.analysisDiagnostics } : {}),
       ...(adaptive.adaptiveAiFallback === true &&
       adaptive.adaptiveAiFallbackReason &&
       adaptive.adaptiveAiFallbackMessage

@@ -32,8 +32,9 @@ function isAdminEntitlementOverrideEmail(email) {
 
 const isAdminQualityOverrideEmail = isAdminEntitlementOverrideEmail;
 
-function applyAdminQualityOverride(normalizedEmail, outputQuality) {
+function applyAdminQualityOverride(normalizedEmail, outputQuality, adminOverrideAllowed = true) {
   const resolvedEmail = normalizeAdminOverrideEmail(normalizedEmail);
+  if (!adminOverrideAllowed) return outputQuality;
   if (!resolvedEmail || resolvedEmail !== ADMIN_EMAIL) return outputQuality;
   return ADMIN_QUALITY;
 }
@@ -42,9 +43,9 @@ function resolveMasteringOutputQuality(entitlementQuality, emailSource) {
   return emailSource === "none" ? DEFERRED_ARCHIVE_QUALITY : entitlementQuality;
 }
 
-function resolveEncodeOutputQuality(entitlementQuality, emailSource, normalizedEmail) {
+function resolveEncodeOutputQuality(entitlementQuality, emailSource, normalizedEmail, adminOverrideAllowed = true) {
   const base = resolveMasteringOutputQuality(entitlementQuality, emailSource);
-  return applyAdminQualityOverride(normalizedEmail, base);
+  return applyAdminQualityOverride(normalizedEmail, base, adminOverrideAllowed);
 }
 
 function resolveDeliveryOutputQuality(entitlementQuality, normalizedEmail) {
@@ -106,6 +107,10 @@ function runEmailNormalizationTests() {
 
   const wrongClientDepth = resolveEncodeOutputQuality("16bit", "verified_cookie", ADMIN_EMAIL);
   assert.equal(wrongClientDepth, "32bit_float", "server overrides client/plan 16bit for admin email");
+
+  const spoofedHint = resolveEncodeOutputQuality("16bit", "billing_header", ADMIN_EMAIL, false);
+  assert.equal(spoofedHint, "16bit", "client billing hint cannot grant admin quality");
+  assert.equal(resolveCodecForQuality(spoofedHint), "pcm_s16le", "spoofed admin hint keeps free codec");
 }
 
 function runEntitlementOverrideTests() {
@@ -151,12 +156,15 @@ function runSourceInvariantTests() {
   assertIncludes(override, "export function applyAdminEntitlementOverride", "admin entitlement applier exported");
   assertIncludes(override, 'event: "admin_quality_override_attempt"', "structured admin override attempt log");
   assertIncludes(override, 'event: "admin_quality_override_applied"', "structured admin override applied log");
+  assertIncludes(override, 'reason: "untrusted_email_source"', "untrusted client email source is logged");
   assertIncludes(override, 'event: "admin_entitlement_override_applied"', "structured admin entitlement applied log");
   assertIncludes(override, "maskNormalizedEmailForLog", "masked email in log");
 
   const resolver = read("lib/subscriptions/resolve-entitlement-billing-context.ts");
   assertIncludes(resolver, "resolveEncodeOutputQuality", "encode output resolver exported");
   assertIncludes(resolver, "resolveDeliveryOutputQuality", "delivery output resolver exported");
+  assertIncludes(resolver, "adminOverrideAllowed", "resolver marks trusted admin override state");
+  assertIncludes(resolver, "owner_bypass", "resolver supports explicit owner bypass identity");
   assertIncludes(resolver, "admin-entitlement-override", "resolver imports admin entitlement module");
 
   const masterRoute = read("app/api/master/route.ts");
@@ -171,6 +179,8 @@ function runSourceInvariantTests() {
 
   const masterAiRoute = read("app/api/master-ai/route.ts");
   assertIncludes(masterAiRoute, "resolveEncodeOutputQuality", "master-ai route uses encode resolver");
+  assertIncludes(masterAiRoute, "adminOverrideAllowed: billingResolution.adminOverrideAllowed", "master-ai passes trusted admin override state");
+  assertIncludes(masterAiRoute, "adminOverrideGranted: billingResolution.adminOverrideGranted", "master-ai persists admin override state");
   assertBefore(
     masterAiRoute,
     "resolveEncodeOutputQuality(",
