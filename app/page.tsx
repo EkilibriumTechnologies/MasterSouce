@@ -8,6 +8,7 @@ import { JsonLdClient } from "@/components/seo/JsonLdClient";
 import { UploadForm } from "@/components/upload-form";
 import { TestimonialsSection } from "@/components/testimonials-section";
 import { StaticBeforeAfterDemo } from "@/components/StaticBeforeAfterDemo";
+import { isHomepageBeforeAfterEnabled } from "@/lib/features/homepage-before-after";
 import { getHomeProductMetrics } from "@/lib/product-metrics";
 import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
 import { MobileMasterBanner } from "@/components/mobile-master-banner";
@@ -61,6 +62,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const checkoutSuccessMessage =
     kind === "credit_pack" ? "Your credit pack was added successfully." : "Your plan is now active.";
   const homeProductMetrics = await getHomeProductMetrics();
+  // Temporarily gated until updated samples use the current MasterSauce pipeline.
+  const showHomepageBeforeAfter = isHomepageBeforeAfterEnabled();
 
   return (
     <>
@@ -245,7 +248,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </p>
       </section>
 
-      <StaticBeforeAfterDemo />
+      {showHomepageBeforeAfter ? <StaticBeforeAfterDemo /> : null}
 
       <MobileMasterBanner />
       <UploadForm />
