@@ -64,7 +64,7 @@ function run() {
   const masteringPipeline = read("lib/audio/mastering-pipeline.ts");
   assertBefore(
     masteringPipeline,
-    "await validateExportedWav(masteredPath, { codec: outputCodec });",
+    "await validateExportedWav(masteredPath, { codec: outputCodec, sampleRate: exportSampleRate });",
     "// 30s preview snippets for fast before/after checks.",
     "mastering-pipeline: export-only WAV validation before preview generation"
   );

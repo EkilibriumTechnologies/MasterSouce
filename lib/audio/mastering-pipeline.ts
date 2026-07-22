@@ -1,22 +1,27 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { analyzeTrack, TrackAnalysis } from "@/lib/audio/analyze-track";
+import { analyzeTrack, type TrackAnalysis } from "@/lib/audio/analyze-track";
 import { getFfmpegExecutablePath } from "@/lib/audio/ffmpeg-bin";
 import { getPreviewStartSeconds, getSafePreviewDurationSeconds } from "@/lib/audio/preview-segment";
 import {
   GENRE_PRESETS,
-  GenrePreset,
   getLoudnessModeLufsTarget,
   getLoudnessModeTruePeak,
   LOUDNESS_MODES,
-  LoudnessMode
+  type GenrePreset,
+  type LoudnessMode
 } from "@/lib/genre-presets";
+import { probeAudioStream } from "@/lib/audio/media-probe";
 import { validateExportedWav } from "@/lib/audio/wav-export-validation";
-import { resolveCodecForQuality, WAV_EXPORT_CHANNELS, WAV_EXPORT_SAMPLE_RATE } from "@/lib/audio/wav-export-codec";
+import {
+  resolveCodecForQuality,
+  resolveExportSampleRate,
+  WAV_EXPORT_CHANNELS
+} from "@/lib/audio/wav-export-codec";
 import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
-import { PlanQuality } from "@/lib/subscriptions/types";
+import type { PlanQuality } from "@/lib/subscriptions/types";
 
 export type MasteringRequest = {
   inputPath: string;
@@ -91,7 +96,8 @@ function buildEqFilters(preset: GenrePreset, analysis: TrackAnalysis): string[] 
     filters.push("equalizer=f=75:width_type=o:width=1.5:g=-1.5");
   }
   if (analysis.airDb !== null && analysis.airDb < -34) {
-    filters.push("equalizer=f=11000:width_type=o:width=1.2:g=1.2");
+    // Modest air only — avoid stacking harshness on top of genre HF bands.
+    filters.push("equalizer=f=11000:width_type=o:width=1.2:g=0.8");
   }
 
   return filters;
@@ -100,6 +106,13 @@ function buildEqFilters(preset: GenrePreset, analysis: TrackAnalysis): string[] 
 function buildTargetLufs(preset: GenrePreset, loudnessMode: LoudnessMode): number {
   return toFixedDb(clamp(getLoudnessModeLufsTarget(preset, loudnessMode), -18, -7));
 }
+
+/**
+ * FFmpeg `alimiter` is sample-peak only. Oversampled true-peak routinely exceeds the
+ * configured sample ceiling by ~0.4–0.7 dB on dense masters, so the final brick-wall
+ * stage aims this many dB below the advertised dBTP target.
+ */
+const TRUE_PEAK_ISP_MARGIN_DB = 0.55;
 
 function resolveModeDynamics(
   preset: GenrePreset,
@@ -133,6 +146,42 @@ function resolveModeDynamics(
   };
 }
 
+/**
+ * Estimate EQ/comp/softclip insertion loss ahead of the pre-limiter volume stage.
+ * Bounded and analysis-derived — replaces a fixed global makeup (+3.2 dB) that
+ * overshoots dense commercial mixes. EQ boosts are intentional character and are
+ * not treated as negative loss (that under-compensated and crushed loudness).
+ */
+function estimateInsertLossDb(preset: GenrePreset, analysis: TrackAnalysis): number {
+  // Baseline: acompressor with makeup=1 plus typical adaptive/EQ path loss.
+  let loss = 1.7;
+  for (const band of preset.eq) {
+    if (band.type === "highpass") {
+      loss += 0.15;
+      continue;
+    }
+    if (band.gain < 0) loss += Math.abs(band.gain) * 0.25;
+  }
+  if (analysis.lowMidDb !== null && analysis.lowMidDb > -22) loss += 0.35;
+  if (analysis.harshnessDb !== null && analysis.harshnessDb > -24) loss += 0.3;
+  if (analysis.lowEndDb !== null && analysis.lowEndDb > -19.5) loss += 0.25;
+  if (preset.saturation) loss += 0.08;
+  if (analysis.alreadyLimited) loss -= 0.45;
+  if (analysis.crestDb !== null && analysis.crestDb < 9) loss -= 0.25;
+  return clamp(loss, 1.2, 2.35);
+}
+
+/**
+ * Mode true-peak target, optionally tightened by a genre floor (never loosened).
+ * Lo-Fi may keep quieter genre-specific ceilings via truePeakSafetyLimiterDbTp.
+ */
+function resolveEnforcedTruePeakCeilingDb(preset: GenrePreset, loudnessMode: LoudnessMode): number {
+  const modeCeiling = getLoudnessModeTruePeak(preset, loudnessMode);
+  const genreFloor = preset.truePeakSafetyLimiterDbTp;
+  if (genreFloor === undefined) return modeCeiling;
+  return Math.min(modeCeiling, genreFloor);
+}
+
 function buildMasteringFilterChain(
   preset: GenrePreset,
   analysis: TrackAnalysis,
@@ -153,28 +202,38 @@ function buildMasteringFilterChain(
     limiterRelease
   } = resolveModeDynamics(preset, loudnessMode, alreadyLoudPenalty, analysis.alreadyLimited);
 
-  // Coarse loudness push based on analysis delta to target.
+  // Single-stage pre-limiter gain toward the mode LUFS target.
+  // Prefer slight undershoot; fail only when >1.0 LU hotter than target.
   const currentLufs = analysis.integratedLufs ?? targetLufs - 2.5;
-  const neededGain = clamp(targetLufs - currentLufs, -1, 6) * 0.9;
+  const rawDelta = targetLufs - currentLufs;
+  const insertLossDb = estimateInsertLossDb(preset, analysis);
+  // Always restore estimated insert loss (EQ cuts still apply on downward moves).
+  const undershootBiasDb = rawDelta > 0 ? -0.15 : 0;
+  // Large upward pushes densify under the limiter and overshoot integrated LUFS.
+  const densityGuardDb = rawDelta > 4.5 ? clamp((rawDelta - 4.5) * 0.3, 0, 0.55) : 0;
+  const loudnessDelta = clamp(
+    rawDelta + insertLossDb + undershootBiasDb - densityGuardDb,
+    -2.5,
+    8.5
+  );
+  const approach = clamp(0.95 + (mode.limiterDrive - 1) * 0.1, 0.84, 1.04);
+  const preLimiterGain = clamp(loudnessDelta * approach, -2.5, 8.5);
 
-  const limiterInputDrive = clamp(neededGain * mode.limiterDrive, 0, 5);
+  const enforcedTruePeakDb = resolveEnforcedTruePeakCeilingDb(preset, loudnessMode);
+  // Final brick-wall sample ceiling below the advertised dBTP so exported true-peak matches.
+  const finalSampleCeilingDb = enforcedTruePeakDb - TRUE_PEAK_ISP_MARGIN_DB;
 
   const filters: string[] = [
     ...eqFilters,
     // FFmpeg acompressor requires makeup in [1, 64] (dB-ish scale); 0 is invalid and fails the whole chain.
     `acompressor=threshold=${toFixedDb(compThreshold)}dB:ratio=${toFixedDb(compRatio)}:attack=${compAttack}:release=${compRelease}:makeup=1`,
     ...(preset.saturation ? ["asoftclip=type=tanh:threshold=0.96"] : []),
-    // Pre-limiter drive only; avoid post-limiter gain so true-peak ceiling remains meaningful.
-    `volume=${toFixedDb(neededGain + limiterInputDrive)}dB`,
-    `alimiter=limit=${Math.pow(10, limiterCeiling / 20).toFixed(4)}:attack=${limiterAttack}:release=${limiterRelease}:level=disabled`
+    // Pre-limiter drive only — no volume/makeup/normalization after the final safety limiter.
+    `volume=${toFixedDb(preLimiterGain)}dB`,
+    `alimiter=limit=${Math.pow(10, limiterCeiling / 20).toFixed(4)}:attack=${limiterAttack}:release=${limiterRelease}:level=disabled`,
+    // Final gain-changing DSP stage: mode-aware brick-wall with ISP margin (level disabled).
+    `alimiter=limit=${Math.pow(10, finalSampleCeilingDb / 20).toFixed(4)}:attack=0.1:release=1:level=disabled`
   ];
-
-  const safetyDb = preset.truePeakSafetyLimiterDbTp;
-  if (safetyDb !== undefined) {
-    filters.push(
-      `alimiter=limit=${Math.pow(10, safetyDb / 20).toFixed(4)}:attack=1:release=1:level=disabled`
-    );
-  }
 
   return filters.join(",");
 }
@@ -194,8 +253,10 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
 
   const masteringFilter = buildMasteringFilterChain(preset, originalAnalysis, request.loudnessMode);
   const outputCodec = resolveCodecForQuality(request.outputQuality);
+  const inputProbe = await probeAudioStream(request.inputPath);
+  const exportSampleRate = resolveExportSampleRate(inputProbe.sample_rate);
 
-  // Final mux only: PCM codec/bit depth is chosen here; DSP chain above is unchanged.
+  // Final mux only: PCM codec/bit depth + preserved sample rate; DSP chain above is unchanged.
   await runFfmpeg([
     "-y",
     "-hide_banner",
@@ -206,14 +267,14 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
     "-c:a",
     outputCodec,
     "-ar",
-    String(WAV_EXPORT_SAMPLE_RATE),
+    String(exportSampleRate),
     "-ac",
     String(WAV_EXPORT_CHANNELS),
     masteredPath
   ]);
 
   // Export-only verification — does not alter mastering decisions or loudness.
-  await validateExportedWav(masteredPath, { codec: outputCodec });
+  await validateExportedWav(masteredPath, { codec: outputCodec, sampleRate: exportSampleRate });
   await markJobExportCodecVerified(request.jobId, outputCodec);
 
   // 30s preview snippets for fast before/after checks.

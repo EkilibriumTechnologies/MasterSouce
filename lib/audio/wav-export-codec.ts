@@ -2,11 +2,32 @@ import type { PlanQuality } from "@/lib/subscriptions/types";
 
 export type WavOutputCodec = "pcm_s16le" | "pcm_s24le" | "pcm_f32le";
 
-/** Fixed export rate used by the mastering pipelines (export container only; DSP chain unchanged). */
+/**
+ * Fallback export rate when the source rate is missing or nonstandard.
+ * Adaptive Mastering still forces this rate; preset mastering preserves the source when possible.
+ */
 export const WAV_EXPORT_SAMPLE_RATE = 44100;
 
 /** Fixed stereo export layout used by the mastering pipelines. */
 export const WAV_EXPORT_CHANNELS = 2;
+
+/** Production rates preserved as-is by preset mastering / codec remux (no forced downsample). */
+const PRESERVED_EXPORT_SAMPLE_RATES = new Set([44100, 48000, 88200, 96000, 176400, 192000]);
+
+/**
+ * Resolves the WAV mux sample rate.
+ * Preserves common source rates; falls back to 44.1 kHz only for unknown/nonstandard rates.
+ */
+export function resolveExportSampleRate(sourceSampleRateHz: number | null | undefined): number {
+  if (
+    typeof sourceSampleRateHz === "number" &&
+    Number.isFinite(sourceSampleRateHz) &&
+    PRESERVED_EXPORT_SAMPLE_RATES.has(Math.round(sourceSampleRateHz))
+  ) {
+    return Math.round(sourceSampleRateHz);
+  }
+  return WAV_EXPORT_SAMPLE_RATE;
+}
 
 /**
  * Rollback / staging switch for paid 24-bit WAV delivery.

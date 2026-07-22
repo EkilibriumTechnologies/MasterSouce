@@ -6,8 +6,8 @@ import { probeAudioStream } from "@/lib/audio/media-probe";
 import { validateExportedWav } from "@/lib/audio/wav-export-validation";
 import {
   resolveCodecForQuality,
+  resolveExportSampleRate,
   WAV_EXPORT_CHANNELS,
-  WAV_EXPORT_SAMPLE_RATE,
   type WavOutputCodec
 } from "@/lib/audio/wav-export-codec";
 import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
@@ -47,6 +47,8 @@ function runFfmpeg(args: string[]): Promise<void> {
 
 async function transcodeWavToCodec(sourcePath: string, targetCodec: WavOutputCodec): Promise<string> {
   await fs.mkdir(getTempRoot(), { recursive: true });
+  const probe = await probeAudioStream(sourcePath);
+  const exportSampleRate = resolveExportSampleRate(probe.sample_rate);
   const tempOut = path.join(getTempRoot(), `${makeId("wav_finalize")}.wav`);
   await runFfmpeg([
     "-y",
@@ -56,12 +58,12 @@ async function transcodeWavToCodec(sourcePath: string, targetCodec: WavOutputCod
     "-c:a",
     targetCodec,
     "-ar",
-    String(WAV_EXPORT_SAMPLE_RATE),
+    String(exportSampleRate),
     "-ac",
     String(WAV_EXPORT_CHANNELS),
     tempOut
   ]);
-  await validateExportedWav(tempOut, { codec: targetCodec });
+  await validateExportedWav(tempOut, { codec: targetCodec, sampleRate: exportSampleRate });
   return tempOut;
 }
 
