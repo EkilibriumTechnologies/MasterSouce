@@ -12,6 +12,10 @@ import { EmailCaptureForm } from "@/components/email-capture-form";
 import { MasterReadyCallout } from "@/components/master-ready-callout";
 import { PostMasterReleaseCallout } from "@/components/post-master-release-callout";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
+import type {
+  AudioArtifactProfile,
+  AudioRestorationStrength
+} from "@/lib/audio/audio-restoration-types";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { buildAdaptivePricingLink } from "@/lib/billing/adaptive-pricing-link";
@@ -245,6 +249,10 @@ type PreMasterAnalysisResponse = {
     };
     recommendation: string;
   };
+  audioRestoration?: {
+    available: true;
+    assessment: AudioArtifactProfile;
+  };
   debug?: {
     filename?: string;
     fileSize?: number;
@@ -256,6 +264,17 @@ type PreMasterAnalysisResponse = {
   };
   source?: SourceUploadRef;
 };
+
+type AudioRestorationUiState = {
+  available: boolean;
+  assessment: AudioArtifactProfile | null;
+};
+
+function getArtifactLevelLabel(overallSeverity: number): "Low" | "Moderate" | "High" {
+  if (overallSeverity >= 0.7) return "High";
+  if (overallSeverity >= 0.45) return "Moderate";
+  return "Low";
+}
 
 type MasteringAnalyticsContext = ReturnType<typeof buildMasteringAnalyticsContext>;
 
@@ -368,12 +387,17 @@ type AdaptivePromptPanelProps = {
   adaptiveSectionRef: React.RefObject<HTMLDivElement>;
   advancedControlsOpen: boolean;
   loading: boolean;
+  audioRestoration: AudioRestorationUiState;
+  audioRestorationRequested: boolean;
+  audioRestorationStrength: AudioRestorationStrength;
   referenceArtist: string;
   referenceTrackFile: File | null;
   referenceTrackInputRef: React.RefObject<HTMLInputElement>;
   referenceTrackNotice: string | null;
   onAdaptiveIntentChange: (value: string) => void;
   onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
+  onAudioRestorationRequestedChange: (value: boolean) => void;
+  onAudioRestorationStrengthChange: (value: AudioRestorationStrength) => void;
   onReferenceArtistChange: (value: string) => void;
   onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
   onRunAdaptive: () => void;
@@ -385,12 +409,17 @@ function AdaptivePromptPanel({
   adaptiveSectionRef,
   advancedControlsOpen,
   loading,
+  audioRestoration,
+  audioRestorationRequested,
+  audioRestorationStrength,
   referenceArtist,
   referenceTrackFile,
   referenceTrackInputRef,
   referenceTrackNotice,
   onAdaptiveIntentChange,
   onAdvancedControlsOpenChange,
+  onAudioRestorationRequestedChange,
+  onAudioRestorationStrengthChange,
   onReferenceArtistChange,
   onReferenceTrackSelection,
   onRunAdaptive
@@ -415,6 +444,46 @@ function AdaptivePromptPanel({
       <p style={adaptiveIntentHintStyle}>
         Short phrases work best — think “warmer vocal,” “tighter low end,” or “more club energy.”
       </p>
+      {audioRestoration.available && audioRestoration.assessment ? (
+        <div style={audioRestorationSectionStyle}>
+          <div>
+            <p style={audioRestorationTitleStyle}>AI Audio Restoration</p>
+            <p style={audioRestorationDescriptionStyle}>
+              Reduce metallic highs, smeared detail, weak transients, and unstable stereo information before mastering.
+            </p>
+            <p style={audioRestorationStatusStyle}>
+              {audioRestoration.assessment.restorationRecommended
+                ? "Restoration recommended before mastering."
+                : "No significant restoration issues detected."}
+            </p>
+            <p style={audioRestorationLevelStyle}>
+              Artifact level: {getArtifactLevelLabel(audioRestoration.assessment.overallSeverity)}
+            </p>
+          </div>
+          <label style={audioRestorationCheckboxStyle}>
+            <input
+              type="checkbox"
+              checked={audioRestorationRequested}
+              onChange={(event) => onAudioRestorationRequestedChange(event.target.checked)}
+            />
+            <span>Apply AI Audio Restoration</span>
+          </label>
+          <label htmlFor="audio-restoration-strength" style={referenceTrackFieldLabelStyle}>
+            Strength
+          </label>
+          <select
+            id="audio-restoration-strength"
+            value={audioRestorationStrength}
+            disabled={!audioRestorationRequested}
+            onChange={(event) => onAudioRestorationStrengthChange(event.target.value as AudioRestorationStrength)}
+            style={audioRestorationSelectStyle}
+          >
+            <option value="light">Light</option>
+            <option value="balanced">Balanced</option>
+            <option value="strong">Strong</option>
+          </select>
+        </div>
+      ) : null}
       <div style={advancedControlsSectionStyle}>
         <button
           type="button"
@@ -525,6 +594,9 @@ type AnalysisSummaryPanelProps = {
   confirmedContinueWithStandard: boolean;
   isProduction: boolean;
   loading: boolean;
+  audioRestoration: AudioRestorationUiState;
+  audioRestorationRequested: boolean;
+  audioRestorationStrength: AudioRestorationStrength;
   preMasterAnalysis: PreMasterAnalysisResponse["analysis"];
   preMasterDebug: PreMasterAnalysisResponse["debug"] | null;
   referenceArtist: string;
@@ -534,6 +606,8 @@ type AnalysisSummaryPanelProps = {
   showAdaptivePlaceholder: boolean;
   onAdaptiveIntentChange: (value: string) => void;
   onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
+  onAudioRestorationRequestedChange: (value: boolean) => void;
+  onAudioRestorationStrengthChange: (value: AudioRestorationStrength) => void;
   onOpenAdaptive: () => void;
   onReferenceArtistChange: (value: string) => void;
   onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
@@ -549,6 +623,9 @@ function AnalysisSummaryPanel({
   confirmedContinueWithStandard,
   isProduction,
   loading,
+  audioRestoration,
+  audioRestorationRequested,
+  audioRestorationStrength,
   preMasterAnalysis,
   preMasterDebug,
   referenceArtist,
@@ -558,6 +635,8 @@ function AnalysisSummaryPanel({
   showAdaptivePlaceholder,
   onAdaptiveIntentChange,
   onAdvancedControlsOpenChange,
+  onAudioRestorationRequestedChange,
+  onAudioRestorationStrengthChange,
   onOpenAdaptive,
   onReferenceArtistChange,
   onReferenceTrackSelection,
@@ -622,12 +701,17 @@ function AnalysisSummaryPanel({
           adaptiveSectionRef={adaptiveSectionRef}
           advancedControlsOpen={advancedControlsOpen}
           loading={loading}
+          audioRestoration={audioRestoration}
+          audioRestorationRequested={audioRestorationRequested}
+          audioRestorationStrength={audioRestorationStrength}
           referenceArtist={referenceArtist}
           referenceTrackFile={referenceTrackFile}
           referenceTrackInputRef={referenceTrackInputRef}
           referenceTrackNotice={referenceTrackNotice}
           onAdaptiveIntentChange={onAdaptiveIntentChange}
           onAdvancedControlsOpenChange={onAdvancedControlsOpenChange}
+          onAudioRestorationRequestedChange={onAudioRestorationRequestedChange}
+          onAudioRestorationStrengthChange={onAudioRestorationStrengthChange}
           onReferenceArtistChange={onReferenceArtistChange}
           onReferenceTrackSelection={onReferenceTrackSelection}
           onRunAdaptive={onRunAdaptive}
@@ -704,6 +788,14 @@ export function UploadForm() {
   const [showAdaptivePlaceholder, setShowAdaptivePlaceholder] = useState(false);
   const [adaptiveIntent, setAdaptiveIntent] = useState("");
   const [advancedControlsOpen, setAdvancedControlsOpen] = useState(false);
+  const [audioRestoration, setAudioRestoration] = useState<AudioRestorationUiState>({
+    available: false,
+    assessment: null
+  });
+  const [audioRestorationRequested, setAudioRestorationRequested] = useState(false);
+  const [audioRestorationStrength, setAudioRestorationStrength] =
+    useState<AudioRestorationStrength>("balanced");
+  const [audioRestorationNotice, setAudioRestorationNotice] = useState<string | null>(null);
   const [referenceTrackFile, setReferenceTrackFile] = useState<File | null>(null);
   const [referenceTrackNotice, setReferenceTrackNotice] = useState<string | null>(null);
   const [referenceArtist, setReferenceArtist] = useState("");
@@ -936,6 +1028,10 @@ export function UploadForm() {
     setShowAdaptivePlaceholder(false);
     setAdaptiveIntent("");
     setAdvancedControlsOpen(false);
+    setAudioRestoration({ available: false, assessment: null });
+    setAudioRestorationRequested(false);
+    setAudioRestorationStrength("balanced");
+    setAudioRestorationNotice(null);
     setReferenceTrackFile(null);
     setReferenceTrackNotice(null);
     setReferenceArtist("");
@@ -1102,7 +1198,12 @@ export function UploadForm() {
     setAdaptiveProcessing(true);
     setError(null);
     setAdaptiveAiNotice(null);
-    setStatus("Preparing your original mix for adaptive…");
+    setAudioRestorationNotice(null);
+    setStatus(
+      audioRestoration.available && audioRestorationRequested
+        ? "Restoring audio before mastering…"
+        : "Preparing your original mix for adaptive…"
+    );
     trackMasteringFunnelEvent("mastering_preview_started", {
       source_component: "upload_form",
       mastering_mode: "adaptive"
@@ -1129,6 +1230,10 @@ export function UploadForm() {
         const artist = referenceArtist.trim();
         if (intent) formData.append("user_intent", intent);
         if (artist) formData.append("referenceArtist", artist);
+        if (audioRestoration.available) {
+          formData.append("applyAudioRestoration", String(audioRestorationRequested));
+          formData.append("audioRestorationStrength", audioRestorationStrength);
+        }
         if (billingEmail) formData.append("billingEmail", billingEmail.trim().toLowerCase());
         if (referenceTrackFile) formData.append("referenceTrack", referenceTrackFile);
         response = await fetch("/api/master-ai", {
@@ -1155,6 +1260,12 @@ export function UploadForm() {
             preset: genre,
             loudnessMode: loudness,
             user_intent: adaptiveIntent.trim() || undefined,
+            ...(audioRestoration.available
+              ? {
+                  applyAudioRestoration: audioRestorationRequested,
+                  audioRestorationStrength
+                }
+              : {}),
             ...(referenceArtist.trim() ? { referenceArtist: referenceArtist.trim() } : {}),
             ...(billingEmail ? { billingEmail: billingEmail.trim().toLowerCase() } : {})
           })
@@ -1201,6 +1312,19 @@ export function UploadForm() {
       } else {
         setAdaptiveAiNotice(null);
       }
+      if (adaptive.audioRestoration?.requested) {
+        if (adaptive.audioRestoration.selectedSource === "restored_source" && adaptive.audioRestoration.result.success) {
+          setAudioRestorationNotice("Audio restored. Adaptive Mastering will use the restored source.");
+        } else {
+          setAudioRestorationNotice(
+            "Restoration could not be completed. Adaptive Mastering will continue with the original source."
+          );
+        }
+      } else if (adaptive.audioRestoration?.available && !adaptive.audioRestoration.recommended) {
+        setAudioRestorationNotice("No significant restoration issues detected.");
+      } else {
+        setAudioRestorationNotice(null);
+      }
       console.log("[ADAPTIVE_UI] adaptive preview completed", { jobId: adaptive.jobId });
       setStatus("Adaptive preview ready — compare below, then export when you are happy.");
       trackMasteringFunnelEvent("mastering_preview_succeeded", {
@@ -1239,6 +1363,10 @@ export function UploadForm() {
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
     setSourceUploadRef(null);
+    setAudioRestoration({ available: false, assessment: null });
+    setAudioRestorationRequested(false);
+    setAudioRestorationStrength("balanced");
+    setAudioRestorationNotice(null);
     setConfirmedContinueWithStandard(false);
     setStatus("Analyzing your mix (a few seconds)…");
     const requestId = latestAnalysisRequestIdRef.current + 1;
@@ -1285,6 +1413,20 @@ export function UploadForm() {
       setPreMasterAnalysis(parsed.analysis);
       setPreMasterDebug(parsed.debug ?? null);
       setSourceUploadRef(parsed.source ?? null);
+      if (parsed.audioRestoration?.available) {
+        setAudioRestoration({ available: true, assessment: parsed.audioRestoration.assessment });
+        setAudioRestorationRequested(parsed.audioRestoration.assessment.restorationRecommended);
+        setAudioRestorationStrength(
+          parsed.audioRestoration.assessment.restorationRecommended
+            ? parsed.audioRestoration.assessment.recommendedStrength
+            : "balanced"
+        );
+      } else {
+        setAudioRestoration({ available: false, assessment: null });
+        setAudioRestorationRequested(false);
+        setAudioRestorationStrength("balanced");
+      }
+      setAudioRestorationNotice(null);
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
       setAdaptiveAiNotice(null);
@@ -1403,6 +1545,10 @@ export function UploadForm() {
                   setPreMasterDebug(null);
                   setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
+                  setAudioRestoration({ available: false, assessment: null });
+                  setAudioRestorationRequested(false);
+                  setAudioRestorationStrength("balanced");
+                  setAudioRestorationNotice(null);
                   setConfirmedContinueWithStandard(false);
                 }}
                 style={genre === key ? genreChipActiveStyle : genreChipStyle}
@@ -1427,6 +1573,10 @@ export function UploadForm() {
                   setPreMasterDebug(null);
                   setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
+                  setAudioRestoration({ available: false, assessment: null });
+                  setAudioRestorationRequested(false);
+                  setAudioRestorationStrength("balanced");
+                  setAudioRestorationNotice(null);
                   setConfirmedContinueWithStandard(false);
                 }}
                 style={loudness === key ? loudnessCardActiveStyle : loudnessCardStyle}
@@ -1454,6 +1604,9 @@ export function UploadForm() {
           confirmedContinueWithStandard={confirmedContinueWithStandard}
           isProduction={isProduction}
           loading={loading}
+          audioRestoration={audioRestoration}
+          audioRestorationRequested={audioRestorationRequested}
+          audioRestorationStrength={audioRestorationStrength}
           preMasterAnalysis={preMasterAnalysis}
           preMasterDebug={preMasterDebug}
           referenceArtist={referenceArtist}
@@ -1463,6 +1616,8 @@ export function UploadForm() {
           showAdaptivePlaceholder={showAdaptivePlaceholder}
           onAdaptiveIntentChange={setAdaptiveIntent}
           onAdvancedControlsOpenChange={setAdvancedControlsOpen}
+          onAudioRestorationRequestedChange={setAudioRestorationRequested}
+          onAudioRestorationStrengthChange={setAudioRestorationStrength}
           onOpenAdaptive={() => {
             debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
             setShowAdaptivePlaceholder(true);
@@ -1501,6 +1656,12 @@ export function UploadForm() {
           }}
         >
           {adaptiveAiNotice}
+        </p>
+      ) : null}
+
+      {audioRestorationNotice ? (
+        <p role="status" style={audioRestorationNoticeStyle}>
+          {audioRestorationNotice}
         </p>
       ) : null}
 
@@ -2139,6 +2300,16 @@ const errorStyle: React.CSSProperties = {
   color: "#ff8ba8",
   marginTop: "12px"
 };
+const audioRestorationNoticeStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  padding: "12px 14px",
+  borderRadius: "10px",
+  background: "rgba(126, 184, 218, 0.12)",
+  border: "1px solid rgba(126, 184, 218, 0.35)",
+  color: "#c8e6f5",
+  fontSize: "0.88rem",
+  lineHeight: 1.5
+};
 
 /** Shown for download-limit messaging — calm, not “error red”. */
 const quotaExhaustedMessageStyle: React.CSSProperties = {
@@ -2287,6 +2458,55 @@ const adaptiveIntentHintStyle: React.CSSProperties = {
   margin: 0,
   color: "#9eb0dd",
   fontSize: "0.8rem"
+};
+const audioRestorationSectionStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "8px",
+  borderRadius: "12px",
+  border: "1px solid rgba(126, 184, 218, 0.32)",
+  background: "rgba(10, 18, 30, 0.76)",
+  padding: "12px"
+};
+const audioRestorationTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#e5f3ff",
+  fontWeight: 800,
+  fontSize: "0.95rem"
+};
+const audioRestorationDescriptionStyle: React.CSSProperties = {
+  margin: "4px 0 0",
+  color: "#a8bbdf",
+  fontSize: "0.82rem",
+  lineHeight: 1.45
+};
+const audioRestorationStatusStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#cde6f7",
+  fontSize: "0.84rem",
+  fontWeight: 700
+};
+const audioRestorationLevelStyle: React.CSSProperties = {
+  margin: "4px 0 0",
+  color: "#91a6de",
+  fontSize: "0.8rem"
+};
+const audioRestorationCheckboxStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  color: "#d8e2ff",
+  fontWeight: 700,
+  fontSize: "0.86rem"
+};
+const audioRestorationSelectStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  borderRadius: "10px",
+  border: "1px solid rgba(116, 133, 191, 0.6)",
+  background: "rgba(8, 13, 25, 0.85)",
+  color: "#eef3ff",
+  padding: "9px 12px",
+  fontSize: "0.88rem"
 };
 const advancedControlsSectionStyle: React.CSSProperties = {
   display: "grid",

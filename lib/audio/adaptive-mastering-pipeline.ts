@@ -594,6 +594,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
 
   await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });
   await markJobExportCodecVerified(request.jobId, outputCodec);
+  console.log(`[adaptive-mastering] verifiedExportCodec=${outputCodec}`);
 
   return {
     baselineAnalysis,

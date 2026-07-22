@@ -1,5 +1,10 @@
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import type { AdaptiveAnalysisDiagnostics } from "@/lib/audio/adaptive-track-analysis";
+import type {
+  AudioArtifactProfile,
+  AudioRestorationResult,
+  AudioRestorationStrength
+} from "@/lib/audio/audio-restoration-types";
 import type { ReadinessVerdict } from "@/lib/audio/readiness";
 
 export type AdaptiveMasterSettingsSummary = {
@@ -51,6 +56,15 @@ export type MasterAiResponse = {
   adaptiveAiFallbackReason?: "timeout";
   adaptiveAiFallbackMessage?: string;
   referenceTrackApplied?: boolean;
+  audioRestoration?: {
+    available: boolean;
+    requested: boolean;
+    recommended: boolean;
+    strength: AudioRestorationStrength;
+    artifactProfile: AudioArtifactProfile;
+    result: Omit<AudioRestorationResult, "inputPath" | "outputPath">;
+    selectedSource: "original_source" | "restored_source";
+  };
   analysisDiagnostics?: {
     baseline: AdaptiveAnalysisDiagnostics;
     adaptive: AdaptiveAnalysisDiagnostics | null;

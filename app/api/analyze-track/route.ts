@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { API_ERROR_CODES, apiErrorResponse, logApiError } from "@/lib/api/error-responses";
+import { assessAudioArtifacts } from "@/lib/audio/audio-artifact-assessment";
 import { analyzeTrackWithV2 } from "@/lib/audio/analyze-track-combined";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
+import {
+  isAiAudioRestorationAuthorized,
+  resolveAiAudioRestorationFeatureConfig
+} from "@/lib/features/ai-audio-restoration";
 import { resolveTrackAnalysisV2Enablement } from "@/lib/features/track-analysis-v2";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { createJobId } from "@/lib/jobs/job-id";
@@ -87,6 +92,35 @@ export async function POST(request: NextRequest) {
       }
     });
     const readiness = evaluateTrackReadiness(analysis);
+    const restorationFeatureConfig = resolveAiAudioRestorationFeatureConfig();
+    const restorationOwnerAuthorized = isMasterAdminBypassGranted(request);
+    const restorationAuthorized = isAiAudioRestorationAuthorized({
+      config: restorationFeatureConfig,
+      ownerAuthorized: restorationOwnerAuthorized
+    });
+    // Fail-open: artifact assessment is additive and must never fail track analysis.
+    let audioRestoration:
+      | {
+          available: true;
+          assessment: Awaited<ReturnType<typeof assessAudioArtifacts>>;
+        }
+      | undefined;
+    if (restorationAuthorized) {
+      try {
+        audioRestoration = {
+          available: true,
+          assessment: await assessAudioArtifacts(uploadRecord.filePath)
+        };
+      } catch (assessmentError) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(
+            "[analyze-track] audioRestoration assessment unavailable:",
+            assessmentError instanceof Error ? assessmentError.message : assessmentError
+          );
+        }
+        audioRestoration = undefined;
+      }
+    }
 
     const debug =
       process.env.NODE_ENV !== "production"
@@ -123,6 +157,7 @@ export async function POST(request: NextRequest) {
         fileId: uploadRecord.id,
         jobId: uploadRecord.jobId
       },
+      ...(audioRestoration ? { audioRestoration } : {}),
       ...(analysisV2 ? { analysisV2 } : {}),
       ...(debug ? { debug } : {})
     });
