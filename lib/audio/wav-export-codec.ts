@@ -4,19 +4,21 @@ export type WavOutputCodec = "pcm_s16le" | "pcm_s24le" | "pcm_f32le";
 
 /**
  * Fallback export rate when the source rate is missing or nonstandard.
- * Adaptive Mastering still forces this rate; preset mastering preserves the source when possible.
+ * Used by preset mastering, Adaptive Mastering, and codec remux when the source
+ * rate is not in the preserved set (or cannot be probed).
  */
 export const WAV_EXPORT_SAMPLE_RATE = 44100;
 
 /** Fixed stereo export layout used by the mastering pipelines. */
 export const WAV_EXPORT_CHANNELS = 2;
 
-/** Production rates preserved as-is by preset mastering / codec remux (no forced downsample). */
+/** Production rates preserved as-is by mastering pipelines / codec remux (no forced downsample). */
 const PRESERVED_EXPORT_SAMPLE_RATES = new Set([44100, 48000, 88200, 96000, 176400, 192000]);
 
 /**
- * Resolves the WAV mux sample rate.
- * Preserves common source rates; falls back to 44.1 kHz only for unknown/nonstandard rates.
+ * Resolves the WAV mux sample rate for final export.
+ * Preserves common source rates (44.1 / 48 / 88.2 / 96 / 176.4 / 192 kHz);
+ * falls back to {@link WAV_EXPORT_SAMPLE_RATE} (44.1 kHz) for unknown/nonstandard rates.
  */
 export function resolveExportSampleRate(sourceSampleRateHz: number | null | undefined): number {
   if (

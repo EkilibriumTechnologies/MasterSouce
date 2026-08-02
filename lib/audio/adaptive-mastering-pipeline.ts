@@ -11,7 +11,12 @@ import { evaluateTrackReadiness } from "@/lib/audio/readiness";
 import { GENRE_PRESETS, getLoudnessModeLufsTarget, getLoudnessModeTruePeak, type LoudnessMode } from "@/lib/genre-presets";
 import { applyReferenceTrackGuidance } from "@/lib/audio/reference-track-guidance";
 import { validateExportedWav } from "@/lib/audio/wav-export-validation";
-import { resolveCodecForQuality, WAV_EXPORT_CHANNELS, WAV_EXPORT_SAMPLE_RATE } from "@/lib/audio/wav-export-codec";
+import {
+  resolveCodecForQuality,
+  resolveExportSampleRate,
+  WAV_EXPORT_CHANNELS
+} from "@/lib/audio/wav-export-codec";
+import { probeAudioStream } from "@/lib/audio/media-probe";
 import { markJobExportCodecVerified } from "@/lib/jobs/job-export-verify";
 import { getTempRoot, makeId } from "@/lib/storage/temp-files";
 import type { PlanQuality } from "@/lib/subscriptions/types";
@@ -131,6 +136,7 @@ function runFfmpeg(args: string[]): Promise<void> {
 async function applyCorrectiveGainPass(params: {
   sourcePath: string;
   outputCodec: "pcm_s16le" | "pcm_s24le" | "pcm_f32le";
+  exportSampleRate: number;
   gainDb: number;
   limiterCeilingDb: number;
 }): Promise<void> {
@@ -145,12 +151,12 @@ async function applyCorrectiveGainPass(params: {
     "-c:a",
     params.outputCodec,
     "-ar",
-    String(WAV_EXPORT_SAMPLE_RATE),
+    String(params.exportSampleRate),
     "-ac",
     String(WAV_EXPORT_CHANNELS),
     tempPassPath
   ]);
-  await validateExportedWav(tempPassPath, { codec: params.outputCodec });
+  await validateExportedWav(tempPassPath, { codec: params.outputCodec, sampleRate: params.exportSampleRate });
   await fs.copyFile(tempPassPath, params.sourcePath);
   await fs.unlink(tempPassPath).catch(() => undefined);
 }
@@ -409,6 +415,12 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     );
   }
   const outputCodec = resolveCodecForQuality(request.outputQuality);
+  const inputProbe = await probeAudioStream(request.inputPath);
+  const exportSampleRate = resolveExportSampleRate(inputProbe.sample_rate);
+  console.log(`[adaptive-mastering] inputSampleRate=${inputProbe.sample_rate}`);
+  console.log(`[adaptive-mastering] outputSampleRate=${exportSampleRate}`);
+  console.log(`[adaptive-mastering] outputQuality=${request.outputQuality}`);
+  console.log(`[adaptive-mastering] outputCodec=${outputCodec}`);
 
   const adaptiveMasteredPath = path.join(getTempRoot(), `${makeId(`adaptive_${request.jobId}`)}.wav`);
   const adaptivePreviewPath = path.join(getTempRoot(), `${makeId(`adaptive_preview_${request.jobId}`)}.mp3`);
@@ -423,6 +435,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
   const safePeakForBoostDb = -0.4;
   const correctiveLimiterCeilingDb = clamp(instructionSummary.settings.limiterCeilingDb - 0.25, -1.2, -0.65);
 
+  // Final mux only: PCM codec/bit depth + preserved source sample rate; DSP chain above is unchanged.
   await runFfmpeg([
     "-y",
     "-hide_banner",
@@ -433,14 +446,14 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     "-c:a",
     outputCodec,
     "-ar",
-    String(WAV_EXPORT_SAMPLE_RATE),
+    String(exportSampleRate),
     "-ac",
     String(WAV_EXPORT_CHANNELS),
     adaptiveMasteredPath
   ]);
 
-  // Export-only verification — corrective passes preserve the same PCM codec.
-  await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });
+  // Export-only verification — corrective passes preserve the same PCM codec and sample rate.
+  await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec, sampleRate: exportSampleRate });
 
   let adaptiveAnalysis: TrackAnalysis | null = null;
   let adaptiveAnalysisDiagnostics: AdaptiveAnalysisDiagnostics | null = null;
@@ -480,6 +493,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
       await applyCorrectiveGainPass({
         sourcePath: adaptiveMasteredPath,
         outputCodec,
+        exportSampleRate,
         gainDb: correctiveGain,
         limiterCeilingDb: correctiveLimiterCeilingDb
       });
@@ -507,6 +521,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
       await applyCorrectiveGainPass({
         sourcePath: adaptiveMasteredPath,
         outputCodec,
+        exportSampleRate,
         gainDb: extraGain,
         limiterCeilingDb: correctiveLimiterCeilingDb
       });
@@ -592,9 +607,10 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     ])
   ]);
 
-  await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });
+  await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec, sampleRate: exportSampleRate });
   await markJobExportCodecVerified(request.jobId, outputCodec);
   console.log(`[adaptive-mastering] verifiedExportCodec=${outputCodec}`);
+  console.log(`[adaptive-mastering] verifiedExportSampleRate=${exportSampleRate}`);
 
   return {
     baselineAnalysis,

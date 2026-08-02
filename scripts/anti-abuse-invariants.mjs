@@ -72,7 +72,7 @@ function run() {
   const adaptivePipeline = read("lib/audio/adaptive-mastering-pipeline.ts");
   assertBefore(
     adaptivePipeline,
-    "await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec });",
+    "await validateExportedWav(adaptiveMasteredPath, { codec: outputCodec, sampleRate: exportSampleRate });",
     "let adaptiveAnalysis: TrackAnalysis | null = null;",
     "adaptive-mastering-pipeline: export-only WAV validation after initial render"
   );

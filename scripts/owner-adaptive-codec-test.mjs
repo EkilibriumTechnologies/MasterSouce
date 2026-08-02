@@ -8,6 +8,7 @@ import ffmpegStatic from "ffmpeg-static";
 import { probeAudioStream } from "@/lib/audio/media-probe";
 import {
   resolveCodecForQuality,
+  resolveExportSampleRate,
   WAV_EXPORT_CHANNELS,
   WAV_EXPORT_SAMPLE_RATE
 } from "@/lib/audio/wav-export-codec";
@@ -46,6 +47,9 @@ runFfmpeg([
   sourceWav
 ]);
 
+const inputProbe = await probeAudioStream(sourceWav);
+const exportSampleRate = resolveExportSampleRate(inputProbe.sample_rate);
+
 runFfmpeg([
   "-y",
   "-hide_banner",
@@ -56,19 +60,19 @@ runFfmpeg([
   "-c:a",
   outputCodec,
   "-ar",
-  String(WAV_EXPORT_SAMPLE_RATE),
+  String(exportSampleRate),
   "-ac",
   String(WAV_EXPORT_CHANNELS),
   ownerAdaptiveWav
 ]);
 
-await validateExportedWav(ownerAdaptiveWav, { codec: outputCodec });
+await validateExportedWav(ownerAdaptiveWav, { codec: outputCodec, sampleRate: exportSampleRate });
 const probe = await probeAudioStream(ownerAdaptiveWav);
 
 assert.equal(probe.codec_name, "pcm_f32le", "owner Adaptive WAV codec is pcm_f32le");
 assert.equal(probe.sample_fmt, "flt", "owner Adaptive WAV sample format is 32-bit float");
 assert.equal(probe.bits_per_sample ?? probe.bits_per_raw_sample, 32, "owner Adaptive WAV bit depth is 32");
-assert.equal(probe.sample_rate, WAV_EXPORT_SAMPLE_RATE, "owner Adaptive WAV sample rate is 44.1 kHz");
+assert.equal(probe.sample_rate, exportSampleRate, "owner Adaptive WAV sample rate matches resolved source rate");
 assert.equal(probe.channels, WAV_EXPORT_CHANNELS, "owner Adaptive WAV is stereo");
 
 console.log(
@@ -76,6 +80,7 @@ console.log(
     ownerAdaptiveWav,
     outputQuality,
     outputCodec,
+    exportSampleRate,
     ffprobe: probe
   })
 );
