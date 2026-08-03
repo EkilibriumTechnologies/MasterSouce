@@ -1,4 +1,3 @@
-import { getCurrentMonthKeyUtc } from "@/lib/usage/month-key";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import type { PlanId } from "@/lib/subscriptions/types";
 
@@ -28,22 +27,15 @@ type SupabaseErrorLike = {
   hint?: string | null;
 };
 
-const localUsageByMonthEmail = new Map<string, number>();
+/** In-memory all-time counted usage when Supabase is not configured (local/dev/tests). */
+const localUsageByEmail = new Map<string, number>();
 
-function getLocalUsage(monthKey: string, normalizedEmail: string): number {
-  return localUsageByMonthEmail.get(`${monthKey}:${normalizedEmail}`) ?? 0;
+function getLocalUsage(normalizedEmail: string): number {
+  return localUsageByEmail.get(normalizedEmail) ?? 0;
 }
 
-function incrementLocalUsage(monthKey: string, normalizedEmail: string): void {
-  const key = `${monthKey}:${normalizedEmail}`;
-  localUsageByMonthEmail.set(key, getLocalUsage(monthKey, normalizedEmail) + 1);
-}
-
-function getCurrentMonthBoundsUtc(): { start: string; end: string } {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
-  return { start: start.toISOString(), end: end.toISOString() };
+function incrementLocalUsage(normalizedEmail: string): void {
+  localUsageByEmail.set(normalizedEmail, getLocalUsage(normalizedEmail) + 1);
 }
 
 function buildSupabaseErrorMeta(error: SupabaseErrorLike | null | undefined): {
@@ -60,26 +52,27 @@ function buildSupabaseErrorMeta(error: SupabaseErrorLike | null | undefined): {
   };
 }
 
-export async function countHitAnalyzerUsageThisMonth(normalizedEmail: string): Promise<number> {
+/**
+ * Count successful Hit Analyzer evaluations for an email across the full ledger
+ * (no month filter). Only rows with counted=true are included.
+ */
+export async function countHitAnalyzerUsageAllTime(normalizedEmail: string): Promise<number> {
   if (!isSupabaseConfigured()) {
-    return getLocalUsage(getCurrentMonthKeyUtc(), normalizedEmail);
+    return getLocalUsage(normalizedEmail);
   }
 
   const supabase = getSupabaseAdmin();
-  const { start, end } = getCurrentMonthBoundsUtc();
   const { count, error } = await supabase
     .schema("public")
     .from("hit_analyzer_report_events")
     .select("id", { count: "exact", head: true })
     .eq("email", normalizedEmail)
-    .gte("created_at", start)
-    .lt("created_at", end)
     .eq("counted", true);
   if (error) {
     const meta = buildSupabaseErrorMeta(error);
     console.error("[ar-ai] usage_count_query_failed", {
       table: "public.hit_analyzer_report_events",
-      filters: { email: normalizedEmail, created_at_gte: start, created_at_lt: end, counted: true },
+      filters: { email: normalizedEmail, counted: true, scope: "all_time" },
       supabaseError: meta
     });
     throw new Error(
@@ -89,8 +82,12 @@ export async function countHitAnalyzerUsageThisMonth(normalizedEmail: string): P
   return count ?? 0;
 }
 
+/** @deprecated Prefer countHitAnalyzerUsageAllTime — kept name alias for older imports/tests. */
+export async function countHitAnalyzerUsageThisMonth(normalizedEmail: string): Promise<number> {
+  return countHitAnalyzerUsageAllTime(normalizedEmail);
+}
+
 export async function recordHitAnalyzerReportEvent(input: HitAnalyzerReportEventInput): Promise<void> {
-  const monthKey = getCurrentMonthKeyUtc();
   if (isSupabaseConfigured()) {
     const resolvedPlanId = input.planId ?? "free";
     const supabase = getSupabaseAdmin();
@@ -122,11 +119,11 @@ export async function recordHitAnalyzerReportEvent(input: HitAnalyzerReportEvent
   }
 
   if (input.counted && input.normalizedEmail) {
-    incrementLocalUsage(monthKey, input.normalizedEmail);
+    incrementLocalUsage(input.normalizedEmail);
   }
 }
 
 /** Test-only reset for in-memory usage ledger. */
 export function resetHitAnalyzerLocalUsageForTests(): void {
-  localUsageByMonthEmail.clear();
+  localUsageByEmail.clear();
 }

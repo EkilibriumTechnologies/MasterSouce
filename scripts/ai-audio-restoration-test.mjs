@@ -222,12 +222,17 @@ async function runProcessingTests(inputPath) {
 
 function runStaticIntegrationTests() {
   const route = read("app/api/master-ai/route.ts");
+  const helper = read("lib/audio/mastering-source-restoration.ts");
+  const presetRoute = read("app/api/master/route.ts");
   assert.ok(route.includes("resolveAiAudioRestorationFeatureConfig"), "route resolves server-side feature flags");
   assert.ok(route.includes("isAiAudioRestorationAuthorized"), "route checks server-side authorization");
-  assert.ok(route.includes("assessAudioArtifacts(sourceAudio.record.filePath)"), "route assesses authoritative upload");
+  assert.ok(route.includes("resolveMasteringSourceWithRestoration"), "adaptive uses shared restoration helper");
+  assert.ok(helper.includes("assessAudioArtifacts(originalPath)"), "helper assesses authoritative upload");
   assert.ok(route.includes("inputPath: adaptiveSource"), "adaptive pipeline uses selected source");
-  assert.ok(route.includes('selectedSource=" + selectedSource'), "selected source is logged");
-  assert.ok(route.includes('kind: "restored"'), "restored intermediate is registered");
+  assert.ok(helper.includes("[adaptive-mastering] selectedSource=") || helper.includes("selectedSource=${selectedSource}"), "selected source is logged");
+  assert.ok(helper.includes('kind: "restored"'), "restored intermediate is registered");
+  assert.ok(presetRoute.includes("resolveMasteringSourceWithRestoration"), "preset mastering uses shared restoration helper");
+  assert.ok(presetRoute.includes('workflowLogTag: "preset-mastering"'), "preset logs selected source via helper");
   assert.ok(route.includes("outputQuality = resolveEncodeOutputQuality"), "output quality selected before render");
   assert.ok(route.includes("outputCodec = resolveCodecForQuality(outputQuality)"), "output codec selected before render");
   assert.ok(route.includes("[adaptive-mastering] outputQuality=32bit_float") || route.includes("outputQuality"), "owner quality logging remains present");
@@ -241,9 +246,23 @@ function runStaticIntegrationTests() {
   assert.ok(uploadForm.includes("No significant restoration issues detected."), "not recommended UI state exists");
   assert.ok(uploadForm.includes("Restoration recommended before mastering."), "recommended UI state exists");
   assert.ok(uploadForm.includes("Restoring audio before mastering"), "processing UI state exists");
-  assert.ok(uploadForm.includes("Audio restored. Adaptive Mastering will use the restored source."), "success UI state exists");
-  assert.ok(uploadForm.includes("Restoration could not be completed. Adaptive Mastering will continue with the original source."), "fallback UI state exists");
-  assert.ok(!/fingerprint|watermark|provenance|detection marker/i.test(uploadForm), "UI avoids disallowed claims");
+  assert.ok(uploadForm.includes("Audio restored. Mastering used the restored source."), "success UI state exists");
+  assert.ok(uploadForm.includes("Restoration could not be completed. Mastering continued with the original source."), "fallback UI state exists");
+  assert.ok(uploadForm.includes('<option value="off">Off</option>'), "public Off choice exists");
+  assert.ok(uploadForm.includes('<option value="balanced">Balanced</option>'), "public Balanced choice exists");
+  assert.ok(uploadForm.includes('<option value="strong">Strong</option>'), "public Strong choice exists");
+  assert.ok(!uploadForm.includes('<option value="light">Light</option>'), "public Light choice is hidden");
+  assert.ok(uploadForm.includes("Suggested Mastering Preset"), "suggested preset label exists");
+  assert.ok(uploadForm.includes("We detected audio characteristics that may benefit from AI Audio Restoration.") || read("lib/audio/artifact-recommendation.ts").includes("We detected audio characteristics that may benefit from AI Audio Restoration."), "safe restoration recommendation copy exists");
+  assert.ok(!/fingerprint|watermark|provenance|detection marker|AI detector|undetectable/i.test(uploadForm), "UI avoids disallowed claims");
+
+  const envExample = read(".env.example");
+  assert.ok(envExample.includes("AI_AUDIO_RESTORATION_ENABLED=true"), "env example documents enabled rollout");
+  assert.ok(envExample.includes("AI_AUDIO_RESTORATION_OWNER_ONLY=false"), "env example documents open rollout");
+  const feature = read("lib/features/ai-audio-restoration.ts");
+  assert.ok(feature.includes("parseFeatureBoolean(env[AI_AUDIO_RESTORATION_ENABLED_ENV_VAR], false)"), "safe enabled default preserved");
+  assert.ok(feature.includes("parseFeatureBoolean(env[AI_AUDIO_RESTORATION_OWNER_ONLY_ENV_VAR], true)"), "safe ownerOnly default preserved");
+
   console.log("adaptive integration invariants: ok", {
     successSelection: "restored_source",
     fallbackSelection: "original_source",

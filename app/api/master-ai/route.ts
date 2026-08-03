@@ -3,14 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { API_ERROR_CODES, apiErrorResponse, logApiError } from "@/lib/api/error-responses";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
-import { assessAudioArtifacts } from "@/lib/audio/audio-artifact-assessment";
-import { runAudioArtifactRestoration } from "@/lib/audio/audio-restoration";
-import {
-  isAudioRestorationStrength,
-  type AudioRestorationResult,
-  type AudioRestorationStrength
-} from "@/lib/audio/audio-restoration-types";
 import { analyzeTrack } from "@/lib/audio/analyze-track";
+import {
+  resolveMasteringSourceWithRestoration,
+  sanitizeRestorationResultForResponse
+} from "@/lib/audio/mastering-source-restoration";
 import { toPublicMetrics } from "@/lib/audio/public-analysis";
 import { runAdaptiveMasteringPipeline } from "@/lib/audio/adaptive-mastering-pipeline";
 import {
@@ -83,21 +80,6 @@ function parseOptionalBooleanField(value: FormDataEntryValue | null): boolean | 
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
   return undefined;
-}
-
-function sanitizeRestorationResultForResponse(
-  result: AudioRestorationResult
-): Omit<AudioRestorationResult, "inputPath" | "outputPath"> {
-  return {
-    attempted: result.attempted,
-    applied: result.applied,
-    success: result.success,
-    strength: result.strength,
-    fallbackUsed: result.fallbackUsed,
-    ...(result.fallbackReason ? { fallbackReason: result.fallbackReason } : {}),
-    modulesApplied: result.modulesApplied,
-    ...(result.processingTimeMs !== undefined ? { processingTimeMs: result.processingTimeMs } : {})
-  };
 }
 
 async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterAiRequest | "invalid_json" | "invalid_payload"> {
@@ -333,104 +315,23 @@ export async function POST(request: NextRequest) {
       ownerAuthorized: restorationOwnerAuthorized
     });
     const restorationRequested = parsed.applyAudioRestoration === true;
-    let selectedRestorationStrength: AudioRestorationStrength =
-      isAudioRestorationStrength(parsed.audioRestorationStrength) ? parsed.audioRestorationStrength : "balanced";
     // Fail-open: assessment/restoration errors must never block Adaptive Mastering.
-    let restorationProfile: Awaited<ReturnType<typeof assessAudioArtifacts>> | null = null;
-    if (restorationAuthorized) {
-      try {
-        restorationProfile = await assessAudioArtifacts(sourceAudio.record.filePath);
-      } catch (assessmentError) {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn(
-            "[ai-audio-restoration] assessment unavailable:",
-            assessmentError instanceof Error ? assessmentError.message : assessmentError
-          );
-        }
-        restorationProfile = null;
-      }
-    }
-    if (restorationProfile?.restorationRecommended && parsed.audioRestorationStrength === undefined) {
-      selectedRestorationStrength = restorationProfile.recommendedStrength;
-    }
-    const shouldAttemptRestoration =
-      restorationAuthorized && restorationProfile !== null && restorationRequested;
-    let restorationResult: AudioRestorationResult | null = null;
-    if (shouldAttemptRestoration && restorationProfile) {
-      try {
-        restorationResult = await runAudioArtifactRestoration({
-          inputPath: sourceAudio.record.filePath,
-          jobId,
-          strength: selectedRestorationStrength,
-          artifactProfile: restorationProfile,
-          force: restorationRequested && !restorationProfile.restorationRecommended
-        });
-      } catch (restorationError) {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn(
-            "[ai-audio-restoration] processing unavailable:",
-            restorationError instanceof Error ? restorationError.message : restorationError
-          );
-        }
-        restorationResult = {
-          attempted: true,
-          applied: false,
-          success: false,
-          strength: selectedRestorationStrength,
-          inputPath: sourceAudio.record.filePath,
-          fallbackUsed: true,
-          fallbackReason: "processing_error",
-          modulesApplied: []
-        };
-      }
-    }
-    if (restorationResult?.success && restorationResult.outputPath) {
-      try {
-        await registerExistingFile({
-          filePath: restorationResult.outputPath,
-          kind: "restored",
-          mime: "audio/wav",
-          jobId
-        });
-      } catch (registerError) {
-        // Keep restored intermediate usable; age-based temp cleanup covers orphans.
-        if (process.env.NODE_ENV !== "production") {
-          console.warn(
-            "[ai-audio-restoration] restored temp registration failed:",
-            registerError instanceof Error ? registerError.message : registerError
-          );
-        }
-      }
-    }
-    const adaptiveSource =
-      restorationAuthorized &&
-      restorationResult?.success === true &&
-      restorationResult.outputPath
-        ? restorationResult.outputPath
-        : sourceAudio.record.filePath;
-    const selectedSource = adaptiveSource === sourceAudio.record.filePath ? "original_source" : "restored_source";
-    const restorationFallbackReason =
-      restorationResult?.fallbackReason ??
-      (!restorationFeatureConfig.enabled
-        ? "feature_disabled"
-        : !restorationAuthorized
-          ? "not_authorized"
-          : !restorationRequested
-            ? "not_requested"
-            : "not_attempted");
-    console.log("[ai-audio-restoration]", {
-      featureEnabled: restorationFeatureConfig.enabled,
-      ownerOnly: restorationFeatureConfig.ownerOnly,
+    const restorationResolution = await resolveMasteringSourceWithRestoration({
+      originalPath: sourceAudio.record.filePath,
+      jobId,
+      featureConfig: restorationFeatureConfig,
+      restorationAuthorized,
       ownerAuthorized: restorationOwnerAuthorized,
-      requested: restorationRequested,
-      recommended: restorationProfile?.restorationRecommended ?? false,
-      strength: selectedRestorationStrength,
-      modules: restorationResult?.modulesApplied ?? [],
-      success: restorationResult?.success ?? false,
-      fallbackUsed: restorationResult?.fallbackUsed ?? selectedSource === "original_source",
-      fallbackReason: selectedSource === "restored_source" ? null : restorationFallbackReason
+      restorationRequested,
+      requestedStrength: parsed.audioRestorationStrength,
+      workflowLogTag: "adaptive-mastering"
     });
-    console.log("[adaptive-mastering] selectedSource=" + selectedSource);
+    const restorationProfile = restorationResolution.profile;
+    const restorationResult = restorationResolution.result;
+    const selectedRestorationStrength = restorationResolution.strength;
+    const selectedSource = restorationResolution.selectedSource;
+    const restorationFallbackReason = restorationResolution.fallbackReason ?? "not_attempted";
+    const adaptiveSource = restorationResolution.selectedPath;
 
     const adaptive = await runAdaptiveMasteringPipeline({
       inputPath: adaptiveSource,

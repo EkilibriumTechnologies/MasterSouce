@@ -50,6 +50,6 @@ export const HOME_FAQ_ITEMS: HomeFaqItem[] = [
   {
     question: "What can I upload?",
     answer:
-      "WAV or MP3 within the limit shown in the uploader. A quick analysis checks loudness and headroom, then mastering follows the genre and loudness preset you selected."
+      "WAV or MP3 within the limit shown in the uploader. MasterSauce analyzes your audio before mastering, may recommend a mastering profile and optional AI Audio Restoration, then follows the preset or Adaptive path you choose."
   }
 ];

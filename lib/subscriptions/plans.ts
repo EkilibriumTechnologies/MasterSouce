@@ -16,6 +16,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     features: [
       "Unlimited MP3 downloads",
       "1 free WAV download",
+      "1 Song Analyzer evaluation",
       "All 7 genre presets",
       "WAV 16-bit",
       "No watermark"
@@ -38,6 +39,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     features: [
       "Unlimited MP3 downloads",
       "25 WAV downloads / month",
+      "Unlimited Song Analyzer",
       "All 7 genre presets",
       "Prompt-Based Adaptive Mastering",
       "A/B preview",
@@ -62,6 +64,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     features: [
       "Unlimited MP3 downloads",
       "Unlimited WAV downloads",
+      "Unlimited Song Analyzer",
       "All 7 genre presets",
       "Prompt-Based Adaptive Mastering",
       "A/B preview",

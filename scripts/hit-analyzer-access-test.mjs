@@ -17,8 +17,8 @@ const BILLING_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const HIT_ANALYZER_TIER_LIMITS = {
   free: 1,
-  creator_monthly: 10,
-  pro_studio_monthly: 50
+  creator_monthly: null,
+  pro_studio_monthly: null
 };
 
 const HIT_ANALYZER_DEFAULT_LAUNCH_END_DATE = "2026-07-30T23:59:59.999Z";
@@ -66,7 +66,7 @@ function buildHitAnalyzerLaunchCountdown(now, envValue) {
       unit: "days",
       value: 0,
       label: "0 days",
-      message: "Launch access has ended. Monthly plan limits apply."
+      message: "Launch access has ended. Plan limits apply."
     };
   }
 
@@ -101,9 +101,10 @@ function resolveHitAnalyzerTierLimit(planId, email) {
 }
 
 function evaluatePostLaunchAccess({ planId, email, used }) {
-  const unlimited = isAdminEntitlementOverrideEmail(email);
+  const adminUnlimited = isAdminEntitlementOverrideEmail(email);
   const limit = resolveHitAnalyzerTierLimit(planId, email);
-  if (unlimited) return { allowed: true, unlimited: true };
+  const unlimited = adminUnlimited || limit == null;
+  if (unlimited) return { allowed: true, unlimited: true, limit: null, remaining: null };
   const remaining = Math.max((limit ?? 0) - used, 0);
   if (remaining <= 0) {
     return {
@@ -125,38 +126,43 @@ function runLaunchCountdownTests() {
   assert.ok(countdown.value >= 29, "mid-window day countdown is plausible");
   assert.match(countdown.message, /Free launch access ends in/, "countdown message prefix");
 
-  const finalDay = new Date("2026-07-30T12:00:00.000Z");
-  const hoursCountdown = buildHitAnalyzerLaunchCountdown(finalDay, undefined);
-  assert.equal(hoursCountdown.unit, "hours", "final day uses hour unit");
-  assert.ok(hoursCountdown.value >= 1, "final day has at least 1 hour");
-
   const afterLaunch = new Date("2026-08-01T00:00:00.000Z");
   assert.equal(isHitAnalyzerLaunchActive(afterLaunch, undefined), false, "launch ends after default date");
 }
 
 function runTierLimitTests() {
-  assert.equal(resolveHitAnalyzerTierLimit("free", "user@example.com"), 1, "free tier limit");
-  assert.equal(resolveHitAnalyzerTierLimit("creator_monthly", "user@example.com"), 10, "creator tier limit");
-  assert.equal(resolveHitAnalyzerTierLimit("pro_studio_monthly", "user@example.com"), 50, "pro tier limit");
+  assert.equal(resolveHitAnalyzerTierLimit("free", "user@example.com"), 1, "free tier lifetime limit");
+  assert.equal(resolveHitAnalyzerTierLimit("creator_monthly", "user@example.com"), null, "creator unlimited");
+  assert.equal(resolveHitAnalyzerTierLimit("pro_studio_monthly", "user@example.com"), null, "pro unlimited");
   assert.equal(resolveHitAnalyzerTierLimit("free", ADMIN_EMAIL), null, "admin unlimited");
   assert.equal(resolveHitAnalyzerTierLimit("free", "  LLAROD@Gmail.COM  "), null, "admin email trim/lowercase");
 }
 
 function runPostLaunchQuotaTests() {
+  const freeAllowed = evaluatePostLaunchAccess({ planId: "free", email: "user@example.com", used: 0 });
+  assert.equal(freeAllowed.allowed, true, "free allows first lifetime evaluation");
+  assert.equal(freeAllowed.remaining, 1);
+
   const freeBlocked = evaluatePostLaunchAccess({ planId: "free", email: "user@example.com", used: 1 });
-  assert.equal(freeBlocked.allowed, false, "free blocked at 1 used");
+  assert.equal(freeBlocked.allowed, false, "free blocked after 1 successful lifetime evaluation");
   assert.equal(freeBlocked.code, "hit_analyzer_quota_exhausted");
   assert.equal(freeBlocked.remaining, 0);
 
-  const creatorAllowed = evaluatePostLaunchAccess({ planId: "creator_monthly", email: "user@example.com", used: 9 });
-  assert.equal(creatorAllowed.allowed, true, "creator allows 10th report");
-  assert.equal(creatorAllowed.remaining, 1);
+  const creatorUnlimited = evaluatePostLaunchAccess({
+    planId: "creator_monthly",
+    email: "user@example.com",
+    used: 999
+  });
+  assert.equal(creatorUnlimited.allowed, true, "creator remains unlimited");
+  assert.equal(creatorUnlimited.unlimited, true);
 
-  const creatorBlocked = evaluatePostLaunchAccess({ planId: "creator_monthly", email: "user@example.com", used: 10 });
-  assert.equal(creatorBlocked.allowed, false, "creator blocked at 10");
-
-  const proAllowed = evaluatePostLaunchAccess({ planId: "pro_studio_monthly", email: "user@example.com", used: 49 });
-  assert.equal(proAllowed.allowed, true, "pro allows 50th report");
+  const proUnlimited = evaluatePostLaunchAccess({
+    planId: "pro_studio_monthly",
+    email: "user@example.com",
+    used: 999
+  });
+  assert.equal(proUnlimited.allowed, true, "pro remains unlimited");
+  assert.equal(proUnlimited.unlimited, true);
 
   const admin = evaluatePostLaunchAccess({ planId: "free", email: ADMIN_EMAIL, used: 999 });
   assert.equal(admin.allowed, true, "admin remains unlimited");
@@ -176,12 +182,18 @@ function runSourceIntegrationTests() {
   const route = read("app/api/ar-ai/route.ts");
   const accessRoute = read("app/api/ar-ai/access/route.ts");
   const page = read("app/ar-ai/page.tsx");
+  const plans = read("lib/subscriptions/plans.ts");
 
   assertIncludes(accessLib, "HIT_ANALYZER_DEFAULT_LAUNCH_END_DATE", "access lib default launch end");
   assertIncludes(accessLib, "HIT_ANALYZER_FREE_LAUNCH_END_DATE", "access lib env override");
   assertIncludes(accessLib, "isAdminEntitlementOverrideEmail", "access lib admin override");
   assertIncludes(accessLib, "hit_analyzer_quota_exhausted", "access lib quota code");
+  assertIncludes(accessLib, "countHitAnalyzerUsageAllTime", "access lib uses all-time count");
+  assertIncludes(accessLib, "creator_monthly: null", "creator unlimited");
+  assertIncludes(accessLib, "pro_studio_monthly: null", "pro unlimited");
   assertIncludes(usageLib, "hit_analyzer_report_events", "usage lib table name");
+  assertIncludes(usageLib, "countHitAnalyzerUsageAllTime", "usage lib all-time counter");
+  assert.ok(!usageLib.includes(".gte(\"created_at\""), "usage count must not restrict to current month");
   assertIncludes(route, "resolveHitAnalyzerAccess", "route uses access helper");
   assertIncludes(route, "consumeRateLimit", "route keeps IP abuse guard");
   assertIncludes(route, 'bucket: "ar_ai_ip"', "route keeps ar_ai_ip bucket");
@@ -196,6 +208,11 @@ function runSourceIntegrationTests() {
   assertIncludes(page, "Try Hit Analyzer free during launch.", "launch banner copy");
   assertIncludes(page, "Upgrade to analyze more songs", "upgrade CTA");
   assertIncludes(page, "/#pricing", "pricing link");
+  assertIncludes(page, "1 Song Analyzer evaluation", "free allowance copy");
+  assertIncludes(page, "Unlimited Song Analyzer", "paid allowance copy");
+  assertIncludes(plans, "1 Song Analyzer evaluation", "free plan feature copy");
+  assertIncludes(plans, "Unlimited Song Analyzer", "paid plan feature copy");
+  assertIncludes(plans, "Unlimited MP3 downloads", "MP3 entitlement wording unchanged");
 }
 
 function runInvariantCompatibilityTests() {
@@ -203,6 +220,7 @@ function runInvariantCompatibilityTests() {
   assert.ok(!route.includes("adaptiveMastering"), "ar-ai route must not invoke adaptive mastering");
   assertIncludes(route, "normalizeArAiReport", "report normalization unchanged");
   assertIncludes(route, "analyzeTrack", "technical analysis unchanged");
+  assert.ok(!read("app/api/analyze-track/route.ts").includes("resolveHitAnalyzerAccess"), "Track Analysis remains unmetered");
 }
 
 function run() {

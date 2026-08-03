@@ -219,7 +219,7 @@ export default function ArAiPage() {
         }
         if (data.code === "hit_analyzer_quota_exhausted") {
           setUpgradeRequired(Boolean(data.upgradeRequired));
-          setError(data.message || "You reached your Hit Analyzer limit for this month.");
+          setError(data.message || "You reached your Hit Analyzer limit.");
           if (typeof data.limit === "number") {
             setUsage((current) =>
               current
@@ -395,15 +395,17 @@ export default function ArAiPage() {
             </>
           ) : (
             <>
-              <p style={launchBannerTitleStyle}>Monthly Hit Analyzer allowance</p>
+              <p style={launchBannerTitleStyle}>Hit Analyzer allowance</p>
               <p style={launchBannerSubStyle}>
                 {usage?.unlimited
-                  ? `${getPlanDisplayName(usage.planId)}: unlimited reports`
+                  ? `${getPlanDisplayName(usage.planId)}: Unlimited Song Analyzer`
                   : usage
-                    ? `${getPlanDisplayName(usage.planId)}: ${usage.limit ?? "—"}/month${
-                        usage.remaining != null ? ` · ${usage.remaining} remaining` : ""
-                      }`
-                    : "Free: 1/month · Creator: 10/month · Pro: 50/month"}
+                    ? `${getPlanDisplayName(usage.planId)}: ${
+                        usage.limit === 1
+                          ? "1 Song Analyzer evaluation"
+                          : `${usage.limit ?? "—"} evaluations`
+                      }${usage.remaining != null ? ` · ${usage.remaining} remaining` : ""}`
+                    : "Free: 1 Song Analyzer evaluation · Paid: Unlimited Song Analyzer"}
               </p>
             </>
           )}

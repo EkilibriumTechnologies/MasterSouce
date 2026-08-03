@@ -255,6 +255,10 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
   const outputCodec = resolveCodecForQuality(request.outputQuality);
   const inputProbe = await probeAudioStream(request.inputPath);
   const exportSampleRate = resolveExportSampleRate(inputProbe.sample_rate);
+  console.log(`[preset-mastering] inputSampleRate=${inputProbe.sample_rate}`);
+  console.log(`[preset-mastering] outputSampleRate=${exportSampleRate}`);
+  console.log(`[mastering] outputQuality=${request.outputQuality}`);
+  console.log(`[mastering] outputCodec=${outputCodec}`);
 
   // Final mux only: PCM codec/bit depth + preserved sample rate; DSP chain above is unchanged.
   await runFfmpeg([
@@ -276,6 +280,8 @@ export async function runMasteringPipeline(request: MasteringRequest): Promise<M
   // Export-only verification — does not alter mastering decisions or loudness.
   await validateExportedWav(masteredPath, { codec: outputCodec, sampleRate: exportSampleRate });
   await markJobExportCodecVerified(request.jobId, outputCodec);
+  console.log(`[mastering] verifiedExportCodec=${outputCodec}`);
+  console.log(`[mastering] verifiedExportSampleRate=${exportSampleRate}`);
 
   // 30s preview snippets for fast before/after checks.
   const previewStartSeconds = getPreviewStartSeconds(originalAnalysis.durationSec);

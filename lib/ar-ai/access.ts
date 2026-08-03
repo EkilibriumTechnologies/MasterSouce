@@ -8,15 +8,25 @@ import { validateEmailAddress } from "@/lib/security/validate-email-address";
 import { isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
-import { countHitAnalyzerUsageThisMonth, type HitAnalyzerUsageSnapshot } from "@/lib/ar-ai/usage";
+import { countHitAnalyzerUsageAllTime, type HitAnalyzerUsageSnapshot } from "@/lib/ar-ai/usage";
 
 /** Default launch window end (UTC). One month from initial Hit Analyzer launch. */
 export const HIT_ANALYZER_DEFAULT_LAUNCH_END_DATE = "2026-07-30T23:59:59.999Z";
 
-export const HIT_ANALYZER_TIER_LIMITS: Record<PlanId, number> = {
+/**
+ * Hit Analyzer tier limits.
+ * - free: 1 successful evaluation total (lifetime) per account/email
+ * - paid tiers: unlimited (null)
+ * Admin/owner override emails remain unlimited via resolveHitAnalyzerTierLimit.
+ *
+ * Counting policy: only successful evaluations recorded with counted=true
+ * consume allowance. Failed OpenAI / validation / aborted paths do not count.
+ * Free-tier enforcement queries all-time counted events for the normalized email.
+ */
+export const HIT_ANALYZER_TIER_LIMITS: Record<PlanId, number | null> = {
   free: 1,
-  creator_monthly: 10,
-  pro_studio_monthly: 50
+  creator_monthly: null,
+  pro_studio_monthly: null
 };
 
 export type HitAnalyzerLaunchCountdown = {
@@ -94,7 +104,7 @@ export function buildHitAnalyzerLaunchCountdown(now: Date = new Date()): HitAnal
       unit: "days",
       value: 0,
       label: "0 days",
-      message: "Launch access has ended. Monthly plan limits apply."
+      message: "Launch access has ended. Plan limits apply."
     };
   }
 
@@ -144,19 +154,17 @@ function resolveBillingEmailHint(request: NextRequest, billingEmailHint?: string
 
 function buildQuotaExhaustedMessage(planId: PlanId): string {
   if (planId === "free") {
-    return "You used your free Hit Analyzer report for this month. Upgrade to Creator or Pro to analyze more songs.";
+    return "You used your free Hit Analyzer evaluation. Upgrade to Creator or Pro for unlimited Song Analyzer access.";
   }
-  if (planId === "creator_monthly") {
-    return "You used all 10 Hit Analyzer reports for this month on Creator. Upgrade to Pro Studio for more.";
-  }
-  return "You used all 50 Hit Analyzer reports for this month on Pro Studio.";
+  return "You reached your Hit Analyzer limit. Upgrade your plan to continue.";
 }
 
 export async function resolveHitAnalyzerUsageForEmail(normalizedEmail: string): Promise<HitAnalyzerUsageSnapshot> {
   const planId = await resolvePlanIdForEmail(normalizedEmail);
-  const unlimited = isAdminEntitlementOverrideEmail(normalizedEmail);
+  const adminUnlimited = isAdminEntitlementOverrideEmail(normalizedEmail);
   const tierLimit = resolveHitAnalyzerTierLimit(planId, normalizedEmail);
-  const used = unlimited ? 0 : await countHitAnalyzerUsageThisMonth(normalizedEmail);
+  const unlimited = adminUnlimited || tierLimit == null;
+  const used = unlimited ? 0 : await countHitAnalyzerUsageAllTime(normalizedEmail);
   const limit = unlimited || tierLimit == null ? null : tierLimit;
   const remaining = unlimited || limit == null ? null : Math.max(limit - used, 0);
   return {
@@ -276,9 +284,13 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
   };
 }
 
-export function getHitAnalyzerMonthlyAllowanceLabel(planId: PlanId): string {
+export function getHitAnalyzerAllowanceLabel(planId: PlanId): string {
   const limit = HIT_ANALYZER_TIER_LIMITS[planId];
-  if (planId === "pro_studio_monthly") return `Pro: ${limit}/month`;
-  if (planId === "creator_monthly") return `Creator: ${limit}/month`;
-  return `Free: ${limit}/month`;
+  if (limit == null) return "Unlimited Song Analyzer";
+  return "1 Song Analyzer evaluation";
+}
+
+/** @deprecated Prefer getHitAnalyzerAllowanceLabel */
+export function getHitAnalyzerMonthlyAllowanceLabel(planId: PlanId): string {
+  return getHitAnalyzerAllowanceLabel(planId);
 }

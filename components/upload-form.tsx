@@ -12,10 +12,8 @@ import { EmailCaptureForm } from "@/components/email-capture-form";
 import { MasterReadyCallout } from "@/components/master-ready-callout";
 import { PostMasterReleaseCallout } from "@/components/post-master-release-callout";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
-import type {
-  AudioArtifactProfile,
-  AudioRestorationStrength
-} from "@/lib/audio/audio-restoration-types";
+import type { PublicRestorationChoice } from "@/lib/audio/artifact-recommendation";
+import type { AudioRestorationStrength } from "@/lib/audio/audio-restoration-types";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { buildAdaptivePricingLink } from "@/lib/billing/adaptive-pricing-link";
@@ -217,6 +215,23 @@ type MasterResponse = {
     fileId: string;
   };
   analysis: MasterJobAnalysis;
+  audioRestoration?: {
+    available: true;
+    requested: boolean;
+    recommended: boolean;
+    strength: AudioRestorationStrength;
+    result: {
+      attempted: boolean;
+      applied: boolean;
+      success: boolean;
+      strength: AudioRestorationStrength;
+      fallbackUsed: boolean;
+      fallbackReason?: string;
+      modulesApplied: string[];
+      processingTimeMs?: number;
+    };
+    selectedSource: "original_source" | "restored_source";
+  };
   quota?: {
     mastersUsedThisPeriod: number;
     monthlyMastersLimit: number | null;
@@ -249,9 +264,18 @@ type PreMasterAnalysisResponse = {
     };
     recommendation: string;
   };
+  suggestedMasteringPreset?: {
+    key: keyof typeof GENRE_PRESETS | null;
+    label: string | null;
+  };
   audioRestoration?: {
     available: true;
-    assessment: AudioArtifactProfile;
+    recommendation: {
+      artifactLevel: "Low" | "Moderate" | "High";
+      restorationRecommended: boolean;
+      defaultChoice: PublicRestorationChoice;
+      message: string;
+    };
   };
   debug?: {
     filename?: string;
@@ -265,15 +289,31 @@ type PreMasterAnalysisResponse = {
   source?: SourceUploadRef;
 };
 
-type AudioRestorationUiState = {
-  available: boolean;
-  assessment: AudioArtifactProfile | null;
+type AudioRestorationRecommendation = {
+  artifactLevel: "Low" | "Moderate" | "High";
+  restorationRecommended: boolean;
+  defaultChoice: PublicRestorationChoice;
+  message: string;
 };
 
-function getArtifactLevelLabel(overallSeverity: number): "Low" | "Moderate" | "High" {
-  if (overallSeverity >= 0.7) return "High";
-  if (overallSeverity >= 0.45) return "Moderate";
-  return "Low";
+type AudioRestorationUiState = {
+  available: boolean;
+  recommendation: AudioRestorationRecommendation | null;
+};
+
+function toPublicRestorationChoice(value: string): PublicRestorationChoice {
+  if (value === "balanced" || value === "strong") return value;
+  return "off";
+}
+
+function restorationChoiceToRequest(choice: PublicRestorationChoice): {
+  applyAudioRestoration: boolean;
+  audioRestorationStrength: AudioRestorationStrength;
+} {
+  if (choice === "off") {
+    return { applyAudioRestoration: false, audioRestorationStrength: "balanced" };
+  }
+  return { applyAudioRestoration: true, audioRestorationStrength: choice };
 }
 
 type MasteringAnalyticsContext = ReturnType<typeof buildMasteringAnalyticsContext>;
@@ -381,23 +421,70 @@ function StandardMasterPanel({
   );
 }
 
+type RestorationControlsProps = {
+  audioRestoration: AudioRestorationUiState;
+  audioRestorationChoice: PublicRestorationChoice;
+  controlId: string;
+  onAudioRestorationChoiceChange: (value: PublicRestorationChoice) => void;
+};
+
+function RestorationControls({
+  audioRestoration,
+  audioRestorationChoice,
+  controlId,
+  onAudioRestorationChoiceChange
+}: RestorationControlsProps) {
+  if (!audioRestoration.available || !audioRestoration.recommendation) return null;
+  const recommendation = audioRestoration.recommendation;
+  return (
+    <div style={audioRestorationSectionStyle}>
+      <div>
+        <p style={audioRestorationTitleStyle}>AI Audio Restoration</p>
+        <p style={audioRestorationDescriptionStyle}>
+          Reduces metallic highs, smeared detail, unstable stereo, and other common audio artifacts before mastering.
+        </p>
+        <p style={audioRestorationStatusStyle}>{recommendation.message}</p>
+        {recommendation.restorationRecommended ? (
+          <p style={audioRestorationStatusStyle}>Restoration recommended before mastering.</p>
+        ) : (
+          <p style={audioRestorationStatusStyle}>No significant restoration issues detected.</p>
+        )}
+        <p style={audioRestorationLevelStyle}>Artifact level: {recommendation.artifactLevel}</p>
+        {recommendation.defaultChoice === "balanced" || recommendation.defaultChoice === "strong" ? (
+          <p style={audioRestorationLevelStyle}>
+            {recommendation.defaultChoice === "strong" ? "Strong" : "Balanced"} Restoration is recommended.
+          </p>
+        ) : null}
+      </div>
+      <label htmlFor={controlId} style={referenceTrackFieldLabelStyle}>
+        AI Audio Restoration
+      </label>
+      <select
+        id={controlId}
+        value={audioRestorationChoice}
+        onChange={(event) => onAudioRestorationChoiceChange(toPublicRestorationChoice(event.target.value))}
+        style={audioRestorationSelectStyle}
+      >
+        <option value="off">Off</option>
+        <option value="balanced">Balanced</option>
+        <option value="strong">Strong</option>
+      </select>
+    </div>
+  );
+}
+
 type AdaptivePromptPanelProps = {
   adaptiveIntent: string;
   adaptiveProcessing: boolean;
   adaptiveSectionRef: React.RefObject<HTMLDivElement>;
   advancedControlsOpen: boolean;
   loading: boolean;
-  audioRestoration: AudioRestorationUiState;
-  audioRestorationRequested: boolean;
-  audioRestorationStrength: AudioRestorationStrength;
   referenceArtist: string;
   referenceTrackFile: File | null;
   referenceTrackInputRef: React.RefObject<HTMLInputElement>;
   referenceTrackNotice: string | null;
   onAdaptiveIntentChange: (value: string) => void;
   onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
-  onAudioRestorationRequestedChange: (value: boolean) => void;
-  onAudioRestorationStrengthChange: (value: AudioRestorationStrength) => void;
   onReferenceArtistChange: (value: string) => void;
   onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
   onRunAdaptive: () => void;
@@ -409,17 +496,12 @@ function AdaptivePromptPanel({
   adaptiveSectionRef,
   advancedControlsOpen,
   loading,
-  audioRestoration,
-  audioRestorationRequested,
-  audioRestorationStrength,
   referenceArtist,
   referenceTrackFile,
   referenceTrackInputRef,
   referenceTrackNotice,
   onAdaptiveIntentChange,
   onAdvancedControlsOpenChange,
-  onAudioRestorationRequestedChange,
-  onAudioRestorationStrengthChange,
   onReferenceArtistChange,
   onReferenceTrackSelection,
   onRunAdaptive
@@ -444,46 +526,6 @@ function AdaptivePromptPanel({
       <p style={adaptiveIntentHintStyle}>
         Short phrases work best — think “warmer vocal,” “tighter low end,” or “more club energy.”
       </p>
-      {audioRestoration.available && audioRestoration.assessment ? (
-        <div style={audioRestorationSectionStyle}>
-          <div>
-            <p style={audioRestorationTitleStyle}>AI Audio Restoration</p>
-            <p style={audioRestorationDescriptionStyle}>
-              Reduce metallic highs, smeared detail, weak transients, and unstable stereo information before mastering.
-            </p>
-            <p style={audioRestorationStatusStyle}>
-              {audioRestoration.assessment.restorationRecommended
-                ? "Restoration recommended before mastering."
-                : "No significant restoration issues detected."}
-            </p>
-            <p style={audioRestorationLevelStyle}>
-              Artifact level: {getArtifactLevelLabel(audioRestoration.assessment.overallSeverity)}
-            </p>
-          </div>
-          <label style={audioRestorationCheckboxStyle}>
-            <input
-              type="checkbox"
-              checked={audioRestorationRequested}
-              onChange={(event) => onAudioRestorationRequestedChange(event.target.checked)}
-            />
-            <span>Apply AI Audio Restoration</span>
-          </label>
-          <label htmlFor="audio-restoration-strength" style={referenceTrackFieldLabelStyle}>
-            Strength
-          </label>
-          <select
-            id="audio-restoration-strength"
-            value={audioRestorationStrength}
-            disabled={!audioRestorationRequested}
-            onChange={(event) => onAudioRestorationStrengthChange(event.target.value as AudioRestorationStrength)}
-            style={audioRestorationSelectStyle}
-          >
-            <option value="light">Light</option>
-            <option value="balanced">Balanced</option>
-            <option value="strong">Strong</option>
-          </select>
-        </div>
-      ) : null}
       <div style={advancedControlsSectionStyle}>
         <button
           type="button"
@@ -595,8 +637,8 @@ type AnalysisSummaryPanelProps = {
   isProduction: boolean;
   loading: boolean;
   audioRestoration: AudioRestorationUiState;
-  audioRestorationRequested: boolean;
-  audioRestorationStrength: AudioRestorationStrength;
+  audioRestorationChoice: PublicRestorationChoice;
+  genre: keyof typeof GENRE_PRESETS;
   preMasterAnalysis: PreMasterAnalysisResponse["analysis"];
   preMasterDebug: PreMasterAnalysisResponse["debug"] | null;
   referenceArtist: string;
@@ -604,10 +646,11 @@ type AnalysisSummaryPanelProps = {
   referenceTrackInputRef: React.RefObject<HTMLInputElement>;
   referenceTrackNotice: string | null;
   showAdaptivePlaceholder: boolean;
+  suggestedMasteringPreset: PreMasterAnalysisResponse["suggestedMasteringPreset"] | null;
   onAdaptiveIntentChange: (value: string) => void;
   onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
-  onAudioRestorationRequestedChange: (value: boolean) => void;
-  onAudioRestorationStrengthChange: (value: AudioRestorationStrength) => void;
+  onAudioRestorationChoiceChange: (value: PublicRestorationChoice) => void;
+  onGenreChange: (value: keyof typeof GENRE_PRESETS) => void;
   onOpenAdaptive: () => void;
   onReferenceArtistChange: (value: string) => void;
   onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
@@ -624,8 +667,8 @@ function AnalysisSummaryPanel({
   isProduction,
   loading,
   audioRestoration,
-  audioRestorationRequested,
-  audioRestorationStrength,
+  audioRestorationChoice,
+  genre,
   preMasterAnalysis,
   preMasterDebug,
   referenceArtist,
@@ -633,10 +676,11 @@ function AnalysisSummaryPanel({
   referenceTrackInputRef,
   referenceTrackNotice,
   showAdaptivePlaceholder,
+  suggestedMasteringPreset,
   onAdaptiveIntentChange,
   onAdvancedControlsOpenChange,
-  onAudioRestorationRequestedChange,
-  onAudioRestorationStrengthChange,
+  onAudioRestorationChoiceChange,
+  onGenreChange,
   onOpenAdaptive,
   onReferenceArtistChange,
   onReferenceTrackSelection,
@@ -673,6 +717,34 @@ function AnalysisSummaryPanel({
         </div>
       </div>
       <p style={analysisRecommendationStyle}>{preMasterAnalysis.recommendation}</p>
+      {suggestedMasteringPreset?.label ? (
+        <div style={audioRestorationSectionStyle}>
+          <p style={audioRestorationTitleStyle}>Suggested Mastering Preset</p>
+          <p style={audioRestorationStatusStyle}>{suggestedMasteringPreset.label}</p>
+          <p style={audioRestorationDescriptionStyle}>You can keep this suggestion or choose another preset below.</p>
+          <label htmlFor="suggested-mastering-preset" style={referenceTrackFieldLabelStyle}>
+            Mastering preset
+          </label>
+          <select
+            id="suggested-mastering-preset"
+            value={genre}
+            onChange={(event) => onGenreChange(event.target.value as keyof typeof GENRE_PRESETS)}
+            style={audioRestorationSelectStyle}
+          >
+            {Object.entries(GENRE_PRESETS).map(([key, preset]) => (
+              <option key={key} value={key}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      <RestorationControls
+        audioRestoration={audioRestoration}
+        audioRestorationChoice={audioRestorationChoice}
+        controlId="audio-restoration-choice"
+        onAudioRestorationChoiceChange={onAudioRestorationChoiceChange}
+      />
       {!isProduction && preMasterDebug ? (
         <div style={analysisDebugBoxStyle}>
           <p style={analysisDebugTitleStyle}>Debug (development only)</p>
@@ -701,17 +773,12 @@ function AnalysisSummaryPanel({
           adaptiveSectionRef={adaptiveSectionRef}
           advancedControlsOpen={advancedControlsOpen}
           loading={loading}
-          audioRestoration={audioRestoration}
-          audioRestorationRequested={audioRestorationRequested}
-          audioRestorationStrength={audioRestorationStrength}
           referenceArtist={referenceArtist}
           referenceTrackFile={referenceTrackFile}
           referenceTrackInputRef={referenceTrackInputRef}
           referenceTrackNotice={referenceTrackNotice}
           onAdaptiveIntentChange={onAdaptiveIntentChange}
           onAdvancedControlsOpenChange={onAdvancedControlsOpenChange}
-          onAudioRestorationRequestedChange={onAudioRestorationRequestedChange}
-          onAudioRestorationStrengthChange={onAudioRestorationStrengthChange}
           onReferenceArtistChange={onReferenceArtistChange}
           onReferenceTrackSelection={onReferenceTrackSelection}
           onRunAdaptive={onRunAdaptive}
@@ -790,12 +857,13 @@ export function UploadForm() {
   const [advancedControlsOpen, setAdvancedControlsOpen] = useState(false);
   const [audioRestoration, setAudioRestoration] = useState<AudioRestorationUiState>({
     available: false,
-    assessment: null
+    recommendation: null
   });
-  const [audioRestorationRequested, setAudioRestorationRequested] = useState(false);
-  const [audioRestorationStrength, setAudioRestorationStrength] =
-    useState<AudioRestorationStrength>("balanced");
+  const [audioRestorationChoice, setAudioRestorationChoice] = useState<PublicRestorationChoice>("off");
   const [audioRestorationNotice, setAudioRestorationNotice] = useState<string | null>(null);
+  const [suggestedMasteringPreset, setSuggestedMasteringPreset] = useState<
+    PreMasterAnalysisResponse["suggestedMasteringPreset"] | null
+  >(null);
   const [referenceTrackFile, setReferenceTrackFile] = useState<File | null>(null);
   const [referenceTrackNotice, setReferenceTrackNotice] = useState<string | null>(null);
   const [referenceArtist, setReferenceArtist] = useState("");
@@ -1028,10 +1096,10 @@ export function UploadForm() {
     setShowAdaptivePlaceholder(false);
     setAdaptiveIntent("");
     setAdvancedControlsOpen(false);
-    setAudioRestoration({ available: false, assessment: null });
-    setAudioRestorationRequested(false);
-    setAudioRestorationStrength("balanced");
+    setAudioRestoration({ available: false, recommendation: null });
+    setAudioRestorationChoice("off");
     setAudioRestorationNotice(null);
+    setSuggestedMasteringPreset(null);
     setReferenceTrackFile(null);
     setReferenceTrackNotice(null);
     setReferenceArtist("");
@@ -1108,12 +1176,17 @@ export function UploadForm() {
     setResult(null);
     setWavDownloadUrl(null);
     setMp3DownloadUrl(null);
+    setAudioRestorationNotice(null);
     if (!keepPostAnalysisUi) {
       setShowAdaptivePlaceholder(false);
       setAdaptiveIntent("");
       setConfirmedContinueWithStandard(false);
     }
-    setStatus("Uploading your file…");
+    setStatus(
+      audioRestoration.available && audioRestorationChoice !== "off"
+        ? "Restoring audio before mastering…"
+        : "Uploading your file…"
+    );
     trackMasteringFunnelEvent("mastering_preview_started", {
       source_component: "upload_form",
       mastering_mode: "standard"
@@ -1124,6 +1197,11 @@ export function UploadForm() {
       formData.append("audio", file);
       formData.append("genre", genre);
       formData.append("loudnessMode", loudness);
+      if (audioRestoration.available) {
+        const restorationRequest = restorationChoiceToRequest(audioRestorationChoice);
+        formData.append("applyAudioRestoration", String(restorationRequest.applyAudioRestoration));
+        formData.append("audioRestorationStrength", restorationRequest.audioRestorationStrength);
+      }
       const billingEmail = readStoredBillingEmail();
       if (billingEmail) {
         formData.append("billingEmail", billingEmail.trim().toLowerCase());
@@ -1132,7 +1210,10 @@ export function UploadForm() {
       const response = await fetch("/api/master", {
         method: "POST",
         credentials: "include",
-        headers: masteringBillingHeaders(),
+        headers: {
+          ...masteringBillingHeaders(),
+          ...ownerBypassHeaders(ownerTestingPanel)
+        },
         body: formData
       });
 
@@ -1151,6 +1232,22 @@ export function UploadForm() {
       setLastStandardResult(masterPayload);
     setAdaptiveModeActive(false);
     setAdaptiveAiNotice(null);
+    if (masterPayload.audioRestoration?.requested) {
+      if (
+        masterPayload.audioRestoration.selectedSource === "restored_source" &&
+        masterPayload.audioRestoration.result.success
+      ) {
+        setAudioRestorationNotice("Audio restored. Mastering used the restored source.");
+      } else {
+        setAudioRestorationNotice(
+          "Restoration could not be completed. Mastering continued with the original source."
+        );
+      }
+    } else if (masterPayload.audioRestoration?.available && !masterPayload.audioRestoration.recommended) {
+      setAudioRestorationNotice("No significant restoration issues detected.");
+    } else {
+      setAudioRestorationNotice(null);
+    }
     setStatus("Recommended master is ready — A/B below, then add email only when you export.");
       trackMasteringFunnelEvent("mastering_preview_succeeded", {
         source_component: "upload_form",
@@ -1200,7 +1297,7 @@ export function UploadForm() {
     setAdaptiveAiNotice(null);
     setAudioRestorationNotice(null);
     setStatus(
-      audioRestoration.available && audioRestorationRequested
+      audioRestoration.available && audioRestorationChoice !== "off"
         ? "Restoring audio before mastering…"
         : "Preparing your original mix for adaptive…"
     );
@@ -1231,8 +1328,9 @@ export function UploadForm() {
         if (intent) formData.append("user_intent", intent);
         if (artist) formData.append("referenceArtist", artist);
         if (audioRestoration.available) {
-          formData.append("applyAudioRestoration", String(audioRestorationRequested));
-          formData.append("audioRestorationStrength", audioRestorationStrength);
+          const restorationRequest = restorationChoiceToRequest(audioRestorationChoice);
+          formData.append("applyAudioRestoration", String(restorationRequest.applyAudioRestoration));
+          formData.append("audioRestorationStrength", restorationRequest.audioRestorationStrength);
         }
         if (billingEmail) formData.append("billingEmail", billingEmail.trim().toLowerCase());
         if (referenceTrackFile) formData.append("referenceTrack", referenceTrackFile);
@@ -1261,10 +1359,13 @@ export function UploadForm() {
             loudnessMode: loudness,
             user_intent: adaptiveIntent.trim() || undefined,
             ...(audioRestoration.available
-              ? {
-                  applyAudioRestoration: audioRestorationRequested,
-                  audioRestorationStrength
-                }
+              ? (() => {
+                  const restorationRequest = restorationChoiceToRequest(audioRestorationChoice);
+                  return {
+                    applyAudioRestoration: restorationRequest.applyAudioRestoration,
+                    audioRestorationStrength: restorationRequest.audioRestorationStrength
+                  };
+                })()
               : {}),
             ...(referenceArtist.trim() ? { referenceArtist: referenceArtist.trim() } : {}),
             ...(billingEmail ? { billingEmail: billingEmail.trim().toLowerCase() } : {})
@@ -1314,10 +1415,10 @@ export function UploadForm() {
       }
       if (adaptive.audioRestoration?.requested) {
         if (adaptive.audioRestoration.selectedSource === "restored_source" && adaptive.audioRestoration.result.success) {
-          setAudioRestorationNotice("Audio restored. Adaptive Mastering will use the restored source.");
+          setAudioRestorationNotice("Audio restored. Mastering used the restored source.");
         } else {
           setAudioRestorationNotice(
-            "Restoration could not be completed. Adaptive Mastering will continue with the original source."
+            "Restoration could not be completed. Mastering continued with the original source."
           );
         }
       } else if (adaptive.audioRestoration?.available && !adaptive.audioRestoration.recommended) {
@@ -1363,10 +1464,10 @@ export function UploadForm() {
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
     setSourceUploadRef(null);
-    setAudioRestoration({ available: false, assessment: null });
-    setAudioRestorationRequested(false);
-    setAudioRestorationStrength("balanced");
+    setAudioRestoration({ available: false, recommendation: null });
+    setAudioRestorationChoice("off");
     setAudioRestorationNotice(null);
+    setSuggestedMasteringPreset(null);
     setConfirmedContinueWithStandard(false);
     setStatus("Analyzing your mix (a few seconds)…");
     const requestId = latestAnalysisRequestIdRef.current + 1;
@@ -1413,25 +1514,26 @@ export function UploadForm() {
       setPreMasterAnalysis(parsed.analysis);
       setPreMasterDebug(parsed.debug ?? null);
       setSourceUploadRef(parsed.source ?? null);
-      if (parsed.audioRestoration?.available) {
-        setAudioRestoration({ available: true, assessment: parsed.audioRestoration.assessment });
-        setAudioRestorationRequested(parsed.audioRestoration.assessment.restorationRecommended);
-        setAudioRestorationStrength(
-          parsed.audioRestoration.assessment.restorationRecommended
-            ? parsed.audioRestoration.assessment.recommendedStrength
-            : "balanced"
-        );
+      setSuggestedMasteringPreset(parsed.suggestedMasteringPreset ?? null);
+      if (parsed.suggestedMasteringPreset?.key) {
+        setGenre(parsed.suggestedMasteringPreset.key);
+      }
+      if (parsed.audioRestoration?.available && parsed.audioRestoration.recommendation) {
+        setAudioRestoration({
+          available: true,
+          recommendation: parsed.audioRestoration.recommendation
+        });
+        setAudioRestorationChoice(parsed.audioRestoration.recommendation.defaultChoice);
       } else {
-        setAudioRestoration({ available: false, assessment: null });
-        setAudioRestorationRequested(false);
-        setAudioRestorationStrength("balanced");
+        setAudioRestoration({ available: false, recommendation: null });
+        setAudioRestorationChoice("off");
       }
       setAudioRestorationNotice(null);
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
       setAdaptiveAiNotice(null);
       setLastStandardResult(null);
-      setStatus("Analysis complete — run the recommended master or open adaptive customization.");
+      setStatus("Analysis complete — review suggestions, then master with a preset or Adaptive.");
     } catch (err) {
       if (requestId !== latestAnalysisRequestIdRef.current) {
         if (process.env.NODE_ENV !== "production") {
@@ -1545,10 +1647,10 @@ export function UploadForm() {
                   setPreMasterDebug(null);
                   setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
-                  setAudioRestoration({ available: false, assessment: null });
-                  setAudioRestorationRequested(false);
-                  setAudioRestorationStrength("balanced");
+                  setAudioRestoration({ available: false, recommendation: null });
+                  setAudioRestorationChoice("off");
                   setAudioRestorationNotice(null);
+                  setSuggestedMasteringPreset(null);
                   setConfirmedContinueWithStandard(false);
                 }}
                 style={genre === key ? genreChipActiveStyle : genreChipStyle}
@@ -1573,10 +1675,10 @@ export function UploadForm() {
                   setPreMasterDebug(null);
                   setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
-                  setAudioRestoration({ available: false, assessment: null });
-                  setAudioRestorationRequested(false);
-                  setAudioRestorationStrength("balanced");
+                  setAudioRestoration({ available: false, recommendation: null });
+                  setAudioRestorationChoice("off");
                   setAudioRestorationNotice(null);
+                  setSuggestedMasteringPreset(null);
                   setConfirmedContinueWithStandard(false);
                 }}
                 style={loudness === key ? loudnessCardActiveStyle : loudnessCardStyle}
@@ -1605,8 +1707,8 @@ export function UploadForm() {
           isProduction={isProduction}
           loading={loading}
           audioRestoration={audioRestoration}
-          audioRestorationRequested={audioRestorationRequested}
-          audioRestorationStrength={audioRestorationStrength}
+          audioRestorationChoice={audioRestorationChoice}
+          genre={genre}
           preMasterAnalysis={preMasterAnalysis}
           preMasterDebug={preMasterDebug}
           referenceArtist={referenceArtist}
@@ -1614,10 +1716,11 @@ export function UploadForm() {
           referenceTrackInputRef={referenceTrackInputRef}
           referenceTrackNotice={referenceTrackNotice}
           showAdaptivePlaceholder={showAdaptivePlaceholder}
+          suggestedMasteringPreset={suggestedMasteringPreset}
           onAdaptiveIntentChange={setAdaptiveIntent}
           onAdvancedControlsOpenChange={setAdvancedControlsOpen}
-          onAudioRestorationRequestedChange={setAudioRestorationRequested}
-          onAudioRestorationStrengthChange={setAudioRestorationStrength}
+          onAudioRestorationChoiceChange={setAudioRestorationChoice}
+          onGenreChange={setGenre}
           onOpenAdaptive={() => {
             debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
             setShowAdaptivePlaceholder(true);

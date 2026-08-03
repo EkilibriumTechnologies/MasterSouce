@@ -2,6 +2,10 @@ import { stat } from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runMasteringPipeline } from "@/lib/audio/mastering-pipeline";
+import {
+  resolveMasteringSourceWithRestoration,
+  sanitizeRestorationResultForResponse
+} from "@/lib/audio/mastering-source-restoration";
 import { hasAnyMetric, toPublicMetrics } from "@/lib/audio/public-analysis";
 import {
   FfmpegBinaryMissingError,
@@ -10,10 +14,15 @@ import {
 } from "@/lib/audio/ffmpeg-bin";
 import { API_ERROR_CODES, apiErrorResponse, logApiError, sanitizeLogDetails } from "@/lib/api/error-responses";
 import { GENRE_PRESETS, LOUDNESS_MODES } from "@/lib/genre-presets";
+import {
+  isAiAudioRestorationAuthorized,
+  resolveAiAudioRestorationFeatureConfig
+} from "@/lib/features/ai-audio-restoration";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { cleanupExpiredTempFiles, registerExistingFile, saveTempFile } from "@/lib/storage/temp-files";
 import { getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import {
   logWavExportEntitlementResolution,
   resolveEntitlementBillingContext,
@@ -36,8 +45,19 @@ const ACCEPTED_EXT = new Set(["wav", "mp3"]);
 
 const InputSchema = z.object({
   genre: z.enum(["pop", "hiphop", "edm", "rock", "reggaeton", "rnb", "lofi"]),
-  loudnessMode: z.enum(["clean", "balanced", "loud"])
+  loudnessMode: z.enum(["clean", "balanced", "loud"]),
+  applyAudioRestoration: z.boolean().optional(),
+  audioRestorationStrength: z.enum(["light", "balanced", "strong"]).optional()
 });
+
+function parseOptionalBooleanField(value: FormDataEntryValue | null): boolean | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (["true", "1", "yes", "on"].includes(normalized)) return true;
+  if (["false", "0", "no", "off"].includes(normalized)) return false;
+  return undefined;
+}
 
 function parseFfmpegExitCodeFromMessage(message: string): number | undefined {
   const m = message.match(/ffmpeg failed \((-?\d+)\)/);
@@ -124,6 +144,8 @@ export async function POST(request: NextRequest) {
     const file = formData.get("audio");
     const genre = formData.get("genre");
     const loudnessMode = formData.get("loudnessMode");
+    const applyAudioRestoration = parseOptionalBooleanField(formData.get("applyAudioRestoration"));
+    const audioRestorationStrength = formData.get("audioRestorationStrength");
 
     console.log("[MASTER_DEBUG] form:extracted", {
       hasFile: file instanceof File,
@@ -136,7 +158,13 @@ export async function POST(request: NextRequest) {
       hasEmail: Boolean(user.email)
     });
 
-    const parsed = InputSchema.safeParse({ genre, loudnessMode });
+    const parsed = InputSchema.safeParse({
+      genre,
+      loudnessMode,
+      applyAudioRestoration,
+      audioRestorationStrength:
+        typeof audioRestorationStrength === "string" ? audioRestorationStrength : undefined
+    });
     if (!parsed.success) {
       console.log("[MASTER_DEBUG] return:invalid_form");
       const res = NextResponse.json({ error: "Invalid genre or loudness mode." }, { status: 400 });
@@ -271,10 +299,28 @@ export async function POST(request: NextRequest) {
       executableResolved: Boolean(execPath)
     });
 
+    const restorationFeatureConfig = resolveAiAudioRestorationFeatureConfig();
+    const restorationOwnerAuthorized = isMasterAdminBypassGranted(request);
+    const restorationAuthorized = isAiAudioRestorationAuthorized({
+      config: restorationFeatureConfig,
+      ownerAuthorized: restorationOwnerAuthorized
+    });
+    const restorationRequested = parsed.data.applyAudioRestoration === true;
+    const restorationResolution = await resolveMasteringSourceWithRestoration({
+      originalPath: uploadRecord.filePath,
+      jobId,
+      featureConfig: restorationFeatureConfig,
+      restorationAuthorized,
+      ownerAuthorized: restorationOwnerAuthorized,
+      restorationRequested,
+      requestedStrength: parsed.data.audioRestorationStrength,
+      workflowLogTag: "preset-mastering"
+    });
+
     let result: Awaited<ReturnType<typeof runMasteringPipeline>>;
     try {
       result = await runMasteringPipeline({
-        inputPath: uploadRecord.filePath,
+        inputPath: restorationResolution.selectedPath,
         genre: parsed.data.genre,
         loudnessMode: parsed.data.loudnessMode,
         outputFormat: "wav",
@@ -420,6 +466,29 @@ export async function POST(request: NextRequest) {
         original: originalMetrics,
         ...(hasMasteredMetrics && masteredMetrics ? { mastered: masteredMetrics } : {})
       },
+      ...(restorationAuthorized && restorationResolution.profile
+        ? {
+            audioRestoration: {
+              available: true,
+              requested: restorationRequested,
+              recommended: restorationResolution.profile.restorationRecommended,
+              strength: restorationResolution.strength,
+              result: sanitizeRestorationResultForResponse(
+                restorationResolution.result ?? {
+                  attempted: false,
+                  applied: false,
+                  success: false,
+                  strength: restorationResolution.strength,
+                  inputPath: uploadRecord.filePath,
+                  fallbackUsed: true,
+                  fallbackReason: restorationResolution.fallbackReason ?? "not_attempted",
+                  modulesApplied: []
+                }
+              ),
+              selectedSource: restorationResolution.selectedSource
+            }
+          }
+        : {}),
       ...(quotaSnapshot ? { quota: quotaSnapshot } : {}),
       subscription: {
         customerPortalEligible: nextEntitlements.customerPortalEligible,

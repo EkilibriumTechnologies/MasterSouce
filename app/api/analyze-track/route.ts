@@ -3,7 +3,9 @@ import { z } from "zod";
 import { API_ERROR_CODES, apiErrorResponse, logApiError } from "@/lib/api/error-responses";
 import { assessAudioArtifacts } from "@/lib/audio/audio-artifact-assessment";
 import { analyzeTrackWithV2 } from "@/lib/audio/analyze-track-combined";
+import { buildAudioRestorationPublicRecommendation } from "@/lib/audio/artifact-recommendation";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
+import { suggestMasteringPreset } from "@/lib/audio/suggested-mastering-preset";
 import {
   isAiAudioRestorationAuthorized,
   resolveAiAudioRestorationFeatureConfig
@@ -92,6 +94,7 @@ export async function POST(request: NextRequest) {
       }
     });
     const readiness = evaluateTrackReadiness(analysis);
+    const suggestedMasteringPreset = suggestMasteringPreset(analysis);
     const restorationFeatureConfig = resolveAiAudioRestorationFeatureConfig();
     const restorationOwnerAuthorized = isMasterAdminBypassGranted(request);
     const restorationAuthorized = isAiAudioRestorationAuthorized({
@@ -102,14 +105,15 @@ export async function POST(request: NextRequest) {
     let audioRestoration:
       | {
           available: true;
-          assessment: Awaited<ReturnType<typeof assessAudioArtifacts>>;
+          recommendation: ReturnType<typeof buildAudioRestorationPublicRecommendation>;
         }
       | undefined;
     if (restorationAuthorized) {
       try {
+        const assessment = await assessAudioArtifacts(uploadRecord.filePath);
         audioRestoration = {
           available: true,
-          assessment: await assessAudioArtifacts(uploadRecord.filePath)
+          recommendation: buildAudioRestorationPublicRecommendation(assessment)
         };
       } catch (assessmentError) {
         if (process.env.NODE_ENV !== "production") {
@@ -147,6 +151,7 @@ export async function POST(request: NextRequest) {
         peakSafety: readiness.peakSafety,
         dynamicControl: readiness.dynamicControl,
         recommendation: readiness.recommendation,
+        suggestedMasteringPreset,
         ...(debug ?? {})
       });
     }
@@ -156,6 +161,10 @@ export async function POST(request: NextRequest) {
       source: {
         fileId: uploadRecord.id,
         jobId: uploadRecord.jobId
+      },
+      suggestedMasteringPreset: {
+        key: suggestedMasteringPreset.key,
+        label: suggestedMasteringPreset.label
       },
       ...(audioRestoration ? { audioRestoration } : {}),
       ...(analysisV2 ? { analysisV2 } : {}),

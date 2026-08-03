@@ -164,7 +164,13 @@ function runStaticInvariants() {
   assert.ok(restoration.includes('"pcm_s24le"'), "restoration intermediate remains pcm_s24le");
 
   const route = read("app/api/master-ai/route.ts");
-  assert.ok(route.includes('selectedSource=" + selectedSource'), "selectedSource logging intact");
+  const restorationHelper = read("lib/audio/mastering-source-restoration.ts");
+  assert.ok(
+    restorationHelper.includes("selectedSource=${selectedSource}") ||
+      restorationHelper.includes("[adaptive-mastering] selectedSource="),
+    "selectedSource logging intact"
+  );
+  assert.ok(route.includes("resolveMasteringSourceWithRestoration"), "adaptive uses shared restoration helper");
   assert.ok(route.includes("inputPath: adaptiveSource"), "adaptive source selection intact");
 
   console.log("static invariants: ok");
