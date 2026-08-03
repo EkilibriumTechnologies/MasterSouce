@@ -115,8 +115,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
         <h1 style={h1Style}>Your track sounds finished today — not almost ready.</h1>
         <p style={subStyle}>
-          AI mastering your way — preset, prompt-guided, or reference-guided. Upload a song you love or name an artist to
-          steer tone and loudness. Free MP3 previews; premium plans unlock HD WAV exports. No plugins. No studio time.
+          MasterSauce analyzes your audio before mastering, recommends a mastering profile, and offers optional AI Audio
+          Restoration when it may help — then preset, prompt-guided, or reference-guided mastering. Free MP3 previews;
+          premium plans unlock HD WAV exports. No plugins. No studio time.
         </p>
         <div style={platformRowStyle} aria-label="Streaming platform optimization">
           <span style={platformLabelStyle}>Optimized for:</span>
@@ -180,8 +181,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           What is MasterSauce?
         </h2>
         <p style={proseCenterStyle}>
-          MasterSauce gives you AI mastering with preset, prompt-guided, and reference-guided options — so you can shape
-          a release-ready master your way.
+          MasterSauce analyzes your audio before mastering, automatically identifies audio issues that may benefit from
+          restoration, and recommends a mastering profile based on your track — with optional AI Audio Restoration before
+          preset, prompt-guided, or reference-guided mastering.
         </p>
         <p style={proseCenterStyle}>Preset Mastering</p>
         <p style={proseCenterStyle}>
