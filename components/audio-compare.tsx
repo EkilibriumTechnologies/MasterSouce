@@ -1,14 +1,23 @@
 "use client";
 
-import { ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { CompareSpectrum } from "@/components/audio-compare-spectrum";
+import { MasterComparisonControls } from "@/components/master-comparison-controls";
 import { trackAbEvent, type AbVersion } from "@/lib/analytics/ab-comparison";
 import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
+import {
+  canShowMasterComparison,
+  computeLoudnessMatchGains,
+  LOUDNESS_MATCH_DEFAULT_ENABLED,
+  type ComparisonSource
+} from "@/lib/master-comparison";
 
 type AudioCompareProps = {
   originalPreviewUrl: string;
   masteredPreviewUrl: string;
+  originalLufs?: number | null;
+  masteredLufs?: number | null;
   originalLabel?: string;
   originalSubLabel?: string;
   masteredLabel?: string;
@@ -46,6 +55,8 @@ function dynamicHintStyle(active: boolean): CSSProperties {
 export function AudioCompare({
   originalPreviewUrl,
   masteredPreviewUrl,
+  originalLufs = null,
+  masteredLufs = null,
   originalLabel = "Original",
   originalSubLabel = "Your uploaded track",
   masteredLabel = "Mastered",
@@ -58,14 +69,30 @@ export function AudioCompare({
   const audioContextRef = useRef<AudioContext | null>(null);
   const originalAnalyserRef = useRef<AnalyserNode | null>(null);
   const masteredAnalyserRef = useRef<AnalyserNode | null>(null);
+  const originalGainRef = useRef<GainNode | null>(null);
+  const masteredGainRef = useRef<GainNode | null>(null);
   /** Tracks which preview URL pair the current MediaElementSource graph belongs to (Strict Mode safe). */
   const wiredUrlPairRef = useRef<string | null>(null);
-  const [activeSource, setActiveSource] = useState<"original" | "mastered">("original");
-  const activeSourceRef = useRef<"original" | "mastered">("original");
+  const [activeSource, setActiveSource] = useState<ComparisonSource>("original");
+  const activeSourceRef = useRef<ComparisonSource>("original");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [originalDuration, setOriginalDuration] = useState(0);
   const [masteredDuration, setMasteredDuration] = useState(0);
+  const [loudnessMatchEnabled, setLoudnessMatchEnabled] = useState(LOUDNESS_MATCH_DEFAULT_ENABLED);
+  const showCompare = canShowMasterComparison({
+    originalSource: originalPreviewUrl,
+    masteredSource: masteredPreviewUrl
+  });
+  const monitoringGains = useMemo(
+    () =>
+      computeLoudnessMatchGains({
+        originalLufs,
+        masteredLufs,
+        enabled: loudnessMatchEnabled
+      }),
+    [originalLufs, masteredLufs, loudnessMatchEnabled]
+  );
   const progressMilestonesRef = useRef<Record<AbVersion, Set<number>>>({
     original: new Set<number>(),
     mastered: new Set<number>()
@@ -80,6 +107,7 @@ export function AudioCompare({
     setCurrentTime(0);
     setOriginalDuration(0);
     setMasteredDuration(0);
+    setLoudnessMatchEnabled(LOUDNESS_MATCH_DEFAULT_ENABLED);
     progressMilestonesRef.current.original.clear();
     progressMilestonesRef.current.mastered.clear();
     trackMasteringFunnelEvent("mastering_ab_viewed", {
@@ -106,6 +134,8 @@ export function AudioCompare({
       wiredUrlPairRef.current = null;
       originalAnalyserRef.current = null;
       masteredAnalyserRef.current = null;
+      originalGainRef.current = null;
+      masteredGainRef.current = null;
       const ctx = audioContextRef.current;
       audioContextRef.current = null;
       if (ctx && ctx.state !== "closed") void ctx.close();
@@ -133,6 +163,8 @@ export function AudioCompare({
     audioContextRef.current = null;
     originalAnalyserRef.current = null;
     masteredAnalyserRef.current = null;
+    originalGainRef.current = null;
+    masteredGainRef.current = null;
     wiredUrlPairRef.current = null;
 
     const AC =
@@ -144,26 +176,58 @@ export function AudioCompare({
     try {
       const origSrc = ctx.createMediaElementSource(originalEl);
       const mastSrc = ctx.createMediaElementSource(masteredEl);
+      const origGain = ctx.createGain();
+      const mastGain = ctx.createGain();
       const origAn = ctx.createAnalyser();
       const mastAn = ctx.createAnalyser();
       origAn.fftSize = 512;
       mastAn.fftSize = 512;
       origAn.smoothingTimeConstant = 0.52;
       mastAn.smoothingTimeConstant = 0.36;
-      origSrc.connect(origAn);
+      origSrc.connect(origGain);
+      origGain.connect(origAn);
       origAn.connect(ctx.destination);
-      mastSrc.connect(mastAn);
+      mastSrc.connect(mastGain);
+      mastGain.connect(mastAn);
       mastAn.connect(ctx.destination);
       audioContextRef.current = ctx;
       originalAnalyserRef.current = origAn;
       masteredAnalyserRef.current = mastAn;
+      originalGainRef.current = origGain;
+      masteredGainRef.current = mastGain;
       wiredUrlPairRef.current = pair;
+      originalEl.volume = 1;
+      masteredEl.volume = 1;
+      applyMonitoringGains();
     } catch {
       wiredUrlPairRef.current = null;
       originalAnalyserRef.current = null;
       masteredAnalyserRef.current = null;
+      originalGainRef.current = null;
+      masteredGainRef.current = null;
       audioContextRef.current = null;
       void ctx.close();
+    }
+  }
+
+  function applyMonitoringGains() {
+    const originalEl = originalRef.current;
+    const masteredEl = masteredRef.current;
+    const origGain = originalGainRef.current;
+    const mastGain = masteredGainRef.current;
+
+    if (origGain) {
+      origGain.gain.value = monitoringGains.originalLinear;
+      if (originalEl) originalEl.volume = 1;
+    } else if (originalEl) {
+      originalEl.volume = monitoringGains.originalLinear;
+    }
+
+    if (mastGain) {
+      mastGain.gain.value = monitoringGains.masteredLinear;
+      if (masteredEl) masteredEl.volume = 1;
+    } else if (masteredEl) {
+      masteredEl.volume = monitoringGains.masteredLinear;
     }
   }
 
@@ -175,12 +239,20 @@ export function AudioCompare({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
-  function getAudio(target: "original" | "mastered") {
+  function getAudio(target: ComparisonSource) {
     return target === "original" ? originalRef.current : masteredRef.current;
   }
 
-  function getDuration(target: "original" | "mastered") {
+  function getDuration(target: ComparisonSource) {
     return target === "original" ? originalDuration : masteredDuration;
+  }
+
+  function readLivePosition(): number {
+    const activeAudio = getAudio(activeSourceRef.current);
+    if (activeAudio && Number.isFinite(activeAudio.currentTime)) {
+      return Math.max(0, activeAudio.currentTime);
+    }
+    return currentTime;
   }
 
   const sharedDuration = Math.max(
@@ -198,7 +270,11 @@ export function AudioCompare({
     if (mastered) mastered.currentTime = Math.min(timeInSec, masteredDuration || timeInSec);
   }
 
-  function seekByRatio(ratio: number, target: "original" | "mastered") {
+  useEffect(() => {
+    applyMonitoringGains();
+  }, [monitoringGains]);
+
+  function seekByRatio(ratio: number, target: ComparisonSource) {
     const targetDuration = getDuration(target);
     if (!targetDuration) return;
     const nextTime = ratio * targetDuration;
@@ -208,7 +284,7 @@ export function AudioCompare({
     activeSourceRef.current = target;
   }
 
-  function seekWithSlider(event: ChangeEvent<HTMLInputElement>, target: "original" | "mastered") {
+  function seekWithSlider(event: ChangeEvent<HTMLInputElement>, target: ComparisonSource) {
     const ratio = Number(event.currentTarget.value) / 100;
     seekByRatio(Math.max(0, Math.min(1, ratio)), target);
   }
@@ -257,13 +333,16 @@ export function AudioCompare({
     });
   }
 
-  async function playSource(target: "original" | "mastered") {
+  async function playSource(target: ComparisonSource) {
     const previousSource = activeSourceRef.current;
     const nextAudio = getAudio(target);
     const otherAudio = getAudio(target === "original" ? "mastered" : "original");
     if (!nextAudio) return;
 
+    const position = readLivePosition();
+    setCurrentTime(position);
     ensureWebAudioGraph();
+    applyMonitoringGains();
 
     otherAudio?.pause();
     setActiveSource(target);
@@ -278,7 +357,7 @@ export function AudioCompare({
       }
     }
 
-    nextAudio.currentTime = Math.min(currentTime, getDuration(target) || currentTime);
+    nextAudio.currentTime = Math.min(position, getDuration(target) || position);
 
     try {
       await nextAudio.play();
@@ -298,8 +377,43 @@ export function AudioCompare({
     setIsPlaying(false);
   }
 
+  /**
+   * Switch Original ↔ Master without restarting from 0.
+   * Preserves seek position and playing/paused. A brief gap can occur while the
+   * other HTMLAudioElement starts; sample-accurate crossfades are not reliable
+   * across Safari / iOS Safari with media-element sources.
+   */
+  function selectSource(target: ComparisonSource) {
+    if (target === activeSourceRef.current && !isPlaying) {
+      setActiveSource(target);
+      return;
+    }
+
+    const position = readLivePosition();
+    setCurrentTime(position);
+    syncTimeToBoth(position);
+
+    if (isPlaying) {
+      void playSource(target);
+      return;
+    }
+
+    const nextAudio = getAudio(target);
+    const otherAudio = getAudio(target === "original" ? "mastered" : "original");
+    otherAudio?.pause();
+    setActiveSource(target);
+    activeSourceRef.current = target;
+    if (nextAudio) {
+      nextAudio.currentTime = Math.min(position, getDuration(target) || position);
+    }
+  }
+
   const hintOriginal = "Your mix as uploaded";
   const hintMastered = "More clarity, level, and punch";
+
+  if (!showCompare) {
+    return afterCompare ? <section style={panelStyle}>{afterCompare}</section> : null;
+  }
 
   return (
     <section style={activeSource === "mastered" ? { ...panelStyle, ...panelMasteredGlowStyle } : panelStyle}>
@@ -308,6 +422,18 @@ export function AudioCompare({
         Flip between your upload and the master — unlimited playback while you decide. Nothing counts toward your plan until
         you download the final file.
       </p>
+      <MasterComparisonControls
+        activeSource={activeSource}
+        loudnessMatchEnabled={loudnessMatchEnabled}
+        loudnessMatchAvailable={monitoringGains.compensationAvailable}
+        onSelectSource={(source) => {
+          if (source !== activeSource) {
+            trackAbEvent("ab_toggle_clicked", baseAnalyticsParams(source, currentTime, sharedDuration));
+          }
+          selectSource(source);
+        }}
+        onLoudnessMatchChange={setLoudnessMatchEnabled}
+      />
       <div style={comparePlayerRegionStyle}>
         <div style={gridStyle}>
         <div
@@ -336,6 +462,7 @@ export function AudioCompare({
             key={originalPreviewUrl}
             ref={originalRef}
             preload="auto"
+            playsInline
             style={hiddenAudioStyle}
             src={originalPreviewUrl}
             onLoadedMetadata={(event) => setOriginalDuration(event.currentTarget.duration || 0)}
@@ -455,6 +582,7 @@ export function AudioCompare({
             key={masteredPreviewUrl}
             ref={masteredRef}
             preload="auto"
+            playsInline
             style={hiddenAudioStyle}
             src={masteredPreviewUrl}
             onLoadedMetadata={(event) => setMasteredDuration(event.currentTarget.duration || 0)}

@@ -17,6 +17,7 @@ import type { AudioRestorationStrength } from "@/lib/audio/audio-restoration-typ
 import type { MasterReadinessResult } from "@/lib/audio/master-readiness";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
+import { mergeAdaptiveAnalysisForComparison, resolveComparisonLufs } from "@/lib/master-comparison";
 import { buildAdaptivePricingLink } from "@/lib/billing/adaptive-pricing-link";
 import {
   MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY,
@@ -1146,6 +1147,7 @@ export function UploadForm() {
       }),
     [adaptiveModeActive, genre, loudness, selectedGenrePreset, targetLufs]
   );
+  const comparisonLufs = resolveComparisonLufs(result?.analysis);
 
   const DOWNLOAD_LIMIT_MESSAGE = "No masters remaining. Upgrade or get 5 more for $4.";
 
@@ -1472,14 +1474,7 @@ export function UploadForm() {
           mastered: adaptive.previews.adaptive
         },
         download: adaptive.download,
-        analysis:
-          adaptive.analysis.adaptive ?? {
-            durationSec: adaptive.analysis.standard.durationSec,
-            integratedLufs: adaptive.analysis.standard.integratedLufs,
-            peakDb: adaptive.analysis.standard.peakDb,
-            crestDb: adaptive.analysis.standard.crestDb,
-            notes: adaptive.analysis.standard.notes
-          }
+        analysis: mergeAdaptiveAnalysisForComparison(adaptive.analysis)
       };
       setResult(mergedResult);
       setWavDownloadUrl(null);
@@ -1940,9 +1935,11 @@ export function UploadForm() {
           <AudioCompare
             originalPreviewUrl={result.previews.original}
             masteredPreviewUrl={result.previews.mastered}
+            originalLufs={comparisonLufs.originalLufs}
+            masteredLufs={comparisonLufs.masteredLufs}
             originalLabel="Original"
             originalSubLabel="Your uploaded track"
-            masteredLabel={adaptiveModeActive ? "Adaptive master" : "Mastered"}
+            masteredLabel={adaptiveModeActive ? "Master" : "Mastered"}
             masteredSubLabel={
               adaptiveModeActive ? "Shaped from your written notes" : "Balanced for streaming playback"
             }
