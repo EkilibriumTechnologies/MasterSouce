@@ -4,6 +4,7 @@ import { API_ERROR_CODES, apiErrorResponse, logApiError } from "@/lib/api/error-
 import { assessAudioArtifacts } from "@/lib/audio/audio-artifact-assessment";
 import { analyzeTrackWithV2 } from "@/lib/audio/analyze-track-combined";
 import { buildAudioRestorationPublicRecommendation } from "@/lib/audio/artifact-recommendation";
+import { evaluateMasterReadiness } from "@/lib/audio/master-readiness";
 import { evaluateTrackReadiness } from "@/lib/audio/readiness";
 import { suggestMasteringPreset } from "@/lib/audio/suggested-mastering-preset";
 import {
@@ -95,6 +96,18 @@ export async function POST(request: NextRequest) {
     });
     const readiness = evaluateTrackReadiness(analysis);
     const suggestedMasteringPreset = suggestMasteringPreset(analysis);
+    // Fail-open: mix readiness is advisory and must never fail track analysis.
+    let masterReadiness = evaluateMasterReadiness(null);
+    try {
+      masterReadiness = evaluateMasterReadiness(analysis, analysisV2);
+    } catch (readinessError) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          "[analyze-track] masterReadiness unavailable:",
+          readinessError instanceof Error ? readinessError.message : readinessError
+        );
+      }
+    }
     const restorationFeatureConfig = resolveAiAudioRestorationFeatureConfig();
     const restorationOwnerAuthorized = isMasterAdminBypassGranted(request);
     const restorationAuthorized = isAiAudioRestorationAuthorized({
@@ -152,12 +165,18 @@ export async function POST(request: NextRequest) {
         dynamicControl: readiness.dynamicControl,
         recommendation: readiness.recommendation,
         suggestedMasteringPreset,
+        masterReadiness: {
+          status: masterReadiness.status,
+          score: masterReadiness.score,
+          findingIds: masterReadiness.findings.map((finding) => finding.id)
+        },
         ...(debug ?? {})
       });
     }
 
     return NextResponse.json({
       analysis: readiness,
+      masterReadiness,
       source: {
         fileId: uploadRecord.id,
         jobId: uploadRecord.jobId

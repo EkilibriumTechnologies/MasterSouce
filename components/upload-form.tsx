@@ -14,6 +14,7 @@ import { PostMasterReleaseCallout } from "@/components/post-master-release-callo
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
 import type { PublicRestorationChoice } from "@/lib/audio/artifact-recommendation";
 import type { AudioRestorationStrength } from "@/lib/audio/audio-restoration-types";
+import type { MasterReadinessResult } from "@/lib/audio/master-readiness";
 import { GENRE_PRESETS, LOUDNESS_MODES, LoudnessMode } from "@/lib/genre-presets";
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import { buildAdaptivePricingLink } from "@/lib/billing/adaptive-pricing-link";
@@ -264,6 +265,7 @@ type PreMasterAnalysisResponse = {
     };
     recommendation: string;
   };
+  masterReadiness?: MasterReadinessResult;
   suggestedMasteringPreset?: {
     key: keyof typeof GENRE_PRESETS | null;
     label: string | null;
@@ -628,6 +630,66 @@ function AdaptivePromptPanel({
   );
 }
 
+type MasterReadinessPanelProps = {
+  masterReadiness: MasterReadinessResult;
+  onMasterAnyway: () => void;
+  showAnalyzeAndImprove: boolean;
+};
+
+function MasterReadinessPanel({
+  masterReadiness,
+  onMasterAnyway,
+  showAnalyzeAndImprove
+}: MasterReadinessPanelProps) {
+  const statusStyle =
+    masterReadiness.status === "Ready to Master"
+      ? masterReadinessStatusReadyStyle
+      : masterReadiness.status === "Minor Issues Detected"
+        ? masterReadinessStatusMinorStyle
+        : masterReadinessStatusFixStyle;
+
+  return (
+    <div style={masterReadinessCardStyle} aria-labelledby="master-readiness-heading">
+      <h3 id="master-readiness-heading" style={analysisHeadingStyle}>
+        Master Readiness
+      </h3>
+      <p style={analysisMetricHintStyle}>
+        Heuristic for mastering readiness — not a mix or song quality rating.
+      </p>
+      <p style={statusStyle}>{masterReadiness.status}</p>
+      {masterReadiness.score !== null ? (
+        <p style={masterReadinessScoreStyle}>Readiness {masterReadiness.score} / 100</p>
+      ) : null}
+      <p style={analysisRecommendationStyle}>{masterReadiness.explanation}</p>
+      {masterReadiness.findings.length ? (
+        <div style={masterReadinessFindingsStyle}>
+          {masterReadiness.findings.map((finding) => (
+            <div key={finding.id} style={analysisMetricItemStyle}>
+              <p style={analysisMetricLabelStyle}>{finding.title}</p>
+              <p style={analysisMetricHintStyle}>{finding.explanation}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div style={analysisActionRowStyle}>
+        <button
+          type="button"
+          style={buttonStyle}
+          aria-label="Master anyway — continue to Adaptive Mastering"
+          onClick={onMasterAnyway}
+        >
+          Master Anyway
+        </button>
+        {showAnalyzeAndImprove ? (
+          <a href="/ar-ai" style={secondaryActionStyle} aria-label="Analyze and improve mix in Hit Analyzer">
+            Analyze &amp; Improve Mix
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 type AnalysisSummaryPanelProps = {
   adaptiveIntent: string;
   adaptiveProcessing: boolean;
@@ -636,6 +698,8 @@ type AnalysisSummaryPanelProps = {
   confirmedContinueWithStandard: boolean;
   isProduction: boolean;
   loading: boolean;
+  masterReadiness: MasterReadinessResult | null;
+  masterReadinessAcknowledged: boolean;
   audioRestoration: AudioRestorationUiState;
   audioRestorationChoice: PublicRestorationChoice;
   genre: keyof typeof GENRE_PRESETS;
@@ -651,6 +715,7 @@ type AnalysisSummaryPanelProps = {
   onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
   onAudioRestorationChoiceChange: (value: PublicRestorationChoice) => void;
   onGenreChange: (value: keyof typeof GENRE_PRESETS) => void;
+  onMasterAnyway: () => void;
   onOpenAdaptive: () => void;
   onReferenceArtistChange: (value: string) => void;
   onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
@@ -666,6 +731,8 @@ function AnalysisSummaryPanel({
   confirmedContinueWithStandard,
   isProduction,
   loading,
+  masterReadiness,
+  masterReadinessAcknowledged,
   audioRestoration,
   audioRestorationChoice,
   genre,
@@ -681,6 +748,7 @@ function AnalysisSummaryPanel({
   onAdvancedControlsOpenChange,
   onAudioRestorationChoiceChange,
   onGenreChange,
+  onMasterAnyway,
   onOpenAdaptive,
   onReferenceArtistChange,
   onReferenceTrackSelection,
@@ -766,7 +834,14 @@ function AnalysisSummaryPanel({
           Optional reference track lives in Prompt Master — upload a song you love as tonal guidance.
         </p>
       ) : null}
-      {showAdaptivePlaceholder ? (
+      {showAdaptivePlaceholder && masterReadiness && !masterReadinessAcknowledged ? (
+        <MasterReadinessPanel
+          masterReadiness={masterReadiness}
+          onMasterAnyway={onMasterAnyway}
+          showAnalyzeAndImprove={masterReadiness.recommendedAction === "analyze_and_improve_mix"}
+        />
+      ) : null}
+      {showAdaptivePlaceholder && (!masterReadiness || masterReadinessAcknowledged) ? (
         <AdaptivePromptPanel
           adaptiveIntent={adaptiveIntent}
           adaptiveProcessing={adaptiveProcessing}
@@ -851,6 +926,8 @@ export function UploadForm() {
   const [status, setStatus] = useState("Choose a file to begin.");
   const [preMasterAnalysis, setPreMasterAnalysis] = useState<PreMasterAnalysisResponse["analysis"] | null>(null);
   const [preMasterDebug, setPreMasterDebug] = useState<PreMasterAnalysisResponse["debug"] | null>(null);
+  const [masterReadiness, setMasterReadiness] = useState<MasterReadinessResult | null>(null);
+  const [masterReadinessAcknowledged, setMasterReadinessAcknowledged] = useState(false);
   const [sourceUploadRef, setSourceUploadRef] = useState<SourceUploadRef | null>(null);
   const [showAdaptivePlaceholder, setShowAdaptivePlaceholder] = useState(false);
   const [adaptiveIntent, setAdaptiveIntent] = useState("");
@@ -1092,6 +1169,8 @@ export function UploadForm() {
     latestAnalysisRequestIdRef.current += 1;
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
+    setMasterReadiness(null);
+    setMasterReadinessAcknowledged(false);
     setSourceUploadRef(null);
     setShowAdaptivePlaceholder(false);
     setAdaptiveIntent("");
@@ -1463,6 +1542,8 @@ export function UploadForm() {
     setShowAdaptivePlaceholder(false);
     setPreMasterAnalysis(null);
     setPreMasterDebug(null);
+    setMasterReadiness(null);
+    setMasterReadinessAcknowledged(false);
     setSourceUploadRef(null);
     setAudioRestoration({ available: false, recommendation: null });
     setAudioRestorationChoice("off");
@@ -1513,6 +1594,8 @@ export function UploadForm() {
       }
       setPreMasterAnalysis(parsed.analysis);
       setPreMasterDebug(parsed.debug ?? null);
+      setMasterReadiness(parsed.masterReadiness ?? null);
+      setMasterReadinessAcknowledged(false);
       setSourceUploadRef(parsed.source ?? null);
       setSuggestedMasteringPreset(parsed.suggestedMasteringPreset ?? null);
       if (parsed.suggestedMasteringPreset?.key) {
@@ -1645,6 +1728,8 @@ export function UploadForm() {
                   latestAnalysisRequestIdRef.current += 1;
                   setPreMasterAnalysis(null);
                   setPreMasterDebug(null);
+                  setMasterReadiness(null);
+                  setMasterReadinessAcknowledged(false);
                   setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
                   setAudioRestoration({ available: false, recommendation: null });
@@ -1673,6 +1758,8 @@ export function UploadForm() {
                   latestAnalysisRequestIdRef.current += 1;
                   setPreMasterAnalysis(null);
                   setPreMasterDebug(null);
+                  setMasterReadiness(null);
+                  setMasterReadinessAcknowledged(false);
                   setSourceUploadRef(null);
                   setShowAdaptivePlaceholder(false);
                   setAudioRestoration({ available: false, recommendation: null });
@@ -1706,6 +1793,8 @@ export function UploadForm() {
           confirmedContinueWithStandard={confirmedContinueWithStandard}
           isProduction={isProduction}
           loading={loading}
+          masterReadiness={masterReadiness}
+          masterReadinessAcknowledged={masterReadinessAcknowledged}
           audioRestoration={audioRestoration}
           audioRestorationChoice={audioRestorationChoice}
           genre={genre}
@@ -1721,12 +1810,23 @@ export function UploadForm() {
           onAdvancedControlsOpenChange={setAdvancedControlsOpen}
           onAudioRestorationChoiceChange={setAudioRestorationChoice}
           onGenreChange={setGenre}
-          onOpenAdaptive={() => {
-            debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
-            setShowAdaptivePlaceholder(true);
+          onMasterAnyway={() => {
+            setMasterReadinessAcknowledged(true);
             setAdvancedControlsOpen(true);
             setError(null);
             setStatus("Adaptive customization — add a short note about the sound you want, then run the free preview.");
+          }}
+          onOpenAdaptive={() => {
+            debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
+            setShowAdaptivePlaceholder(true);
+            setMasterReadinessAcknowledged(!masterReadiness);
+            setAdvancedControlsOpen(Boolean(!masterReadiness));
+            setError(null);
+            setStatus(
+              masterReadiness
+                ? "Master Readiness — review mix notes, then master anyway or improve the mix first."
+                : "Adaptive customization — add a short note about the sound you want, then run the free preview."
+            );
           }}
           onReferenceArtistChange={setReferenceArtist}
           onReferenceTrackSelection={handleReferenceTrackSelection}
@@ -2528,7 +2628,45 @@ const secondaryActionStyle: React.CSSProperties = {
   cursor: "pointer",
   width: "100%",
   boxSizing: "border-box",
-  textAlign: "center"
+  textAlign: "center",
+  textDecoration: "none",
+  display: "inline-block"
+};
+const masterReadinessCardStyle: React.CSSProperties = {
+  borderRadius: "12px",
+  border: "1px solid rgba(126, 146, 220, 0.28)",
+  background: "rgba(10, 16, 30, 0.55)",
+  padding: "14px",
+  display: "grid",
+  gap: "10px"
+};
+const masterReadinessStatusReadyStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#5ee9b5",
+  fontSize: "1.15rem",
+  fontWeight: 700
+};
+const masterReadinessStatusMinorStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#f0d28a",
+  fontSize: "1.15rem",
+  fontWeight: 700
+};
+const masterReadinessStatusFixStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#ffb086",
+  fontSize: "1.15rem",
+  fontWeight: 700
+};
+const masterReadinessScoreStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#c4d1f5",
+  fontSize: "0.92rem",
+  fontWeight: 600
+};
+const masterReadinessFindingsStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "8px"
 };
 const adaptivePlaceholderStyle: React.CSSProperties = {
   borderRadius: "10px",
