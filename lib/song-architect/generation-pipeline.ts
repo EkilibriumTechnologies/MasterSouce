@@ -103,9 +103,12 @@ export function applyRepairedCandidate(
   }
 ): SongArchitectPhase4Result {
   const repairedCritique = critiqueSongCandidate(repaired, args.songDNA, args.resolvedInput);
+  const fewerHardViolations =
+    repairedCritique.hardConstraintViolations.length < previous.selectedCritique.hardConstraintViolations.length;
   const keepRepaired =
-    repairedCritique.hardConstraintViolations.length < previous.selectedCritique.hardConstraintViolations.length ||
-    repairedCritique.overallScore >= previous.selectedCritique.overallScore - 2;
+    fewerHardViolations ||
+    (repairedCritique.hardConstraintViolations.length === 0 &&
+      repairedCritique.overallScore >= previous.selectedCritique.overallScore - 2);
   const selected = keepRepaired ? repaired : previous.selected;
   const selectedCritique = keepRepaired ? repairedCritique : previous.selectedCritique;
   const pronunciation = analyzePronunciation({

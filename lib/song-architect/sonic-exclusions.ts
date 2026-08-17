@@ -1,4 +1,10 @@
-import type { SongDNAGenreFamily, SonicDNA, SonicExclusions } from "@/lib/song-architect/types";
+import type {
+  SongArchitectResolvedInput,
+  SongDNA,
+  SongDNAGenreFamily,
+  SonicDNA,
+  SonicExclusions
+} from "@/lib/song-architect/types";
 
 const FAMILY_EXCLUSIONS: Partial<Record<SongDNAGenreFamily, SonicExclusions>> = {
   "nu-metal": {
@@ -54,6 +60,17 @@ const EXCLUSION_KEYS: Array<keyof SonicExclusions> = [
   "mixCharacteristics"
 ];
 
+/** High-signal lyric recombinations that contradict an explicit anti-EDM-drop exclusion. */
+const GENERIC_EDM_DROP_LYRIC_LEAKS = [
+  /\bdance(?:\s+the)?\s+drop\b/i,
+  /\bfestival\s+drop\b/i,
+  /\bedm\s+drop\b/i,
+  /\bhit\s+the\s+drop\b/i,
+  /\binto\s+the\s+drop\b/i,
+  /\bbuild(?:\s+up)?\s+(?:into|to)\s+(?:the\s+)?drop\b/i,
+  /\bdrop\s+the\s+bass\b/i
+];
+
 function unique(values: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -101,28 +118,67 @@ export function hasSonicExclusions(exclusions?: SonicExclusions): boolean {
   return flattenExclusions(exclusions).length > 0;
 }
 
+export function mergeSonicExclusions(
+  ...parts: Array<SonicExclusions | undefined>
+): SonicExclusions | undefined {
+  const next: SonicExclusions = {};
+  for (const part of parts) {
+    if (!part) continue;
+    for (const key of EXCLUSION_KEYS) {
+      const values = unique([...(next[key] ?? []), ...(part[key] ?? [])]);
+      if (values.length > 0) next[key] = values;
+    }
+  }
+  return hasSonicExclusions(next) ? next : undefined;
+}
+
+/**
+ * Detect explicit user directions against generic/festival EDM-drop behavior.
+ * Does not treat every mention of "drop" as negative.
+ */
+export function extractExplicitDropExclusionsFromNotes(userNotes: string): SonicExclusions | undefined {
+  const text = userNotes.trim();
+  if (!text) return undefined;
+
+  const negatedDrop =
+    /\b(?:no|avoid|without|never|not)\b[\s\S]{0,48}\b(?:generic\s+)?(?:festival[-\s]?)?(?:style\s+)?(?:edm\s+)?drop(?:s)?(?:\s+behavior|\s+structure|\s+language)?\b/i.test(
+      text
+    ) ||
+    /\b(?:continuous\s+)?dembow\b[\s\S]{0,40}\brather than\b[\s\S]{0,40}\b(?:edm\s+)?drop\b/i.test(text) ||
+    /\bavoid\b[\s\S]{0,40}\bfestival[-\s]?style\b[\s\S]{0,20}\bedm\s+drop\b/i.test(text);
+
+  if (!negatedDrop) return undefined;
+
+  return {
+    genres: ["generic EDM drop behavior", "festival EDM drops"],
+    arrangementBehavior: ["festival-style EDM drop structure"]
+  };
+}
+
 export function inferSonicExclusions(args: {
   family: SongDNAGenreFamily;
   sonic: SonicDNA;
   genre: string;
   emotion: string;
+  userNotes?: string;
 }): SonicExclusions | undefined {
   const seed = FAMILY_EXCLUSIONS[args.family];
-  if (!seed) return undefined;
-
   const intended = intendedBlob(args.sonic, args.genre, args.emotion);
   const next: SonicExclusions = {};
   let remaining = 4;
 
-  for (const key of EXCLUSION_KEYS) {
-    if (remaining <= 0) break;
-    const values = unique((seed[key] ?? []).filter((item) => clarifiesIntent(item, intended))).slice(0, remaining);
-    if (values.length === 0) continue;
-    next[key] = values;
-    remaining -= values.length;
+  if (seed) {
+    for (const key of EXCLUSION_KEYS) {
+      if (remaining <= 0) break;
+      const values = unique((seed[key] ?? []).filter((item) => clarifiesIntent(item, intended))).slice(0, remaining);
+      if (values.length === 0) continue;
+      next[key] = values;
+      remaining -= values.length;
+    }
   }
 
-  return hasSonicExclusions(next) ? next : undefined;
+  const fromNotes = extractExplicitDropExclusionsFromNotes(args.userNotes ?? "");
+  return mergeSonicExclusions(hasSonicExclusions(next) ? next : undefined, fromNotes);
 }
 
 export function formatSonicExclusionsPlainText(exclusions: SonicExclusions): string {
@@ -133,4 +189,82 @@ export function formatSonicExclusionsPlainText(exclusions: SonicExclusions): str
 
 export function listSonicExclusionItems(exclusions?: SonicExclusions): string[] {
   return exclusions ? flattenExclusions(exclusions) : [];
+}
+
+export function excludesGenericEdmDropBehavior(
+  songDNA: SongDNA,
+  resolvedInput?: SongArchitectResolvedInput
+): boolean {
+  const blob = [
+    ...listSonicExclusionItems(songDNA.sonicExclusions),
+    resolvedInput?.userNotes ?? ""
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    /\bgeneric\s+edm\s+drop\b/.test(blob) ||
+    /\bfestival(?:[-\s]style)?\s+edm\s+drop/.test(blob) ||
+    /\bfestival\s+edm\s+drops?\b/.test(blob) ||
+    /\bfestival[-\s]?style\s+edm\s+drop/.test(blob) ||
+    /\bno\s+generic\s+edm\s+drop/.test(blob) ||
+    Boolean(extractExplicitDropExclusionsFromNotes(resolvedInput?.userNotes ?? ""))
+  );
+}
+
+export function isDropPositivelyAuthorized(
+  songDNA: SongDNA,
+  resolvedInput?: SongArchitectResolvedInput
+): boolean {
+  if (songDNA.meta.genreFamily === "edm") return true;
+
+  const structure = `${songDNA.composition.structure} ${resolvedInput?.structure ?? ""}`.toLowerCase();
+  if (/\bdrop\b/.test(structure)) return true;
+
+  const positiveFields = [
+    songDNA.composition.hookIdentity,
+    songDNA.composition.theme,
+    songDNA.composition.angle,
+    ...(songDNA.composition.mustInclude ?? []),
+    resolvedInput?.hookIdentity ?? "",
+    resolvedInput?.theme ?? "",
+    ...(resolvedInput?.mustInclude ?? [])
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (/\bdance(?:\s+the)?\s+drop\b|\bedm\s+drop\b|\bfestival\s+drop\b/.test(positiveFields)) {
+    return true;
+  }
+
+  const notes = (resolvedInput?.userNotes ?? "").toLowerCase();
+  if (
+    /\b(?:with|include|want|need|add|use|keep)\b[\s\S]{0,24}\b(?:edm\s+)?drop\b/.test(notes) &&
+    !extractExplicitDropExclusionsFromNotes(resolvedInput?.userNotes ?? "")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Detect contradictory generic EDM-drop lyric language when an explicit exclusion is active.
+ * Ordinary standalone uses of "drop" are allowed.
+ */
+export function detectGenericEdmDropLyricLeak(
+  lyrics: string,
+  songDNA: SongDNA,
+  resolvedInput?: SongArchitectResolvedInput
+): string | undefined {
+  if (!excludesGenericEdmDropBehavior(songDNA, resolvedInput)) return undefined;
+  if (isDropPositivelyAuthorized(songDNA, resolvedInput)) return undefined;
+
+  for (const pattern of GENERIC_EDM_DROP_LYRIC_LEAKS) {
+    const match = lyrics.match(pattern);
+    if (match?.[0]) {
+      return match[0];
+    }
+  }
+  return undefined;
 }

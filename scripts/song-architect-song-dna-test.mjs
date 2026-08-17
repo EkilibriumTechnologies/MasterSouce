@@ -9,8 +9,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { parseStructureSections } from "@/lib/song-architect/arrangement-dna";
-import { planRepairPass, selectBestCandidate } from "@/lib/song-architect/candidate-selection";
+import { parseStructureSections, mapEnergyCurveToSections, hasExplicitNumericEnergyCurve, parseExplicitNumericEnergyCurve } from "@/lib/song-architect/arrangement-dna";
+import { planRepairPass, selectBestCandidate, collectRepairTargets } from "@/lib/song-architect/candidate-selection";
 import { resolveCandidateStrategy } from "@/lib/song-architect/candidate-strategy";
 import { critiqueSongCandidate } from "@/lib/song-architect/critic";
 import { isAdjectiveOnlyEmotion, translateEmotionalIntent } from "@/lib/song-architect/emotion-translation";
@@ -21,12 +21,17 @@ import { PROMPT_BUDGETS, selectBudgetedInstructions } from "@/lib/song-architect
 import { compileGenerationPackage } from "@/lib/song-architect/generation-compiler";
 import { resolveGenerationTarget } from "@/lib/song-architect/generation-target";
 import { analyzePronunciation, budgetPronunciationAdjustments } from "@/lib/song-architect/pronunciation";
-import { buildExportPrompt, buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
+import { buildExportPrompt, buildSystemPrompt, buildUserPrompt, buildRepairSystemPrompt } from "@/lib/song-architect/prompts";
 import { toReferenceSources } from "@/lib/song-architect/reference-dna";
 import { resolveSongArchitectInput } from "@/lib/song-architect/resolve-input";
-import { listSonicExclusionItems } from "@/lib/song-architect/sonic-exclusions";
+import {
+  detectGenericEdmDropLyricLeak,
+  excludesGenericEdmDropBehavior,
+  extractExplicitDropExclusionsFromNotes,
+  listSonicExclusionItems
+} from "@/lib/song-architect/sonic-exclusions";
 import { detectGenreFamily } from "@/lib/song-architect/sonic-inference";
-import { buildSongDNA, formatSongDNAForPrompt, formatSongDNAStylePrompt } from "@/lib/song-architect/song-dna";
+import { alignSongDNAWithConcept, buildSongDNA, formatSongDNAForPrompt, formatSongDNAStylePrompt } from "@/lib/song-architect/song-dna";
 import {
   compileSunoBlueprint,
   compileSunoExportPrompt,
@@ -1433,6 +1438,348 @@ function runPhase5CompilerArchitectureTests() {
   assert.match(page, /Suno Blueprint/);
 }
 
+function runExplicitEnergyCurveAuthorityTests() {
+  const edmStructure =
+    "Intro > Verse 1 > Pre-Chorus > Chorus > Drop > Breakdown > Verse 2 > Pre-Chorus > Chorus > Bridge > Final Drop > Outro";
+  const edmCurve = "3,5,7,9,10,5,7,9,10,6,10,4";
+  const { dna: edm } = dnaFor({
+    genre: "EDM",
+    structure: edmStructure,
+    energyCurve: edmCurve,
+    emotion: "euphoric",
+    vocalStyle: "anthemic topline"
+  });
+  assert.equal(hasExplicitNumericEnergyCurve(edmCurve), true);
+  assert.deepEqual(
+    edm.arrangement.sections.map((section) => section.energy),
+    [3, 5, 7, 9, 10, 5, 7, 9, 10, 6, 10, 4],
+    "ENERGY exact-match: EDM numeric curve is preserved exactly"
+  );
+  assert.equal(edm.composition.energyCurve, edmCurve);
+
+  const arrow = parseExplicitNumericEnergyCurve("3 → 5 → 7 → 9 → 10 → 5 → 7 → 9 → 10 → 6 → 10 → 4");
+  assert.deepEqual(arrow, [3, 5, 7, 9, 10, 5, 7, 9, 10, 6, 10, 4], "ENERGY arrow form parses like commas");
+
+  const nuMetalStructure =
+    "Intro > Verse 1 > Pre-Chorus > Chorus > Verse 2 > Chorus > Bridge > Breakdown > Final Chorus > Outro";
+  const { dna: nuMetal } = dnaFor({
+    genre: "nu-metal",
+    structure: nuMetalStructure,
+    energyCurve: "4,6,8,9,7,9,10,6,10,5",
+    emotion: "dark, emotional, powerful",
+    vocalStyle: "aggressive, gritty"
+  });
+  assert.deepEqual(
+    nuMetal.arrangement.sections.map((section) => section.energy),
+    [4, 6, 8, 9, 7, 9, 10, 6, 10, 5],
+    "ENERGY exact-match: nu-metal numeric curve is preserved"
+  );
+
+  const { dna: acoustic } = dnaFor({
+    genre: "acoustic",
+    structure: "Intro > Verse 1 > Pre-Chorus > Chorus > Verse 2 > Chorus > Bridge > Final Chorus > Outro",
+    energyCurve: "2,3,4,6,4,6,5,7,2",
+    emotion: "intimate",
+    vocalStyle: "breathy, intimate"
+  });
+  assert.deepEqual(
+    acoustic.arrangement.sections.map((section) => section.energy),
+    [2, 3, 4, 6, 4, 6, 5, 7, 2],
+    "ENERGY exact-match: acoustic numeric curve bypasses soft family caps"
+  );
+
+  const { dna: prose } = dnaFor({
+    genre: "pop",
+    structure: "Verse 1 > Chorus > Verse 2 > Final Chorus",
+    energyCurve: "quiet confession into open chorus",
+    emotion: "bitter but hopeful",
+    vocalStyle: "breathy, intimate"
+  });
+  assert.equal(hasExplicitNumericEnergyCurve("quiet confession into open chorus"), false);
+  assert.ok((prose.arrangement.sections.find((s) => s.sectionType === "verse")?.energy ?? 9) <= 5);
+  assert.ok((prose.arrangement.sections.find((s) => s.sectionType === "chorus")?.energy ?? 0) >= 7);
+
+  const malformed = parseExplicitNumericEnergyCurve("not a curve at all");
+  assert.equal(malformed, undefined, "ENERGY malformed curve fails safely");
+  const sections = parseStructureSections("Verse 1 > Chorus > Outro");
+  const inferred = mapEnergyCurveToSections(sections, "not a curve at all", "pop");
+  assert.equal(inferred.length, 3);
+  assert.ok(inferred.every((value) => value >= 1 && value <= 10));
+
+  const clamped = parseExplicitNumericEnergyCurve("0,11,15,3");
+  assert.deepEqual(clamped, [1, 10, 10, 3], "ENERGY out-of-range values clamp to 1–10");
+
+  const short = mapEnergyCurveToSections(parseStructureSections(edmStructure), "3,5,7", "edm");
+  assert.deepEqual(
+    short,
+    [3, 5, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7],
+    "ENERGY short curve pads with last value"
+  );
+  const long = mapEnergyCurveToSections(
+    parseStructureSections("Verse 1 > Chorus > Outro"),
+    "3,5,7,9,10,5,7,9,10,6,10,4",
+    "edm"
+  );
+  assert.deepEqual(long, [3, 5, 7], "ENERGY long curve truncates to section count");
+
+  const { resolved } = resolveSongArchitectInput({
+    genre: "EDM",
+    structure: edmStructure,
+    energyCurve: edmCurve,
+    emotion: "euphoric",
+    vocalStyle: "anthemic topline"
+  });
+  const aligned = alignSongDNAWithConcept(resolved, {
+    theme: resolved.theme,
+    angle: resolved.angle,
+    emotion: resolved.emotion,
+    hookIdentity: resolved.hookIdentity,
+    tensionWords: ["lift", "release"],
+    structure: edmStructure,
+    energyCurve: "medium intro, strong chorus lift, biggest final chorus"
+  });
+  assert.equal(aligned.composition.energyCurve, edmCurve, "ENERGY user numeric curve survives concept alignment");
+  assert.deepEqual(
+    aligned.arrangement.sections.map((section) => section.energy),
+    [3, 5, 7, 9, 10, 5, 7, 9, 10, 6, 10, 4]
+  );
+}
+
+function runPronunciationOrdinaryCapsTests() {
+  const { dna } = phase4Fixture();
+
+  const shouted = analyzePronunciation({
+    cleanLyrics: "[Chorus]\nWHO PROFITS?\nLOVE STOP FIRE BROKEN",
+    sections: [
+      { section: "Chorus", lines: ["WHO PROFITS?", "LOVE STOP FIRE BROKEN"] }
+    ],
+    songDNA: dna
+  });
+  assert.equal(
+    shouted.adjustments.some((item) => /^W-H-O$/i.test(item.pronunciation) || item.word === "WHO"),
+    false,
+    "PRONUNCIATION: WHO stays WHO"
+  );
+  assert.match(shouted.generationOptimizedLyrics, /\bWHO PROFITS\b/);
+  assert.doesNotMatch(shouted.generationOptimizedLyrics, /W-H-O/);
+  for (const word of ["LOVE", "STOP", "FIRE", "BROKEN"]) {
+    assert.equal(
+      shouted.adjustments.some((item) => item.word === word),
+      false,
+      `PRONUNCIATION: ${word} stays unchanged`
+    );
+  }
+
+  const initialisms = analyzePronunciation({
+    cleanLyrics: "[Verse 1]\nAI DJ FBI USA NYC EDM on the radio",
+    sections: [{ section: "Verse 1", lines: ["AI DJ FBI USA NYC EDM on the radio"] }],
+    songDNA: dna
+  });
+  for (const [word, expected] of [
+    ["AI", "A-I"],
+    ["DJ", "D-J"],
+    ["FBI", "F-B-I"],
+    ["USA", "U-S-A"],
+    ["NYC", "N-Y-C"],
+    ["EDM", "E-D-M"]
+  ]) {
+    const hit = initialisms.adjustments.find((item) => item.word === word);
+    assert.ok(hit, `PRONUNCIATION: ${word} is treated as an initialism`);
+    assert.equal(hit.pronunciation, expected);
+  }
+
+  const loizaSections = [
+    { section: "Verse 1", lines: ["We drive to Loíza after midnight"] },
+    { section: "Chorus", lines: ["Loíza keeps the radio warm"] }
+  ];
+  const loiza = analyzePronunciation({
+    cleanLyrics: loizaSections.map((section) => [`[${section.section}]`, ...section.lines].join("\n")).join("\n"),
+    sections: loizaSections,
+    songDNA: dna
+  });
+  assert.ok(loiza.adjustments.some((item) => /lo[ií]za/i.test(item.word) && item.pronunciation === "lo-EE-sah"));
+  assert.match(loiza.generationOptimizedLyrics, /lo-EE-sah/);
+  assert.match(loiza.cleanLyrics, /Loíza/);
+  assert.doesNotMatch(loiza.cleanLyrics, /lo-EE-sah/);
+
+  const override = analyzePronunciation({
+    cleanLyrics: "[Verse 1]\nLoíza after dark",
+    sections: [{ section: "Verse 1", lines: ["Loíza after dark"] }],
+    songDNA: dna,
+    overrides: [{ word: "Loíza", pronunciation: "lo-EE-zah", reason: "custom override" }]
+  });
+  assert.ok(override.adjustments.some((item) => item.source === "override" && item.pronunciation === "lo-EE-zah"));
+
+  const spanishDna = buildSongDNA(
+    resolveSongArchitectInput({
+      genre: "reggaeton",
+      theme: "una noche en Loíza",
+      angle: "te digo la verdad",
+      emotion: "nostalgic",
+      hookIdentity: "Quédate en la noche",
+      language: "Spanish",
+      structure: "Verse 1 > Chorus",
+      mustInclude: ["corazón"]
+    }).resolved
+  );
+  const spanish = analyzePronunciation({
+    cleanLyrics: "[Verse 1]\nEl corazón me late\n[Chorus]\nQuédate en la noche",
+    sections: [
+      { section: "Verse 1", lines: ["El corazón me late"] },
+      { section: "Chorus", lines: ["Quédate en la noche"] }
+    ],
+    songDNA: spanishDna
+  });
+  assert.equal(
+    spanish.adjustments.some((item) => /coraz[oó]n|noche|queda/i.test(item.word)),
+    false,
+    "PRONUNCIATION: unrelated Spanish stays untouched"
+  );
+}
+
+function runExplicitExclusionEnforcementTests() {
+  const notes = "continuous dembow rather than EDM drop structure; no generic EDM drop behavior";
+  assert.ok(extractExplicitDropExclusionsFromNotes(notes));
+
+  const { resolved, dna } = dnaFor({
+    genre: "reggaeton",
+    theme: "club heat without festival clichés",
+    angle: "we keep the dembow moving",
+    emotion: "confident",
+    hookIdentity: "sigue el dembow",
+    structure: "Intro > Verse 1 > Chorus > Verse 2 > Bridge > Final Chorus > Outro",
+    energyCurve: "3,5,7,8,6,8,6,9,4",
+    language: "Spanish",
+    vocalStyle: "rhythmic, confident",
+    userNotes: notes
+  });
+
+  const exclusionBlob = listSonicExclusionItems(dna.sonicExclusions).join(" ").toLowerCase();
+  assert.match(exclusionBlob, /generic edm drop|festival edm drop/);
+  assert.equal(excludesGenericEdmDropBehavior(dna, resolved), true);
+
+  const system = buildSystemPrompt(resolved, dna);
+  assert.match(system, /Never reuse sonic-exclusion wording as lyric imagery/i);
+  assert.match(buildRepairSystemPrompt(resolved, dna), /sonic-exclusion lyric leakage/i);
+
+  const leakCandidate = {
+    id: "A",
+    concept: {
+      theme: dna.composition.theme,
+      angle: dna.composition.angle,
+      emotion: dna.composition.emotionalIntent,
+      hookIdentity: dna.composition.hookIdentity,
+      tensionWords: ["dembow", "heat"],
+      structure: dna.composition.structure,
+      energyCurve: dna.composition.energyCurve
+    },
+    lyricsSections: [
+      { section: "Verse 1", lines: ["La noche prende el club", "dance the drop con fuego"] },
+      { section: "Chorus", lines: ["sigue el dembow", "no pares ahora"] },
+      { section: "Verse 2", lines: ["El ritmo no se quiebra", "la calle sigue viva"] },
+      { section: "Bridge", lines: ["Respiro y vuelvo al loop"] },
+      { section: "Final Chorus", lines: ["sigue el dembow", "hasta el amanecer"] },
+      { section: "Outro", lines: ["El beat se queda"] }
+    ],
+    lyrics: "",
+    performanceNotes: ["Keep dembow continuous"],
+    altHooks: ["sigue el dembow"]
+  };
+  leakCandidate.lyrics = leakCandidate.lyricsSections
+    .map((section) => [`[${section.section}]`, ...section.lines].join("\n"))
+    .join("\n");
+
+  assert.ok(detectGenericEdmDropLyricLeak(leakCandidate.lyrics, dna, resolved));
+  const leakCritique = critiqueSongCandidate(leakCandidate, dna, resolved);
+  assert.ok(
+    leakCritique.hardConstraintViolations.some((item) => /Sonic exclusion leak/i.test(item)),
+    "EXCLUSION: dance the drop is a hard violation under explicit anti-drop notes"
+  );
+  const targets = collectRepairTargets(leakCritique);
+  assert.ok(targets.some((target) => target.kind === "sonic_exclusion_leak"));
+
+  const cleanCandidate = {
+    ...leakCandidate,
+    lyricsSections: leakCandidate.lyricsSections.map((section) =>
+      section.section === "Verse 1"
+        ? { section: "Verse 1", lines: ["La noche prende el club", "el dembow no se apaga"] }
+        : section
+    )
+  };
+  cleanCandidate.lyrics = cleanCandidate.lyricsSections
+    .map((section) => [`[${section.section}]`, ...section.lines].join("\n"))
+    .join("\n");
+  const cleanCritique = critiqueSongCandidate(cleanCandidate, dna, resolved);
+  assert.equal(
+    cleanCritique.hardConstraintViolations.some((item) => /Sonic exclusion leak/i.test(item)),
+    false,
+    "EXCLUSION: clean dembow lyrics pass"
+  );
+
+  const ordinaryDrop = {
+    ...leakCandidate,
+    lyricsSections: leakCandidate.lyricsSections.map((section) =>
+      section.section === "Verse 1"
+        ? { section: "Verse 1", lines: ["A teardrop hits the mirror", "I drop the keys and leave"] }
+        : section
+    )
+  };
+  ordinaryDrop.lyrics = ordinaryDrop.lyricsSections
+    .map((section) => [`[${section.section}]`, ...section.lines].join("\n"))
+    .join("\n");
+  assert.equal(
+    detectGenericEdmDropLyricLeak(ordinaryDrop.lyrics, dna, resolved),
+    undefined,
+    "EXCLUSION: ordinary drop wording is allowed"
+  );
+
+  const phase4 = runSongArchitectPhase4({
+    songDNA: dna,
+    resolvedInput: resolved,
+    candidates: [leakCandidate],
+    candidateMode: "single_candidate"
+  });
+  assert.equal(phase4.repairRecommended, true);
+  const unrepaired = applyRepairedCandidate(phase4, leakCandidate, { songDNA: dna, resolvedInput: resolved });
+  assert.ok(
+    unrepaired.selectedCritique.hardConstraintViolations.some((item) => /Sonic exclusion leak/i.test(item)),
+    "EXCLUSION: failed repair with same leak is not accepted as an improvement"
+  );
+  const repaired = applyRepairedCandidate(phase4, cleanCandidate, { songDNA: dna, resolvedInput: resolved });
+  assert.equal(
+    repaired.selectedCritique.hardConstraintViolations.some((item) => /Sonic exclusion leak/i.test(item)),
+    false,
+    "EXCLUSION: successful repair clears the leak"
+  );
+
+  const style = compileSunoStylePrompt(dna);
+  const blueprint = compileSunoBlueprint(dna);
+  assert.ok(
+    listSonicExclusionItems(dna.sonicExclusions).some((item) => /edm drop|festival/i.test(item)),
+    "EXCLUSION: canonical DNA carries explicit drop exclusions"
+  );
+  assert.doesNotMatch(blueprint, /dance the drop/i);
+  assert.doesNotMatch(style, /dance the drop/i);
+
+  const { dna: edm } = dnaFor({
+    genre: "EDM",
+    structure: "Intro > Build > Drop > Breakdown > Final Drop > Outro",
+    energyCurve: "3,6,10,4,10,3",
+    emotion: "euphoric",
+    vocalStyle: "anthemic topline",
+    userNotes: "big festival drop energy, dance the drop is fine"
+  });
+  const edmBlueprint = compileSunoBlueprint(edm).toLowerCase();
+  assert.match(edmBlueprint, /\[drop\]|\[final drop\]/);
+  const edmLeak = detectGenericEdmDropLyricLeak("we dance the drop tonight", edm, {
+    ...resolved,
+    genre: "EDM",
+    structure: "Intro > Build > Drop > Breakdown > Final Drop > Outro",
+    userNotes: "big festival drop energy"
+  });
+  assert.equal(edmLeak, undefined, "EXCLUSION: EDM tracks that request a drop may still use one");
+}
+
 runCompositionReuseTests();
 runEmotionTranslationTests();
 runGenreAdaptationTests();
@@ -1455,4 +1802,7 @@ runPhase3ArrangementAndCompilerTests();
 runPhase4CriticAndSelectionTests();
 runPhase4PronunciationAndCompilerTests();
 runPhase5CompilerArchitectureTests();
+runExplicitEnergyCurveAuthorityTests();
+runPronunciationOrdinaryCapsTests();
+runExplicitExclusionEnforcementTests();
 console.log("song architect song dna tests passed");

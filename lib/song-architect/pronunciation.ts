@@ -21,6 +21,9 @@ const COMMON_ENGLISH = new Set([
   "when",
   "what",
   "where",
+  "who",
+  "why",
+  "how",
   "because",
   "never",
   "always",
@@ -56,7 +59,17 @@ const COMMON_ENGLISH = new Set([
   "street",
   "room",
   "door",
-  "window"
+  "window",
+  "run",
+  "stop",
+  "no",
+  "yes",
+  "broken",
+  "profits",
+  "say",
+  "can",
+  "did",
+  "got"
 ]);
 
 const COMMON_SPANISH = new Set([
@@ -138,7 +151,36 @@ const KNOWN_PRONUNCIATIONS: Record<string, { pronunciation: string; reason: stri
   "san juan": { pronunciation: "sahn-HWAN", reason: "Puerto Rican capital" }
 };
 
-const ACRONYM = /^[A-Z]{2,5}$/;
+/** Known initialisms with strong evidence for letter-splitting. ALL CAPS alone is not enough. */
+const KNOWN_INITIALISMS = new Set([
+  "ai",
+  "dj",
+  "fbi",
+  "cia",
+  "usa",
+  "nyc",
+  "edm",
+  "nasa",
+  "tv",
+  "ok",
+  "bpm",
+  "dna",
+  "gps",
+  "usb",
+  "cdn",
+  "api",
+  "vpn",
+  "http",
+  "https",
+  "pdf",
+  "html",
+  "css",
+  "sql",
+  "nft",
+  "diy"
+]);
+
+const ALL_CAPS_TOKEN = /^[A-Z]{2,5}$/;
 const ABBREVIATION = /^(?:mr|mrs|ms|dr|st|ave|blvd|vs|etc)\.?$/i;
 const UNUSUAL_SPELLING = /[A-Z][a-z]*[A-Z]|[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ'\-]/;
 
@@ -148,6 +190,18 @@ function isCommonVocabulary(token: string, family: ReturnType<typeof languageFam
   if (family === "spanish" && COMMON_SPANISH.has(folded)) return true;
   if (family === "english" && COMMON_ENGLISH.has(folded)) return true;
   return false;
+}
+
+/**
+ * Letter-split only when there is strong evidence the token is an initialism.
+ * Ordinary ALL-CAPS emphasis (WHO, LOVE, STOP) must stay unchanged.
+ * If uncertain, leave the original word unchanged.
+ */
+function isLikelyInitialism(token: string): boolean {
+  if (!ALL_CAPS_TOKEN.test(token)) return false;
+  const folded = foldLyricText(token);
+  if (COMMON_ENGLISH.has(folded) || COMMON_SPANISH.has(folded)) return false;
+  return KNOWN_INITIALISMS.has(folded);
 }
 
 function looksLikeProperName(token: string, indexInLine: number): boolean {
@@ -167,7 +221,7 @@ function phoneticizeUnknown(token: string, family: ReturnType<typeof languageFam
   const folded = foldLyricText(token);
   const known = KNOWN_PRONUNCIATIONS[folded];
   if (known) return known.pronunciation;
-  if (ACRONYM.test(token)) return token.split("").join("-");
+  if (isLikelyInitialism(token)) return token.split("").join("-");
   if (family === "english" && looksSpanish(token) && token.length > 3) {
     return undefined;
   }
@@ -231,7 +285,7 @@ export function detectPronunciationTargets(
           return;
         }
 
-        if (ACRONYM.test(token)) {
+        if (isLikelyInitialism(token)) {
           seen.set(folded, {
             word: token,
             pronunciation: token.split("").join("-"),

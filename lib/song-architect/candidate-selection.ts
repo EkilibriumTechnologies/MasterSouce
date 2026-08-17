@@ -35,7 +35,8 @@ export type RepairTargetKind =
   | "hook"
   | "structure"
   | "singability"
-  | "section";
+  | "section"
+  | "sonic_exclusion_leak";
 
 export type RepairTarget = {
   kind: RepairTargetKind;
@@ -170,6 +171,10 @@ export function collectRepairTargets(critique: SongCandidateCritique): RepairTar
     }
     if (/Hook identity/i.test(violation)) {
       targets.push({ kind: "hook", detail: violation });
+      continue;
+    }
+    if (/Sonic exclusion leak/i.test(violation)) {
+      targets.push({ kind: "sonic_exclusion_leak", detail: violation });
       continue;
     }
     if (/Empty section/i.test(violation)) {

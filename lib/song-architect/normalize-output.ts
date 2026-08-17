@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { inferArrangementDNA } from "@/lib/song-architect/arrangement-dna";
+import { hasExplicitNumericEnergyCurve, inferArrangementDNA } from "@/lib/song-architect/arrangement-dna";
 import { assembleLyricsFromSections as assembleCandidateLyrics } from "@/lib/song-architect/lyrics-text";
 import { alignSongDNAWithConcept, buildSongDNA } from "@/lib/song-architect/song-dna";
 import { getSongLengthBlueprint } from "@/lib/song-architect/song-length";
@@ -203,6 +203,9 @@ function resolveCanonicalSongDNA(args: {
     return alignSongDNAWithConcept(args.resolvedInput, args.concept);
   }
   if (args.songDNA) {
+    const energyCurve = hasExplicitNumericEnergyCurve(args.songDNA.composition.energyCurve)
+      ? args.songDNA.composition.energyCurve
+      : args.concept.energyCurve;
     const composition = {
       ...args.songDNA.composition,
       theme: args.concept.theme,
@@ -210,7 +213,7 @@ function resolveCanonicalSongDNA(args: {
       emotionalIntent: args.concept.emotion,
       hookIdentity: args.concept.hookIdentity,
       structure: args.concept.structure,
-      energyCurve: args.concept.energyCurve
+      energyCurve
     };
     return {
       ...args.songDNA,

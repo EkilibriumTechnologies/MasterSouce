@@ -40,6 +40,7 @@ Creative brief reading order:
 - Arrangement DNA is section intensity and production behavior. Energy is arrangement intensity, not mastering loudness.
 - Lyric constraints (avoid words, must-include, perspective, language) are separate from sonic constraints.
 - Sonic exclusions are production/instrument/vocal restrictions only. Never treat Avoid Words as sonic exclusions.
+- Never reuse sonic-exclusion wording as lyric imagery, chant lines, or hooks (for example, do not turn “festival EDM drops” or “no generic EDM drop” into phrases like “dance the drop”).
 - exportPrompt is generated for schema compatibility only. The canonical Suno style prompt and blueprint are compiled from Song DNA after you return and will replace any model-created exportPrompt.
 
 Emotional intent vs sonic expression:
@@ -115,7 +116,8 @@ export function buildRepairSystemPrompt(input: SongArchitectResolvedInput, songD
 Targeted repair mode:
 - Do not rewrite the whole song unless a listed target requires it.
 - Preserve strong sections exactly when they are not named in the repair targets.
-- Fix only the listed problems (forbidden words, missing must-include, missing section, weak hook, broken meter, language).
+- Fix only the listed problems (forbidden words, missing must-include, missing section, weak hook, broken meter, language, sonic-exclusion lyric leakage).
+- If a repair target names sonic-exclusion leakage, rewrite the offending lyric phrase so it no longer echoes excluded EDM-drop / festival-drop language while preserving the song’s theme and hook.
 - Return the same JSON contract.`;
 }
 

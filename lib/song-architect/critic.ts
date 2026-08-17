@@ -10,6 +10,7 @@ import {
   lyricBodyText,
   tokenizeLyricLine
 } from "@/lib/song-architect/lyrics-text";
+import { detectGenericEdmDropLyricLeak } from "@/lib/song-architect/sonic-exclusions";
 import { getSongLengthBlueprint } from "@/lib/song-architect/song-length";
 import type {
   ArrangementSectionRole,
@@ -250,6 +251,11 @@ export function collectHardConstraintViolations(
     if (words > 0 && words < Math.max(8, Math.round(blueprint.totalLyricWordCountMin * 0.25))) {
       violations.push("Lyrics are far below the requested runtime length");
     }
+  }
+
+  const dropLeak = detectGenericEdmDropLyricLeak(body, songDNA, resolvedInput);
+  if (dropLeak) {
+    violations.push(`Sonic exclusion leak: lyrics reuse excluded EDM-drop language ("${dropLeak}")`);
   }
 
   return violations;

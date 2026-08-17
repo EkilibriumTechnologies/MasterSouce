@@ -763,11 +763,65 @@ function parseCurveHints(energyCurve: string): {
   return { startBias, payoffBias, finalBias, verseBias, rise };
 }
 
+/**
+ * Parse an explicit numeric energy curve when the input is predominantly numeric.
+ *
+ * Policy:
+ * - Usable when ≥2 integer tokens dominate the string (comma/arrow/slash/whitespace separators).
+ * - Values are clamped to 1–10; malformed tokens are ignored without throwing.
+ * - Prose-only curves return undefined so ROLE/keyword inference remains valid.
+ */
+export function parseExplicitNumericEnergyCurve(energyCurve: string): number[] | undefined {
+  const source = energyCurve.trim();
+  if (!source) return undefined;
+
+  const tokens = source
+    .split(/\s*(?:,|→|->|-|\/|\||;|\s)\s*/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return undefined;
+
+  const numbers: number[] = [];
+  let numericTokenCount = 0;
+  for (const token of tokens) {
+    if (/^-?\d+(?:\.\d+)?$/.test(token)) {
+      numericTokenCount += 1;
+      const parsed = Number(token);
+      if (Number.isFinite(parsed)) numbers.push(clampEnergy(parsed));
+    }
+  }
+
+  if (numbers.length < 2) return undefined;
+  if (numericTokenCount < Math.ceil(tokens.length * 0.6)) return undefined;
+  return numbers;
+}
+
+export function hasExplicitNumericEnergyCurve(energyCurve: string): boolean {
+  return Boolean(parseExplicitNumericEnergyCurve(energyCurve));
+}
+
+/**
+ * Map an energy curve onto compiled sections.
+ *
+ * Precedence:
+ * 1. Explicit usable numeric curve (authoritative; bypasses ROLE/keyword/family defaults)
+ * 2. Keyword + ROLE_ENERGY inference when no usable numeric curve exists
+ *
+ * Count mismatch (explicit only): truncate surplus values; pad short curves with the last value.
+ */
 export function mapEnergyCurveToSections(
   sections: ParsedStructureSection[],
   energyCurve: string,
   family: SongDNAGenreFamily
 ): number[] {
+  const explicit = parseExplicitNumericEnergyCurve(energyCurve);
+  if (explicit && sections.length > 0) {
+    return sections.map((_, index) => {
+      if (index < explicit.length) return explicit[index];
+      return explicit[explicit.length - 1];
+    });
+  }
+
   const hints = parseCurveHints(energyCurve);
   const lastIndex = Math.max(sections.length - 1, 1);
 
@@ -997,7 +1051,9 @@ export function inferArrangementDNA(args: {
         ];
 
   const energies = mapEnergyCurveToSections(sectionsSource, args.composition.energyCurve, args.family);
-  const densityAdjust = args.composition.lineDensity === "sparse" ? -1 : args.composition.lineDensity === "dense" ? 1 : 0;
+  const explicitNumeric = hasExplicitNumericEnergyCurve(args.composition.energyCurve);
+  const densityAdjust =
+    explicitNumeric ? 0 : args.composition.lineDensity === "sparse" ? -1 : args.composition.lineDensity === "dense" ? 1 : 0;
 
   const sections: SectionProductionDirection[] = sectionsSource.map((parsedSection, index) => {
     const energy = clampEnergy((energies[index] ?? ROLE_ENERGY[parsedSection.role]) + (parsedSection.role === "verse" ? densityAdjust : 0));

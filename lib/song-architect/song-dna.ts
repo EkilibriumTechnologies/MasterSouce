@@ -1,4 +1,4 @@
-import { inferArrangementDNA } from "@/lib/song-architect/arrangement-dna";
+import { hasExplicitNumericEnergyCurve, inferArrangementDNA } from "@/lib/song-architect/arrangement-dna";
 import { translateEmotionalIntent } from "@/lib/song-architect/emotion-translation";
 import { formatHarmonyDNAPlainText, inferHarmonyDNA } from "@/lib/song-architect/harmony-dna";
 import {
@@ -104,7 +104,8 @@ export function buildSongDNA(input: SongArchitectResolvedInput): SongDNA {
     family,
     sonic,
     genre: input.genre,
-    emotion: composition.emotionalIntent
+    emotion: composition.emotionalIntent,
+    userNotes: input.userNotes
   });
   const arrangement = inferArrangementDNA({
     composition,
@@ -132,6 +133,12 @@ export function alignSongDNAWithConcept(
   input: SongArchitectResolvedInput,
   concept: SongArchitectConcept
 ): SongDNA {
+  const energyCurve = hasExplicitNumericEnergyCurve(input.energyCurve)
+    ? input.energyCurve
+    : concept.energyCurve?.trim()
+      ? concept.energyCurve
+      : input.energyCurve;
+
   return buildSongDNA({
     ...input,
     theme: concept.theme,
@@ -139,7 +146,7 @@ export function alignSongDNAWithConcept(
     emotion: concept.emotion,
     hookIdentity: concept.hookIdentity,
     structure: concept.structure,
-    energyCurve: concept.energyCurve
+    energyCurve
   });
 }
 
