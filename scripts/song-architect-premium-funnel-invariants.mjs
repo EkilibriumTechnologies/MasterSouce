@@ -64,6 +64,8 @@ function runClientFunnelTests() {
   assertIncludes(page, "PostSuccessUpgradeCta", "page shows post-success upgrade CTA");
   assertIncludes(page, "result.basic.", "page renders basic output partition");
   assertIncludes(page, "result.premium", "page renders premium partition when unlocked");
+  assertIncludes(page, "Advanced Sonic Controls", "page keeps sonic controls collapsed and optional");
+  assertIncludes(page, "result.basic.songDNA", "page renders canonical Song DNA from basic output");
 }
 
 function runPremiumOutputModuleTests() {
@@ -72,6 +74,7 @@ function runPremiumOutputModuleTests() {
   assertIncludes(premiumOutput, "premiumLocked: true", "free payload marks premium locked");
   assertIncludes(premiumOutput, "masteringReadyPrompt", "premium enhancements include mastering prompt");
   assertIncludes(premiumOutput, "styleDirections", "premium enhancements include style directions");
+  assertIncludes(premiumOutput, "songDNA: full.songDNA", "basic payload includes canonical Song DNA");
 }
 
 function run() {

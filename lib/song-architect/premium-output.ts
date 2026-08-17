@@ -2,11 +2,17 @@ import { isSongArchitectPremiumPlan } from "@/lib/song-architect/premium-access"
 import type {
   SongArchitectOutput,
   SongArchitectPremiumEnhancements,
-  SongArchitectResolvedInput
+  SongArchitectResolvedInput,
+  SongArchitectSelectionPresentation
 } from "@/lib/song-architect/types";
 import type { PlanId } from "@/lib/subscriptions/types";
 
-export type SongArchitectBasicOutput = Pick<SongArchitectOutput, "concept" | "stylePrompt" | "lyrics" | "meta">;
+export type SongArchitectBasicOutput = Pick<
+  SongArchitectOutput,
+  "concept" | "songDNA" | "stylePrompt" | "sunoBlueprint" | "lyrics" | "generationOptimizedLyrics" | "meta"
+> & {
+  selection?: SongArchitectSelectionPresentation;
+};
 
 export type SongArchitectClientPayload = {
   basic: SongArchitectBasicOutput;
@@ -17,29 +23,34 @@ export type SongArchitectClientPayload = {
 
 function buildReferenceArtistGuidance(
   output: SongArchitectOutput,
-  resolvedInput?: SongArchitectResolvedInput
+  _resolvedInput?: SongArchitectResolvedInput
 ): string {
-  const artists = resolvedInput?.referenceArtists?.filter(Boolean) ?? [];
-  if (artists.length === 0) {
-    return `No reference artists supplied. Match the ${output.concept.emotion} mood and ${output.stylePrompt} palette when steering Suno/Udio.`;
+  const reference = output.songDNA.reference;
+  if (!reference || reference.sources.length === 0) {
+    return `No references supplied. Match the ${output.concept.emotion} mood and ${output.stylePrompt} palette when steering Suno/Udio.`;
   }
-  const joined = artists.slice(0, 6).join(", ");
   return [
-    `Reference palette: ${joined}.`,
-    `Borrow their ${output.concept.emotion} vocal placement and production density — not literal mimicry.`,
-    `Keep your hook identity distinct: "${output.concept.hookIdentity}".`
+    reference.influenceSummary,
+    `Keep your hook identity distinct: "${output.concept.hookIdentity}".`,
+    "Steer from the resolved sonic direction, not literal artist imitation."
   ].join(" ");
 }
 
 function buildMasteringReadyPrompt(output: SongArchitectOutput): string {
+  const sonic = output.songDNA.sonic;
   return [
     "MasterSauce mastering prep (paste after Suno/Udio export):",
     `Style target: ${output.stylePrompt}`,
     `Energy arc: ${output.concept.energyCurve}`,
+    sonic.emotionalSonicExpression ? `Sonic expression: ${sonic.emotionalSonicExpression}` : null,
+    sonic.primaryGenre ? `Genre: ${sonic.primaryGenre}` : null,
+    typeof sonic.bpm === "number" ? `BPM: ${sonic.bpm}` : null,
     `Hook anchor: ${output.concept.hookIdentity}`,
     `Structure: ${output.concept.structure}`,
     "Export WAV from your AI DAW, then master on MasterSauce with a genre preset aligned to the style prompt."
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildExportMasteringGuidance(output: SongArchitectOutput): string {
@@ -87,9 +98,13 @@ export function partitionSongArchitectClientPayload(
 ): SongArchitectClientPayload {
   const basic: SongArchitectBasicOutput = {
     concept: full.concept,
+    songDNA: full.songDNA,
     stylePrompt: full.stylePrompt,
+    sunoBlueprint: full.sunoBlueprint,
     lyrics: full.lyrics,
-    meta: full.meta
+    generationOptimizedLyrics: full.generationOptimizedLyrics || full.lyrics,
+    meta: full.meta,
+    ...(full.selection ? { selection: full.selection } : {})
   };
 
   if (isSongArchitectPremiumPlan(planId)) {

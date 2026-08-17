@@ -1,10 +1,20 @@
 import { z } from "zod";
-import { buildExportPrompt } from "@/lib/song-architect/prompts";
+import { inferArrangementDNA } from "@/lib/song-architect/arrangement-dna";
+import { assembleLyricsFromSections as assembleCandidateLyrics } from "@/lib/song-architect/lyrics-text";
+import { alignSongDNAWithConcept, buildSongDNA } from "@/lib/song-architect/song-dna";
 import { getSongLengthBlueprint } from "@/lib/song-architect/song-length";
+import { compileGenerationPackage } from "@/lib/song-architect/generation-compiler";
+import { compileSunoStylePrompt } from "@/lib/song-architect/suno-compiler";
 import type {
+  GenerationTarget,
+  SongArchitectCandidate,
+  SongArchitectCandidateId,
+  SongArchitectConcept,
   SongArchitectDiagnostics,
   SongArchitectOutput,
-  SongArchitectResolvedInput
+  SongArchitectResolvedInput,
+  SongArchitectSelectionPresentation,
+  SongDNA
 } from "@/lib/song-architect/types";
 
 const SongArchitectModelOutputSchema = z.object({
@@ -149,7 +159,75 @@ function buildDefaultDiagnostics(): SongArchitectDiagnostics {
   };
 }
 
-function buildStyleBlock(input?: SongArchitectResolvedInput): string {
+function fallbackSongDNAFromConcept(concept: SongArchitectConcept): SongDNA {
+  const composition = {
+    theme: concept.theme,
+    angle: concept.angle,
+    emotionalIntent: concept.emotion,
+    hookIdentity: concept.hookIdentity,
+    lyricalPerspective: concept.angle,
+    language: "English",
+    structure: concept.structure,
+    runtime: "~3 minutes",
+    lineDensity: "balanced" as const,
+    vocalStyle: "",
+    mustInclude: [],
+    avoidWords: [],
+    energyCurve: concept.energyCurve
+  };
+  const sonic = {
+    emotionalSonicExpression: concept.emotion
+  };
+  return {
+    composition,
+    sonic,
+    arrangement: inferArrangementDNA({
+      composition,
+      sonic,
+      family: "generic"
+    }),
+    meta: {
+      genreFamily: "generic",
+      inferenceMode: "automatic",
+      userOverrides: []
+    }
+  };
+}
+
+function resolveCanonicalSongDNA(args: {
+  resolvedInput?: SongArchitectResolvedInput;
+  songDNA?: SongDNA;
+  concept: SongArchitectConcept;
+}): SongDNA {
+  if (args.resolvedInput) {
+    return alignSongDNAWithConcept(args.resolvedInput, args.concept);
+  }
+  if (args.songDNA) {
+    const composition = {
+      ...args.songDNA.composition,
+      theme: args.concept.theme,
+      angle: args.concept.angle,
+      emotionalIntent: args.concept.emotion,
+      hookIdentity: args.concept.hookIdentity,
+      structure: args.concept.structure,
+      energyCurve: args.concept.energyCurve
+    };
+    return {
+      ...args.songDNA,
+      composition,
+      arrangement: inferArrangementDNA({
+        composition,
+        sonic: args.songDNA.sonic,
+        harmony: args.songDNA.harmony,
+        family: args.songDNA.meta.genreFamily
+      })
+    };
+  }
+  return fallbackSongDNAFromConcept(args.concept);
+}
+
+function buildStyleBlock(input?: SongArchitectResolvedInput, songDNA?: SongDNA): string {
+  if (songDNA) return compileSunoStylePrompt(songDNA);
   if (!input) return "modern vocal, concise lines, dynamic lift";
   const runtimeLabel = getSongLengthBlueprint(input.songLength).runtimeLabel;
   return [
@@ -222,7 +300,13 @@ function assembleLyricsFromSections(sections: Array<{ section: string; lines: st
 function toRecoveryOutput(
   parsedJson: Record<string, unknown>,
   fallbackStyleBlock: string,
-  resolvedInput?: SongArchitectResolvedInput
+  resolvedInput?: SongArchitectResolvedInput,
+  incomingSongDNA?: SongDNA,
+  extras?: {
+    generationOptimizedLyrics?: string;
+    selection?: SongArchitectSelectionPresentation;
+    generationTarget?: GenerationTarget;
+  }
 ): Omit<SongArchitectOutput, "meta"> | null {
   const source = parsedJson;
   const conceptSource = (source.concept ?? {}) as Record<string, unknown>;
@@ -284,22 +368,89 @@ function toRecoveryOutput(
         : "steady rise with high-impact final chorus"
   };
 
+  const songDNA = resolveCanonicalSongDNA({
+    resolvedInput,
+    songDNA: incomingSongDNA,
+    concept
+  });
+  const compiled = compileGenerationPackage(songDNA, extras?.generationTarget ?? { provider: "suno" }, {
+    lyrics: extras?.generationOptimizedLyrics ?? lyrics,
+    cleanLyrics: lyrics,
+    concept,
+    ...(resolvedInput?.songLength
+      ? { runtimeLabel: getSongLengthBlueprint(resolvedInput.songLength).runtimeLabel }
+      : {})
+  });
+
   return {
     concept,
-    stylePrompt,
+    songDNA,
+    stylePrompt: compiled.stylePrompt || stylePrompt,
+    sunoBlueprint: compiled.blueprint,
+    lyrics,
+    generationOptimizedLyrics: extras?.generationOptimizedLyrics ?? lyrics,
+    performanceNotes,
+    altHooks,
+    // Model-created exportPrompt is legacy only. Canonical Song DNA compiler wins.
+    exportPrompt: compiled.exportPrompt,
+    diagnostics,
+    ...(extras?.selection ? { selection: extras.selection } : {}),
+    ...(compiled.diagnostics ? { compilerDiagnostics: compiled.diagnostics } : {})
+  };
+}
+
+export function parseSongArchitectCandidateFromRaw(
+  rawOutputText: string,
+  id: SongArchitectCandidateId
+): SongArchitectCandidate {
+  const parsed = safeParseJsonObject(rawOutputText);
+  if (!parsed.value) {
+    throw new Error("Could not parse JSON object from model output.");
+  }
+  const validated = SongArchitectModelOutputSchema.safeParse(parsed.value);
+  const source = validated.success ? validated.data : parsed.value;
+  const conceptSource = (source.concept ?? {}) as Record<string, unknown>;
+  const lyricsSections = normalizeLyricsSections((source as { lyricsSections?: unknown }).lyricsSections, "modern vocal");
+  const { lyricSections } = extractStylePromptFromSections(lyricsSections, "modern vocal");
+  const lyrics = assembleCandidateLyrics(lyricSections);
+  if (!lyrics) {
+    throw new Error("Song Architect candidate lyrics could not be assembled.");
+  }
+  const concept = validated.success
+    ? validated.data.concept
+    : {
+        theme: typeof conceptSource.theme === "string" ? conceptSource.theme : "Custom artist story",
+        angle: typeof conceptSource.angle === "string" ? conceptSource.angle : "Escalating personal tension",
+        emotion: typeof conceptSource.emotion === "string" ? conceptSource.emotion : "Driven",
+        hookIdentity:
+          typeof conceptSource.hookIdentity === "string" ? conceptSource.hookIdentity : "Memorable repeatable anchor phrase",
+        tensionWords: Array.isArray(conceptSource.tensionWords)
+          ? conceptSource.tensionWords.filter((word): word is string => typeof word === "string").slice(0, 10)
+          : ["pressure", "release"],
+        structure:
+          typeof conceptSource.structure === "string"
+            ? conceptSource.structure
+            : "Verse 1 > Pre-Chorus > Chorus > Verse 2 > Bridge > Final Chorus",
+        energyCurve:
+          typeof conceptSource.energyCurve === "string" ? conceptSource.energyCurve : "steady rise with high-impact final chorus"
+      };
+  const performanceNotes = Array.isArray((source as { performanceNotes?: unknown }).performanceNotes)
+    ? ((source as { performanceNotes: unknown[] }).performanceNotes.filter(
+        (note): note is string => typeof note === "string"
+      ) as string[])
+    : [];
+  const altHooks = Array.isArray((source as { altHooks?: unknown }).altHooks)
+    ? ((source as { altHooks: unknown[] }).altHooks.filter((hook): hook is string => typeof hook === "string") as string[])
+    : [];
+
+  return {
+    id,
+    concept,
+    lyricsSections: lyricSections,
     lyrics,
     performanceNotes,
     altHooks,
-    exportPrompt:
-      typeof source.exportPrompt === "string" && source.exportPrompt.trim()
-        ? source.exportPrompt
-        : buildExportPrompt(
-            { concept, lyrics },
-            resolvedInput?.songLength
-              ? { runtimeLabel: getSongLengthBlueprint(resolvedInput.songLength).runtimeLabel }
-              : undefined
-          ),
-    diagnostics
+    rawOutputText
   };
 }
 
@@ -309,6 +460,10 @@ export function normalizeSongArchitectOutput(args: {
   generatedAt: string;
   presetUsed?: string;
   resolvedInput?: SongArchitectResolvedInput;
+  songDNA?: SongDNA;
+  generationOptimizedLyrics?: string;
+  selection?: SongArchitectSelectionPresentation;
+  generationTarget?: GenerationTarget;
   log?: (event: string, payload: Record<string, unknown>) => void;
 }): SongArchitectOutput {
   const parsed = safeParseJsonObject(args.rawOutputText);
@@ -316,11 +471,16 @@ export function normalizeSongArchitectOutput(args: {
   if (!parsed.value) {
     throw new Error("Could not parse JSON object from model output.");
   }
-  const fallbackStyleBlock = buildStyleBlock(args.resolvedInput);
+  const seedDNA = args.songDNA ?? (args.resolvedInput ? buildSongDNA(args.resolvedInput) : undefined);
+  const fallbackStyleBlock = buildStyleBlock(args.resolvedInput, seedDNA);
   const validated = SongArchitectModelOutputSchema.safeParse(parsed.value);
 
   if (!validated.success) {
-    const recovered = toRecoveryOutput(parsed.value, fallbackStyleBlock, args.resolvedInput);
+    const recovered = toRecoveryOutput(parsed.value, fallbackStyleBlock, args.resolvedInput, seedDNA, {
+      generationOptimizedLyrics: args.generationOptimizedLyrics,
+      selection: args.selection,
+      generationTarget: args.generationTarget
+    });
     if (!recovered) {
       throw new Error("Song Architect model output did not match expected schema.");
     }
@@ -346,31 +506,43 @@ export function normalizeSongArchitectOutput(args: {
     throw new Error("Song Architect lyricsSections could not be assembled into lyrics.");
   }
   const diagnostics = buildDefaultDiagnostics();
-  const outputForExport = {
+  const songDNA = resolveCanonicalSongDNA({
+    resolvedInput: args.resolvedInput,
+    songDNA: seedDNA,
+    concept: validated.data.concept
+  });
+  const compiled = compileGenerationPackage(songDNA, args.generationTarget ?? { provider: "suno" }, {
+    lyrics: args.generationOptimizedLyrics ?? lyrics,
+    cleanLyrics: lyrics,
     concept: validated.data.concept,
-    lyrics
-  };
-  const exportPrompt =
-    validated.data.exportPrompt?.trim() ||
-    buildExportPrompt(
-      outputForExport,
-      args.resolvedInput?.songLength
-        ? { runtimeLabel: getSongLengthBlueprint(args.resolvedInput.songLength).runtimeLabel }
-        : undefined
-    );
+    ...(args.resolvedInput?.songLength
+      ? { runtimeLabel: getSongLengthBlueprint(args.resolvedInput.songLength).runtimeLabel }
+      : {})
+  });
   args.log?.("normalize_success", {
     parseStrategy: parsed.strategy,
-    usedRecovery: false
+    usedRecovery: false,
+    exportPromptAuthority: "song_dna_compiler",
+    ignoredLegacyModelExportPrompt: Boolean(validated.data.exportPrompt?.trim()),
+    compilerStrategy: compiled.diagnostics?.strategy ?? "default",
+    stylePromptLength: compiled.stylePrompt.length,
+    blueprintLength: compiled.blueprint.length
   });
 
   return {
     concept: validated.data.concept,
-    stylePrompt,
+    songDNA,
+    stylePrompt: compiled.stylePrompt || stylePrompt,
+    sunoBlueprint: compiled.blueprint,
     lyrics,
+    generationOptimizedLyrics: args.generationOptimizedLyrics ?? lyrics,
     performanceNotes: validated.data.performanceNotes,
     altHooks: validated.data.altHooks,
-    exportPrompt,
+    // Model-created exportPrompt is legacy only. Canonical Song DNA compiler wins.
+    exportPrompt: compiled.exportPrompt,
     diagnostics,
+    ...(args.selection ? { selection: args.selection } : {}),
+    ...(compiled.diagnostics ? { compilerDiagnostics: compiled.diagnostics } : {}),
     meta: {
       ...(args.presetUsed ? { presetUsed: args.presetUsed } : {}),
       model: args.model,

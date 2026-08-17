@@ -25,6 +25,7 @@
     "test:owner-adaptive-codec": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/owner-adaptive-codec-test.mjs",
     "test:adaptive-sample-rate": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/adaptive-sample-rate-preservation-test.mjs",
     "test:song-architect-funnel": "node scripts/song-architect-premium-funnel-invariants.mjs",
+    "test:song-architect-song-dna": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/song-architect-song-dna-test.mjs",
     "test:mastering-funnel": "node scripts/mastering-funnel-invariants.mjs",
     "test:upload-form-refactor": "node scripts/upload-form-refactor-invariants.mjs",
     "test:ar-ai": "node scripts/ar-ai-invariants.mjs",
@@ -37,7 +38,7 @@
     "test:ai-audio-restoration": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/ai-audio-restoration-test.mjs",
     "test:preset-restoration": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/preset-mastering-restoration-test.mjs",
     "bench:track-analysis-v2": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/track-analysis-v2-benchmark.mjs",
-    "test": "npm run test:api-hardening && npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-source-audio && npm run test:adaptive-openai-reasoning && npm run test:adaptive-stereo-width && npm run test:admin-quality-override && npm run test:job-export-verify && npm run test:owner-adaptive-codec && npm run test:adaptive-sample-rate && npm run test:song-architect-funnel && npm run test:mastering-funnel && npm run test:upload-form-refactor && npm run test:mastering-journey && npm run test:master-readiness && npm run test:track-analysis-v2 && npm run test:track-analysis-v2-flag && npm run test:ai-audio-restoration && npm run test:preset-restoration && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
+    "test": "npm run test:api-hardening && npm run test:anti-abuse && npm run test:wav-export && npm run test:wav-entitlement && npm run test:free-plan-quota && npm run test:mp3-master-export && npm run test:promo && npm run test:subscription-buttons && npm run test:adaptive-reference-artist && npm run test:adaptive-source-audio && npm run test:adaptive-openai-reasoning && npm run test:adaptive-stereo-width && npm run test:admin-quality-override && npm run test:job-export-verify && npm run test:owner-adaptive-codec && npm run test:adaptive-sample-rate && npm run test:song-architect-funnel && npm run test:song-architect-song-dna && npm run test:mastering-funnel && npm run test:upload-form-refactor && npm run test:mastering-journey && npm run test:master-readiness && npm run test:track-analysis-v2 && npm run test:track-analysis-v2-flag && npm run test:ai-audio-restoration && npm run test:preset-restoration && npm run test:ar-ai && npm run test:hit-analyzer-access && npm run test:seo-metadata",
     "inspect:wav": "node scripts/inspect-wav-format.mjs"
   },
   "dependencies": {

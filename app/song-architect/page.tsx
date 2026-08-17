@@ -8,8 +8,18 @@ import { MASTERSOUCE_BILLING_EMAIL_HEADER, MASTERSOUCE_BILLING_EMAIL_KEY } from 
 import { trackSongArchitectFunnelEvent } from "@/lib/song-architect/analytics";
 import type { SongArchitectClientPayload } from "@/lib/song-architect/premium-output";
 import { SONG_ARCHITECT_PRESETS } from "@/lib/song-architect/presets";
+import { formatReferenceDNAPlainText } from "@/lib/song-architect/reference-dna";
+import { formatHarmonyDNAPlainText, listFilledHarmonyFields } from "@/lib/song-architect/harmony-dna";
+import { formatProductionMapPlainText } from "@/lib/song-architect/arrangement-dna";
+import { formatSongDNAPlainText, listFilledSonicFields } from "@/lib/song-architect/song-dna";
+import { formatSonicExclusionsPlainText, hasSonicExclusions } from "@/lib/song-architect/sonic-exclusions";
 import { SONG_LENGTH_UI_OPTIONS } from "@/lib/song-architect/song-length";
-import type { SongArchitectInput, SongArchitectPremiumEnhancements, SongArchitectSongLength } from "@/lib/song-architect/types";
+import type {
+  SongArchitectInput,
+  SongArchitectPremiumEnhancements,
+  SongArchitectSongLength,
+  SongDNA
+} from "@/lib/song-architect/types";
 import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
 
 type FormState = {
@@ -29,6 +39,11 @@ type FormState = {
   mustInclude: string;
   avoidWords: string;
   userNotes: string;
+  bpm: string;
+  groove: string;
+  instrumentFocus: string;
+  productionEra: string;
+  productionTexture: string;
 };
 
 type SongArchitectUsage = {
@@ -76,7 +91,12 @@ const defaultFormState: FormState = {
   referenceArtists: "",
   mustInclude: "",
   avoidWords: "",
-  userNotes: ""
+  userNotes: "",
+  bpm: "",
+  groove: "",
+  instrumentFocus: "",
+  productionEra: "",
+  productionTexture: ""
 };
 
 function csvToList(value: string): string[] | undefined {
@@ -87,7 +107,25 @@ function csvToList(value: string): string[] | undefined {
   return parsed.length > 0 ? parsed : undefined;
 }
 
+function parseOptionalBpm(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === "auto") return undefined;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return undefined;
+  const bpm = Math.round(parsed);
+  if (bpm < 40 || bpm > 240) return undefined;
+  return bpm;
+}
+
 function toPayload(form: FormState): SongArchitectInput {
+  const sonicControls = {
+    ...(parseOptionalBpm(form.bpm) !== undefined ? { bpm: parseOptionalBpm(form.bpm) } : {}),
+    ...(form.groove.trim() ? { groove: form.groove.trim() } : {}),
+    ...(form.instrumentFocus.trim() ? { instrumentFocus: form.instrumentFocus.trim() } : {}),
+    ...(form.productionEra.trim() ? { productionEra: form.productionEra.trim() } : {}),
+    ...(form.productionTexture.trim() ? { productionTexture: form.productionTexture.trim() } : {})
+  };
+
   return {
     preset: form.preset || undefined,
     songLength: form.songLength,
@@ -104,7 +142,8 @@ function toPayload(form: FormState): SongArchitectInput {
     referenceArtists: csvToList(form.referenceArtists),
     mustInclude: csvToList(form.mustInclude),
     avoidWords: csvToList(form.avoidWords),
-    userNotes: form.userNotes.trim() || undefined
+    userNotes: form.userNotes.trim() || undefined,
+    ...(Object.keys(sonicControls).length > 0 ? { sonicControls } : {})
   };
 }
 
@@ -237,6 +276,101 @@ function PremiumOutputSections({ premium }: { premium: SongArchitectPremiumEnhan
   );
 }
 
+function SongDNAOutputCard({ songDNA }: { songDNA: SongDNA }) {
+  const sonicRows = listFilledSonicFields(songDNA.sonic).filter(([key]) => key !== "emotionalSonicExpression");
+  const harmonyRows = songDNA.harmony ? listFilledHarmonyFields(songDNA.harmony).slice(0, 8) : [];
+  return (
+    <div style={conceptCardStyle}>
+      <div style={outputCardHeaderStyle}>
+        <p style={outputHeadingStyle}>Song DNA</p>
+        <CopyButton label="Copy Song DNA" value={formatSongDNAPlainText(songDNA)} />
+      </div>
+      <p style={outputLineStyle}>
+        <strong style={outputKeyStyle}>Emotional intent:</strong> {songDNA.composition.emotionalIntent}
+      </p>
+      <p style={outputLineStyle}>
+        <strong style={outputKeyStyle}>Sonic expression:</strong>{" "}
+        {songDNA.sonic.emotionalSonicExpression ?? "Inferred from emotional intent"}
+      </p>
+      <p style={outputLineStyle}>
+        <strong style={outputKeyStyle}>Perspective:</strong> {songDNA.composition.lyricalPerspective}
+      </p>
+      <p style={outputLineStyle}>
+        <strong style={outputKeyStyle}>Runtime:</strong> {songDNA.composition.runtime}
+      </p>
+      {sonicRows.slice(0, 6).map(([key, value]) => (
+        <p key={key} style={outputLineStyle}>
+          <strong style={outputKeyStyle}>{key}:</strong> {value}
+        </p>
+      ))}
+
+      <details style={dnaDetailsStyle}>
+        <summary style={dnaSummaryStyle}>Sonic DNA</summary>
+        {sonicRows.map(([key, value]) => (
+          <p key={`sonic-${key}`} style={outputLineStyle}>
+            <strong style={outputKeyStyle}>{key}:</strong> {value}
+          </p>
+        ))}
+      </details>
+
+      {songDNA.reference ? (
+        <details style={dnaDetailsStyle}>
+          <summary style={dnaSummaryStyle}>Reference DNA</summary>
+          <p style={outputLineStyle}>{songDNA.reference.influenceSummary}</p>
+          <CopyButton label="Copy Reference DNA" value={formatReferenceDNAPlainText(songDNA.reference)} />
+        </details>
+      ) : null}
+
+      {songDNA.harmony ? (
+        <details style={dnaDetailsStyle}>
+          <summary style={dnaSummaryStyle}>Harmony DNA</summary>
+          {harmonyRows.map(([key, value]) => (
+            <p key={`harmony-${key}`} style={outputLineStyle}>
+              <strong style={outputKeyStyle}>{key}:</strong> {value}
+            </p>
+          ))}
+          <CopyButton label="Copy Harmony DNA" value={formatHarmonyDNAPlainText(songDNA.harmony)} />
+        </details>
+      ) : null}
+
+      {hasSonicExclusions(songDNA.sonicExclusions) && songDNA.sonicExclusions ? (
+        <details style={dnaDetailsStyle}>
+          <summary style={dnaSummaryStyle}>Sonic Exclusions</summary>
+          <pre style={lyricsStyle}>{formatSonicExclusionsPlainText(songDNA.sonicExclusions)}</pre>
+        </details>
+      ) : null}
+
+      {songDNA.arrangement ? (
+        <details style={dnaDetailsStyle}>
+          <summary style={dnaSummaryStyle}>Production Map</summary>
+          {songDNA.arrangement.globalArc ? (
+            <p style={outputLineStyle}>
+              <strong style={outputKeyStyle}>Arc:</strong> {songDNA.arrangement.globalArc}
+            </p>
+          ) : null}
+          {songDNA.arrangement.sections.map((section) => (
+            <div key={section.id} style={{ marginTop: "8px" }}>
+              <p style={outputLineStyle}>
+                <strong style={outputKeyStyle}>{section.label.toUpperCase()}</strong>
+              </p>
+              {section.energy !== undefined ? (
+                <p style={outputLineStyle}>Energy: {section.energy}/10</p>
+              ) : null}
+              {section.vocalDirection ? <p style={outputLineStyle}>Vocals: {section.vocalDirection}</p> : null}
+              {section.drumDirection ? <p style={outputLineStyle}>Drums: {section.drumDirection}</p> : null}
+              {section.density ? <p style={outputLineStyle}>Arrangement: {section.density}</p> : null}
+              {section.transitionIntoNext ? (
+                <p style={outputLineStyle}>Transition: {section.transitionIntoNext}</p>
+              ) : null}
+            </div>
+          ))}
+          <CopyButton label="Copy Production Map" value={formatProductionMapPlainText(songDNA.arrangement)} />
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 const songLengthSectionStyle: React.CSSProperties = {
   marginTop: "14px",
   padding: "12px",
@@ -332,6 +466,46 @@ const songLengthCardDescStyle: React.CSSProperties = {
   color: "#9aa8cf",
   fontSize: "0.74rem",
   lineHeight: 1.45
+};
+
+const advancedSonicDetailsStyle: React.CSSProperties = {
+  marginTop: "12px",
+  padding: "10px 12px 12px",
+  borderRadius: "14px",
+  border: "1px solid rgba(118, 136, 210, 0.28)",
+  background: "rgba(10, 16, 32, 0.55)"
+};
+
+const advancedSonicSummaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  color: "#d7e3ff",
+  fontWeight: 700,
+  fontSize: "0.86rem",
+  letterSpacing: "0.01em"
+};
+
+const advancedSonicHintStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#9aa8cf",
+  fontSize: "0.76rem",
+  lineHeight: 1.45
+};
+
+const dnaDetailsStyle: React.CSSProperties = {
+  marginTop: "10px",
+  padding: "8px 10px",
+  borderRadius: "10px",
+  border: "1px solid rgba(118, 136, 210, 0.22)",
+  background: "rgba(10, 16, 32, 0.4)"
+};
+
+const dnaSummaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  color: "#c9d7ff",
+  fontWeight: 700,
+  fontSize: "0.76rem",
+  letterSpacing: "0.06em",
+  textTransform: "uppercase"
 };
 
 const SONG_ARCHITECT_BENEFITS = [
@@ -805,6 +979,61 @@ export default function SongArchitectPage() {
             />
           </label>
 
+          <details style={advancedSonicDetailsStyle}>
+            <summary style={advancedSonicSummaryStyle}>Advanced Sonic Controls</summary>
+            <p style={advancedSonicHintStyle}>
+              Optional. Defaults stay automatic — Song Architect infers Sonic DNA from genre, emotion, and vocal style.
+            </p>
+            <div style={fieldGridStyle}>
+              <label style={fieldLabelStyle}>
+                BPM / Auto
+                <input
+                  style={inputStyle}
+                  inputMode="numeric"
+                  value={form.bpm}
+                  onChange={(event) => setForm((current) => ({ ...current, bpm: event.target.value }))}
+                  placeholder="Auto"
+                />
+              </label>
+              <label style={fieldLabelStyle}>
+                Groove
+                <input
+                  style={inputStyle}
+                  value={form.groove}
+                  onChange={(event) => setForm((current) => ({ ...current, groove: event.target.value }))}
+                  placeholder="Leave blank to infer"
+                />
+              </label>
+              <label style={fieldLabelStyle}>
+                Instrument Focus
+                <input
+                  style={inputStyle}
+                  value={form.instrumentFocus}
+                  onChange={(event) => setForm((current) => ({ ...current, instrumentFocus: event.target.value }))}
+                  placeholder="Leave blank to infer"
+                />
+              </label>
+              <label style={fieldLabelStyle}>
+                Production Era
+                <input
+                  style={inputStyle}
+                  value={form.productionEra}
+                  onChange={(event) => setForm((current) => ({ ...current, productionEra: event.target.value }))}
+                  placeholder="Leave blank to infer"
+                />
+              </label>
+              <label style={fieldLabelStyle}>
+                Production Texture
+                <input
+                  style={inputStyle}
+                  value={form.productionTexture}
+                  onChange={(event) => setForm((current) => ({ ...current, productionTexture: event.target.value }))}
+                  placeholder="Leave blank to infer"
+                />
+              </label>
+            </div>
+          </details>
+
           {selectedPreset ? <p style={presetHintStyle}>{selectedPreset.description}</p> : null}
           <p style={freeTierNoticeStyle}>3 free blueprints per month — no card required. Email confirmed at export.</p>
           <button type="submit" style={primaryButtonStyle} disabled={isGenerating}>
@@ -857,6 +1086,8 @@ export default function SongArchitectPage() {
                 ) : null}
               </div>
 
+              {result.basic.songDNA ? <SongDNAOutputCard songDNA={result.basic.songDNA} /> : null}
+
               <div style={conceptCardStyle}>
                 <div style={outputCardHeaderStyle}>
                   <p style={outputHeadingStyle}>Style Prompt</p>
@@ -865,6 +1096,27 @@ export default function SongArchitectPage() {
                 <pre style={lyricsStyle}>{result.basic.stylePrompt}</pre>
               </div>
 
+              {result.basic.sunoBlueprint ? (
+                <div style={conceptCardStyle}>
+                  <div style={outputCardHeaderStyle}>
+                    <p style={outputHeadingStyle}>Suno Blueprint</p>
+                    <CopyButton label="Copy Blueprint" value={result.basic.sunoBlueprint} />
+                  </div>
+                  <pre style={lyricsStyle}>{result.basic.sunoBlueprint}</pre>
+                </div>
+              ) : null}
+
+              {result.basic.selection?.whyThisVersion && result.basic.selection.whyThisVersion.length > 0 ? (
+                <details style={dnaDetailsStyle}>
+                  <summary style={dnaSummaryStyle}>Why this version</summary>
+                  <ul style={outputListStyle}>
+                    {result.basic.selection.whyThisVersion.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+
               <div style={conceptCardStyle}>
                 <div style={outputCardHeaderStyle}>
                   <p style={outputHeadingStyle}>Lyrics</p>
@@ -872,6 +1124,31 @@ export default function SongArchitectPage() {
                 </div>
                 <pre style={lyricsStyle}>{result.basic.lyrics}</pre>
               </div>
+
+              {result.basic.selection?.pronunciationAdjustments &&
+              result.basic.selection.pronunciationAdjustments.length > 0 ? (
+                <details style={dnaDetailsStyle}>
+                  <summary style={dnaSummaryStyle}>Pronunciation adjustments</summary>
+                  <ul style={outputListStyle}>
+                    {result.basic.selection.pronunciationAdjustments.map((item) => (
+                      <li key={`${item.word}-${item.pronunciation}`}>
+                        {item.word} → {item.pronunciation}
+                      </li>
+                    ))}
+                  </ul>
+                  {result.basic.generationOptimizedLyrics &&
+                  result.basic.generationOptimizedLyrics !== result.basic.lyrics ? (
+                    <>
+                      <p style={outputLineStyle}>
+                        <strong style={outputKeyStyle}>Generation-optimized lyrics</strong> are for Suno paste only. The
+                        lyrics above stay the clean canonical version.
+                      </p>
+                      <CopyButton label="Copy Generation Lyrics" value={result.basic.generationOptimizedLyrics} />
+                      <pre style={lyricsStyle}>{result.basic.generationOptimizedLyrics}</pre>
+                    </>
+                  ) : null}
+                </details>
+              ) : null}
 
               {result.premiumLocked ? (
                 <PremiumLockedPanel

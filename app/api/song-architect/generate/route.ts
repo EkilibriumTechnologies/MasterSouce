@@ -4,15 +4,26 @@ import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/ide
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 import { hasTrustedEmailAccess } from "@/lib/security/verified-email-state";
 import { logSongArchitectFunnelEvent } from "@/lib/song-architect/analytics";
+import { resolveCandidateStrategy } from "@/lib/song-architect/candidate-strategy";
 import { recordSongArchitectGenerationEvent } from "@/lib/song-architect/entitlements";
+import { applyRepairedCandidate, runSongArchitectPhase4 } from "@/lib/song-architect/generation-pipeline";
 import { isSongArchitectPremiumPlan } from "@/lib/song-architect/premium-access";
 import { partitionSongArchitectClientPayload } from "@/lib/song-architect/premium-output";
-import { normalizeSongArchitectOutput } from "@/lib/song-architect/normalize-output";
-import { buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
+import { normalizeSongArchitectOutput, parseSongArchitectCandidateFromRaw } from "@/lib/song-architect/normalize-output";
+import { buildRepairSystemPrompt, buildRepairUserPrompt, buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
 import { resolveSongArchitectInput } from "@/lib/song-architect/resolve-input";
+import { buildSongDNA } from "@/lib/song-architect/song-dna";
 import { getSongLengthBlueprint, parseSongArchitectSongLength } from "@/lib/song-architect/song-length";
 import { resolveSongArchitectVerifiedContext } from "@/lib/song-architect/access";
-import type { SongArchitectInput, SongArchitectResolvedInput } from "@/lib/song-architect/types";
+import type {
+  GenerationTarget,
+  SongArchitectCandidate,
+  SongArchitectCandidateId,
+  SongArchitectInput,
+  SongArchitectResolvedInput,
+  SongArchitectSelectionPresentation,
+  SongDNA
+} from "@/lib/song-architect/types";
 
 const MAX_OUTPUT_TOKENS_HARD_CAP = 8192;
 const MAX_OUTPUT_TOKENS_FLOOR = 1800;
@@ -35,12 +46,47 @@ const SongArchitectInputSchema = z.object({
   vocalStyle: z.string().trim().min(1).max(140).optional(),
   lineDensity: z.enum(["sparse", "balanced", "dense"]).optional(),
   referenceArtists: z.array(z.string().trim().min(1).max(80)).max(6).optional(),
+  references: z
+    .array(
+      z.object({
+        type: z.enum(["artist", "song", "audio", "analyzed_track", "artist_dna"]),
+        label: z.string().trim().min(1).max(80)
+      })
+    )
+    .max(6)
+    .optional(),
   mustInclude: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
   avoidWords: z.array(z.string().trim().min(1).max(60)).max(10).optional(),
-  userNotes: z.string().trim().max(700).optional()
+  userNotes: z.string().trim().max(700).optional(),
+  pronunciationOverrides: z
+    .array(
+      z.object({
+        word: z.string().trim().min(1).max(80),
+        pronunciation: z.string().trim().min(1).max(120),
+        reason: z.string().trim().min(1).max(160).optional()
+      })
+    )
+    .max(24)
+    .optional(),
+  sonicControls: z
+    .object({
+      bpm: z.number().int().min(40).max(240).optional(),
+      groove: z.string().trim().min(1).max(80).optional(),
+      instrumentFocus: z.string().trim().min(1).max(80).optional(),
+      productionEra: z.string().trim().min(1).max(60).optional(),
+      productionTexture: z.string().trim().min(1).max(80).optional()
+    })
+    .optional()
 });
 const SongArchitectRequestSchema = SongArchitectInputSchema.extend({
-  billingEmail: z.string().trim().optional()
+  billingEmail: z.string().trim().optional(),
+  generationTarget: z
+    .object({
+      provider: z.enum(["suno", "generic"]).optional(),
+      version: z.string().trim().min(1).max(40).optional(),
+      strategy: z.enum(["default", "concise", "extended", "legacy"]).optional()
+    })
+    .optional()
 });
 
 const OPENAI_RESPONSE_SCHEMA = {
@@ -123,11 +169,37 @@ function logDebug(event: string, payload: Record<string, unknown>) {
   }
 }
 
+type OpenAIUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+};
+
+function mergeUsage(left?: OpenAIUsage, right?: OpenAIUsage): OpenAIUsage | undefined {
+  if (!left && !right) return undefined;
+  return {
+    input_tokens: (left?.input_tokens ?? 0) + (right?.input_tokens ?? 0),
+    output_tokens: (left?.output_tokens ?? 0) + (right?.output_tokens ?? 0),
+    total_tokens: (left?.total_tokens ?? 0) + (right?.total_tokens ?? 0)
+  };
+}
+
 async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promise<{
   outputText: string;
   model: string;
   presetUsed?: string;
   resolvedInput: SongArchitectResolvedInput;
+  songDNA: SongDNA;
+  generationOptimizedLyrics?: string;
+  selection?: SongArchitectSelectionPresentation;
+  observability: {
+    candidateMode: "single_candidate" | "multi_candidate";
+    candidateCount: number;
+    repaired: boolean;
+    selectionScoreDelta: number;
+    pronunciationAdjustmentCount: number;
+    usage?: OpenAIUsage;
+  };
 }> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -140,6 +212,7 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
   const reasoningEffort = process.env.OPENAI_SONG_ARCHITECT_REASONING_EFFORT?.trim() || DEFAULT_REASONING_EFFORT;
 
   const { resolved, presetUsed } = resolveSongArchitectInput(input);
+  const songDNA = buildSongDNA(resolved);
   const firstAttemptMaxOutputTokens = Math.min(
     MAX_OUTPUT_TOKENS_HARD_CAP,
     Math.max(
@@ -152,7 +225,9 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
     timeoutMs: number;
     maxOutputTokens: number;
     reasoningEffort?: string;
-  }): Promise<string> {
+    systemText: string;
+    userText: string;
+  }): Promise<{ outputText: string; usage?: OpenAIUsage }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), args.timeoutMs);
     const startedAt = Date.now();
@@ -163,11 +238,11 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
         input: [
           {
             role: "system",
-            content: [{ type: "input_text", text: buildSystemPrompt(resolved) }]
+            content: [{ type: "input_text", text: args.systemText }]
           },
           {
             role: "user",
-            content: [{ type: "input_text", text: buildUserPrompt(resolved) }]
+            content: [{ type: "input_text", text: args.userText }]
           }
         ],
         max_output_tokens: args.maxOutputTokens,
@@ -283,7 +358,7 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
         throw new SongArchitectOpenAIError("empty_output", "OpenAI returned no usable output.");
       }
 
-      return outputText;
+      return { outputText, usage: payload.usage };
     } catch (error) {
       if (error instanceof SongArchitectOpenAIError) {
         throw error;
@@ -297,29 +372,115 @@ async function requestSongArchitectFromOpenAI(input: SongArchitectInput): Promis
     }
   }
 
-  try {
-    const outputText = await callOpenAI({
-      attempt: 1,
-      timeoutMs,
-      maxOutputTokens: firstAttemptMaxOutputTokens,
-      reasoningEffort
-    });
-    return { outputText, model, presetUsed, resolvedInput: resolved };
-  } catch (error) {
-    // Slow responses are common with strict JSON schema + long-form lyrics.
-    // Retry once with a longer timeout and simpler reasoning settings.
-    if (error instanceof SongArchitectOpenAIError && (error.code === "timeout" || error.code === "token_limit")) {
-      const retryOutputText = await callOpenAI({
-        attempt: 2,
-        timeoutMs: Math.min(Math.round(timeoutMs * 1.5), MAX_TIMEOUT_MS),
-        maxOutputTokens: Math.min(6500, Math.max(3200, Math.round(firstAttemptMaxOutputTokens * 1.55))),
-        reasoningEffort: DEFAULT_REASONING_EFFORT
+  async function callOpenAIWithRetry(systemText: string, userText: string): Promise<{ outputText: string; usage?: OpenAIUsage }> {
+    try {
+      return await callOpenAI({
+        attempt: 1,
+        timeoutMs,
+        maxOutputTokens: firstAttemptMaxOutputTokens,
+        reasoningEffort,
+        systemText,
+        userText
       });
-      return { outputText: retryOutputText, model, presetUsed, resolvedInput: resolved };
+    } catch (error) {
+      // Slow responses are common with strict JSON schema + long-form lyrics.
+      // Retry once with a longer timeout and simpler reasoning settings.
+      if (error instanceof SongArchitectOpenAIError && (error.code === "timeout" || error.code === "token_limit")) {
+        return callOpenAI({
+          attempt: 2,
+          timeoutMs: Math.min(Math.round(timeoutMs * 1.5), MAX_TIMEOUT_MS),
+          maxOutputTokens: Math.min(6500, Math.max(3200, Math.round(firstAttemptMaxOutputTokens * 1.55))),
+          reasoningEffort: DEFAULT_REASONING_EFFORT,
+          systemText,
+          userText
+        });
+      }
+      throw error;
     }
-
-    throw error;
   }
+
+  const strategy = resolveCandidateStrategy();
+  const slots: SongArchitectCandidateId[] = strategy.requestedCount === 2 ? ["A", "B"] : ["A"];
+  const systemText = buildSystemPrompt(resolved, songDNA);
+
+  async function generateSlot(slot: SongArchitectCandidateId): Promise<{ candidate: SongArchitectCandidate; usage?: OpenAIUsage }> {
+    const result = await callOpenAIWithRetry(systemText, buildUserPrompt(resolved, songDNA, { candidateSlot: slot }));
+    return {
+      candidate: parseSongArchitectCandidateFromRaw(result.outputText, slot),
+      usage: result.usage
+    };
+  }
+
+  const settled = strategy.parallel
+    ? await Promise.allSettled(slots.map((slot) => generateSlot(slot)))
+    : await Promise.all(
+        slots.map(async (slot) => {
+          try {
+            return { status: "fulfilled" as const, value: await generateSlot(slot) };
+          } catch (reason) {
+            return { status: "rejected" as const, reason };
+          }
+        })
+      );
+
+  const generated: Array<{ candidate: SongArchitectCandidate; usage?: OpenAIUsage }> = [];
+  const failures: unknown[] = [];
+  for (const result of settled) {
+    if (result.status === "fulfilled") generated.push(result.value);
+    else failures.push(result.reason);
+  }
+  if (generated.length === 0) {
+    const firstFailure = failures[0];
+    if (firstFailure instanceof Error) throw firstFailure;
+    throw new SongArchitectOpenAIError("empty_output", "Song Architect returned no usable candidate.");
+  }
+
+  let usage = generated.reduce<OpenAIUsage | undefined>((acc, item) => mergeUsage(acc, item.usage), undefined);
+  let phase4 = runSongArchitectPhase4({
+    songDNA,
+    resolvedInput: resolved,
+    candidates: generated.map((item) => item.candidate),
+    candidateMode: strategy.mode,
+    pronunciationOverrides: resolved.pronunciationOverrides
+  });
+
+  if (phase4.repairRecommended) {
+    const repairResult = await callOpenAIWithRetry(
+      buildRepairSystemPrompt(resolved, songDNA),
+      buildRepairUserPrompt({
+        songDNA,
+        candidate: phase4.selected,
+        targets: phase4.repairTargets
+      })
+    );
+    usage = mergeUsage(usage, repairResult.usage);
+    const repaired = parseSongArchitectCandidateFromRaw(repairResult.outputText, phase4.selected.id);
+    phase4 = applyRepairedCandidate(phase4, repaired, {
+      songDNA,
+      resolvedInput: resolved,
+      pronunciationOverrides: resolved.pronunciationOverrides
+    });
+  }
+
+  return {
+    outputText: phase4.selected.rawOutputText ?? JSON.stringify({
+      concept: phase4.selected.concept,
+      lyricsSections: phase4.selected.lyricsSections,
+      performanceNotes: phase4.selected.performanceNotes,
+      altHooks: phase4.selected.altHooks,
+      exportPrompt: "legacy"
+    }),
+    model,
+    presetUsed,
+    resolvedInput: resolved,
+    songDNA,
+    generationOptimizedLyrics: phase4.pronunciation.generationOptimizedLyrics,
+    selection: phase4.presentation,
+    observability: {
+      ...phase4.observability,
+      usage
+    }
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -390,6 +551,14 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
+    const generationTarget: GenerationTarget | undefined = parsed.data.generationTarget
+      ? {
+          provider: parsed.data.generationTarget.provider === "generic" ? "generic" : "suno",
+          ...(parsed.data.generationTarget.version ? { version: parsed.data.generationTarget.version } : {}),
+          ...(parsed.data.generationTarget.strategy ? { strategy: parsed.data.generationTarget.strategy } : {})
+        }
+      : undefined;
+
     const inputPayload: SongArchitectInput = {
       preset: parsed.data.preset,
       songLength: parsed.data.songLength,
@@ -404,9 +573,12 @@ export async function POST(request: NextRequest) {
       vocalStyle: parsed.data.vocalStyle,
       lineDensity: parsed.data.lineDensity,
       referenceArtists: parsed.data.referenceArtists,
+      references: parsed.data.references,
       mustInclude: parsed.data.mustInclude,
       avoidWords: parsed.data.avoidWords,
-      userNotes: parsed.data.userNotes
+      userNotes: parsed.data.userNotes,
+      pronunciationOverrides: parsed.data.pronunciationOverrides,
+      sonicControls: parsed.data.sonicControls
     };
 
     const hasMeaningfulInput = Object.values(inputPayload).some((value) => {
@@ -513,6 +685,17 @@ export async function POST(request: NextRequest) {
       model: string;
       presetUsed?: string;
       resolvedInput: SongArchitectResolvedInput;
+      songDNA: SongDNA;
+      generationOptimizedLyrics?: string;
+      selection?: SongArchitectSelectionPresentation;
+      observability: {
+        candidateMode: "single_candidate" | "multi_candidate";
+        candidateCount: number;
+        repaired: boolean;
+        selectionScoreDelta: number;
+        pronunciationAdjustmentCount: number;
+        usage?: OpenAIUsage;
+      };
     };
     openAiResult = await requestSongArchitectFromOpenAI(inputPayload);
     logDebug("openai_response_received", {
@@ -527,6 +710,10 @@ export async function POST(request: NextRequest) {
         generatedAt: new Date().toISOString(),
         presetUsed: openAiResult.presetUsed,
         resolvedInput: openAiResult.resolvedInput,
+        songDNA: openAiResult.songDNA,
+        generationOptimizedLyrics: openAiResult.generationOptimizedLyrics,
+        selection: openAiResult.selection,
+        generationTarget,
         log: (event, payload) => logDebug(event, payload)
       });
     } catch (error) {
@@ -543,6 +730,16 @@ export async function POST(request: NextRequest) {
 
     logDebug("request_success", {
       elapsedMs: Date.now() - requestStartedAt
+    });
+    console.info("[song-architect] phase4_observability", {
+      candidateMode: openAiResult.observability.candidateMode,
+      candidateCount: openAiResult.observability.candidateCount,
+      repaired: openAiResult.observability.repaired,
+      selectionScoreDelta: openAiResult.observability.selectionScoreDelta,
+      pronunciationAdjustmentCount: openAiResult.observability.pronunciationAdjustmentCount,
+      generationLatencyMs: Date.now() - requestStartedAt,
+      model: openAiResult.model,
+      usage: openAiResult.observability.usage ?? null
     });
     const usagePlanId = trustedAccess.usage.planId ?? "free";
     if (!trustedAccess.usage.planId) {

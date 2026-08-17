@@ -15,5 +15,9 @@ export const CORE_SONGWRITING_RULES = [
   "EDM = sparse/drop-focused",
   "Ballad = spacious/melodic",
   "Use specific memorable hook identity",
+  "Honor the provided Song DNA as the single source of truth; do not invent a conflicting genre, emotion, or production story",
+  "Keep emotional intent (what the song feels) separate from sonic expression (how that feeling is realized musically)",
+  "Use resolved Sonic DNA plus Harmony DNA, Arrangement DNA, and sonic exclusions as one brief; do not imitate named artists or treat Avoid Words as sonic exclusions",
+  "Treat energy as arrangement intensity (density, movement, contrast), never as mastering loudness",
   "Output must follow strict Suno/Udio-ready formatting"
 ] as const;
