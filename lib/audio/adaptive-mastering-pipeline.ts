@@ -27,6 +27,13 @@ import {
   shouldApplyAdaptiveStereoWidthFilter,
   type AdaptiveStereoIntent
 } from "@/lib/audio/adaptive-stereo-width";
+import {
+  applyMasterCharacter,
+  buildMasterCharacterContext,
+  DEFAULT_MASTER_CHARACTER,
+  parseMasterCharacter,
+  type MasterCharacter
+} from "@/lib/audio/master-character";
 
 export type AdaptiveMasteringRequest = {
   inputPath: string;
@@ -34,6 +41,8 @@ export type AdaptiveMasteringRequest = {
   genre?: keyof typeof GENRE_PRESETS;
   loudnessMode?: LoudnessMode;
   userIntent?: string;
+  /** Optional artistic bias applied after Adaptive decisions. Defaults to Recommended. */
+  masterCharacter?: MasterCharacter | string | null;
   referenceAnalysis?: TrackAnalysis;
   outputQuality: PlanQuality;
   analyzeForAdaptive?: AdaptiveTrackAnalyzer;
@@ -66,6 +75,10 @@ export type AdaptiveMasteringResult = {
   adaptiveAnalysis: TrackAnalysis | null;
   adaptiveReadiness: ReturnType<typeof evaluateTrackReadiness> | null;
   instructionSummary: AdaptiveInstructionSummary;
+  /** Character selected for this render (Recommended = no bias). */
+  masterCharacter: MasterCharacter;
+  /** Adaptive settings before Character bias (observability / regression). */
+  adaptiveBaselineSettings: AdaptiveInstructionSettings;
   referenceTrackApplied: boolean;
   adaptiveMasteredPath: string;
   adaptivePreviewPath: string;
@@ -414,6 +427,41 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
       request.referenceAnalysis
     );
   }
+
+  const masterCharacter = parseMasterCharacter(request.masterCharacter ?? DEFAULT_MASTER_CHARACTER);
+  const adaptiveBaselineSettings = {
+    eqDirection: { ...instructionSummary.settings.eqDirection },
+    compressionIntensity: instructionSummary.settings.compressionIntensity,
+    saturationAmount: instructionSummary.settings.saturationAmount,
+    stereoWidth: instructionSummary.settings.stereoWidth,
+    targetLufs: instructionSummary.settings.targetLufs,
+    limiterCeilingDb: instructionSummary.settings.limiterCeilingDb,
+    transientHandling: instructionSummary.settings.transientHandling,
+    vocalPresenceEmphasis: instructionSummary.settings.vocalPresenceEmphasis
+  };
+  const characterResult = applyMasterCharacter(
+    adaptiveBaselineSettings,
+    masterCharacter,
+    buildMasterCharacterContext({
+      alreadyLimited: baselineAnalysis.alreadyLimited,
+      lowEndDb: baselineAnalysis.lowEndDb,
+      adaptiveLowEndEqDb: adaptiveBaselineSettings.eqDirection.lowEnd,
+      stereoIntent
+    })
+  );
+  instructionSummary = {
+    ...instructionSummary,
+    settings: characterResult.settings
+  };
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[ADAPTIVE_CHARACTER_DEBUG]", {
+      selectedCharacter: characterResult.character,
+      adaptiveBaselineSettings,
+      characterBiasApplied: characterResult.biasApplied,
+      finalEffectiveSettings: characterResult.settings
+    });
+  }
+
   const outputCodec = resolveCodecForQuality(request.outputQuality);
   const inputProbe = await probeAudioStream(request.inputPath);
   const exportSampleRate = resolveExportSampleRate(inputProbe.sample_rate);
@@ -546,6 +594,7 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
         adaptivePeakDb: adaptiveAnalysis?.peakDb ?? null,
         baselineCrestDb: baselineAnalysis.crestDb,
         adaptiveCrestDb: adaptiveAnalysis?.crestDb ?? null,
+        masterCharacter: characterResult.character,
         targetLufs: instructionSummary.settings.targetLufs,
         limiterCeilingDb: instructionSummary.settings.limiterCeilingDb,
         compressionIntensity: instructionSummary.settings.compressionIntensity,
@@ -617,6 +666,8 @@ export async function runAdaptiveMasteringPipeline(request: AdaptiveMasteringReq
     adaptiveAnalysis,
     adaptiveReadiness: adaptiveAnalysis ? evaluateTrackReadiness(adaptiveAnalysis, "postmaster") : null,
     instructionSummary,
+    masterCharacter: characterResult.character,
+    adaptiveBaselineSettings,
     referenceTrackApplied,
     adaptiveMasteredPath,
     adaptivePreviewPath,

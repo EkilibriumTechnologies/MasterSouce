@@ -21,8 +21,10 @@ import { resolveAdaptiveSourceAudio } from "@/lib/audio/resolve-adaptive-source-
 import {
   formDataToFieldRecord,
   normalizeAdaptiveNotes,
+  normalizeMasterCharacter,
   normalizeReferenceArtist
 } from "@/lib/audio/parse-adaptive-master-ai-fields";
+import { parseMasterCharacter, type MasterCharacter } from "@/lib/audio/master-character";
 import { buildApiUser } from "@/lib/identity/api-user";
 import {
   isAiAudioRestorationAuthorized,
@@ -72,6 +74,7 @@ type ParsedMasterAiRequest = {
   referenceFile: File | null;
   adaptiveNotes: string;
   referenceArtist?: string;
+  masterCharacter: MasterCharacter;
 };
 
 function parseOptionalBooleanField(value: FormDataEntryValue | null): boolean | undefined {
@@ -116,7 +119,8 @@ async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterA
       inlineAudio: inlineAudioField instanceof File && inlineAudioField.size > 0 ? inlineAudioField : null,
       referenceFile,
       adaptiveNotes: normalizeAdaptiveNotes(fieldRecord),
-      referenceArtist: normalizeReferenceArtist(fieldRecord)
+      referenceArtist: normalizeReferenceArtist(fieldRecord),
+      masterCharacter: parseMasterCharacter(normalizeMasterCharacter(fieldRecord))
     };
   }
 
@@ -142,7 +146,8 @@ async function parseMasterAiRequest(request: NextRequest): Promise<ParsedMasterA
     inlineAudio: null,
     referenceFile: null,
     adaptiveNotes: normalizeAdaptiveNotes(fieldRecord),
-    referenceArtist: normalizeReferenceArtist(fieldRecord)
+    referenceArtist: normalizeReferenceArtist(fieldRecord),
+    masterCharacter: parseMasterCharacter(normalizeMasterCharacter(fieldRecord))
   };
 }
 
@@ -210,7 +215,8 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    const { data: parsed, billingEmailHint, inlineAudio, referenceFile, adaptiveNotes, referenceArtist } = parsedRequest;
+    const { data: parsed, billingEmailHint, inlineAudio, referenceFile, adaptiveNotes, referenceArtist, masterCharacter } =
+      parsedRequest;
 
     const ownerEligible = isMasterAdminBypassGranted(request);
     const adaptiveAnalysisRouting = resolveAdaptiveAnalysisRouting({ ownerEligible });
@@ -340,6 +346,7 @@ export async function POST(request: NextRequest) {
       genre: parsed.preset,
       loudnessMode: parsed.loudnessMode,
       userIntent,
+      masterCharacter,
       referenceAnalysis,
       outputQuality,
       analyzeForAdaptive
@@ -419,6 +426,7 @@ export async function POST(request: NextRequest) {
           }
         : null,
       adaptiveSettings: adaptive.instructionSummary,
+      masterCharacter: adaptive.masterCharacter,
       decisionReport,
       validation: adaptive.validation,
       ...(restorationAuthorized && restorationProfile

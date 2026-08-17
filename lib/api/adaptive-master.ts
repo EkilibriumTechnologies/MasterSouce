@@ -1,6 +1,7 @@
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
 import type { MasteringDecisionReport } from "@/lib/audio/mastering-decision-report";
 import type { AdaptiveAnalysisDiagnostics } from "@/lib/audio/adaptive-track-analysis";
+import type { MasterCharacter } from "@/lib/audio/master-character";
 import type {
   AudioArtifactProfile,
   AudioRestorationResult,
@@ -49,6 +50,8 @@ export type MasterAiResponse = {
   };
   readiness: AdaptiveReadinessSummary | null;
   adaptiveSettings: AdaptiveMasterSettingsSummary;
+  /** Selected Master Character used for this Adaptive render. */
+  masterCharacter: MasterCharacter;
   decisionReport: MasteringDecisionReport;
   validation: {
     correctivePasses: number;

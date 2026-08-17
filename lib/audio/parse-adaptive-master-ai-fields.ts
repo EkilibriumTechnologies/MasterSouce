@@ -39,6 +39,18 @@ export function normalizeReferenceArtist(fields: Record<string, unknown>): strin
   return trimmed;
 }
 
+/**
+ * Parses optional Master Character. Missing/invalid → Recommended.
+ * Client may only send the Character enum — never DSP parameters.
+ */
+export function normalizeMasterCharacter(fields: Record<string, unknown>): string {
+  const raw = fields.masterCharacter ?? fields.master_character ?? fields.character;
+  if (typeof raw !== "string") {
+    return "recommended";
+  }
+  return raw.trim();
+}
+
 /** Coerce multipart FormData string fields into a plain record for normalization. */
 export function formDataToFieldRecord(formData: FormData): Record<string, unknown> {
   const record: Record<string, unknown> = {};

@@ -37,6 +37,10 @@ function runCoreActionTests(uploadForm) {
   assertIncludes(uploadForm, "Prompt Master — describe your sound", "adaptive prompt button label");
   assertIncludes(uploadForm, "Run free adaptive preview", "adaptive preview button label");
   assertIncludes(uploadForm, "onRunAdaptive", "adaptive prompt panel callback");
+  assertIncludes(uploadForm, "Master Character", "adaptive Master Character control");
+  assertIncludes(uploadForm, "DEFAULT_MASTER_CHARACTER", "Master Character defaults to Recommended");
+  assertIncludes(uploadForm, "onMasterCharacterChange", "Master Character change callback");
+  assertIncludes(uploadForm, 'formData.append("masterCharacter", masterCharacter)', "Master Character sent on Adaptive preview");
   assertIncludes(uploadForm, "Master Anyway", "adaptive path always allows master anyway");
   assertIncludes(uploadForm, "Analyze &amp; Improve Mix", "readiness can route to Hit Analyzer");
   assertIncludes(uploadForm, "onMasterAnyway", "readiness panel callback");

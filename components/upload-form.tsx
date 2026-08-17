@@ -36,6 +36,27 @@ import { buildMasteringAnalyticsContext } from "@/lib/analytics/mastering-contex
 import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 import { getLoudnessModeLufsTarget } from "@/lib/genre-presets";
 import { setMastersourceWorkflowBusy } from "@/lib/promo/workflow-guard";
+import {
+  DEFAULT_MASTER_CHARACTER,
+  type MasterCharacter
+} from "@/lib/audio/master-character";
+
+const MASTER_CHARACTER_OPTIONS: Array<{
+  value: MasterCharacter;
+  label: string;
+  description?: string;
+}> = [
+  {
+    value: "recommended",
+    label: "Recommended",
+    description: "MasterSauce chooses the mastering approach from your track analysis."
+  },
+  { value: "punchier", label: "Punchier" },
+  { value: "warmer", label: "Warmer" },
+  { value: "more_open", label: "More Open" },
+  { value: "more_dynamic", label: "More Dynamic" },
+  { value: "more_aggressive", label: "More Aggressive" }
+];
 
 /** Owner panel: session token for owner bypass checks on GET /api/download. */
 function resolveOwnerSessionToken(ownerTestingPanel: boolean): string {
@@ -484,12 +505,14 @@ type AdaptivePromptPanelProps = {
   adaptiveSectionRef: React.RefObject<HTMLDivElement>;
   advancedControlsOpen: boolean;
   loading: boolean;
+  masterCharacter: MasterCharacter;
   referenceArtist: string;
   referenceTrackFile: File | null;
   referenceTrackInputRef: React.RefObject<HTMLInputElement>;
   referenceTrackNotice: string | null;
   onAdaptiveIntentChange: (value: string) => void;
   onAdvancedControlsOpenChange: (value: boolean | ((open: boolean) => boolean)) => void;
+  onMasterCharacterChange: (value: MasterCharacter) => void;
   onReferenceArtistChange: (value: string) => void;
   onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
   onRunAdaptive: () => void;
@@ -501,12 +524,14 @@ function AdaptivePromptPanel({
   adaptiveSectionRef,
   advancedControlsOpen,
   loading,
+  masterCharacter,
   referenceArtist,
   referenceTrackFile,
   referenceTrackInputRef,
   referenceTrackNotice,
   onAdaptiveIntentChange,
   onAdvancedControlsOpenChange,
+  onMasterCharacterChange,
   onReferenceArtistChange,
   onReferenceTrackSelection,
   onRunAdaptive
@@ -531,6 +556,44 @@ function AdaptivePromptPanel({
       <p style={adaptiveIntentHintStyle}>
         Short phrases work best — think “warmer vocal,” “tighter low end,” or “more club energy.”
       </p>
+      <fieldset style={masterCharacterFieldsetStyle} disabled={adaptiveProcessing || loading}>
+        <legend style={masterCharacterLegendStyle}>Master Character</legend>
+        <p style={adaptiveIntentHintStyle}>
+          Optional artistic direction on top of Adaptive analysis. Recommended keeps the current Adaptive behavior.
+        </p>
+        <div style={masterCharacterOptionsStyle} role="radiogroup" aria-label="Master Character">
+          {MASTER_CHARACTER_OPTIONS.map((option) => {
+            const selected = masterCharacter === option.value;
+            const optionId = `master-character-${option.value}`;
+            return (
+              <label
+                key={option.value}
+                htmlFor={optionId}
+                style={{
+                  ...masterCharacterOptionStyle,
+                  ...(selected ? masterCharacterOptionSelectedStyle : null)
+                }}
+              >
+                <input
+                  id={optionId}
+                  type="radio"
+                  name="masterCharacter"
+                  value={option.value}
+                  checked={selected}
+                  onChange={() => onMasterCharacterChange(option.value)}
+                  style={masterCharacterRadioStyle}
+                />
+                <span>
+                  <span style={masterCharacterOptionLabelStyle}>{option.label}</span>
+                  {option.description ? (
+                    <span style={masterCharacterOptionDescriptionStyle}>{option.description}</span>
+                  ) : null}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
       <div style={advancedControlsSectionStyle}>
         <button
           type="button"
@@ -701,6 +764,7 @@ type AnalysisSummaryPanelProps = {
   confirmedContinueWithStandard: boolean;
   isProduction: boolean;
   loading: boolean;
+  masterCharacter: MasterCharacter;
   masterReadiness: MasterReadinessResult | null;
   masterReadinessAcknowledged: boolean;
   audioRestoration: AudioRestorationUiState;
@@ -719,6 +783,7 @@ type AnalysisSummaryPanelProps = {
   onAudioRestorationChoiceChange: (value: PublicRestorationChoice) => void;
   onGenreChange: (value: keyof typeof GENRE_PRESETS) => void;
   onMasterAnyway: () => void;
+  onMasterCharacterChange: (value: MasterCharacter) => void;
   onOpenAdaptive: () => void;
   onReferenceArtistChange: (value: string) => void;
   onReferenceTrackSelection: (selected: File | null, input?: HTMLInputElement) => void;
@@ -734,6 +799,7 @@ function AnalysisSummaryPanel({
   confirmedContinueWithStandard,
   isProduction,
   loading,
+  masterCharacter,
   masterReadiness,
   masterReadinessAcknowledged,
   audioRestoration,
@@ -752,6 +818,7 @@ function AnalysisSummaryPanel({
   onAudioRestorationChoiceChange,
   onGenreChange,
   onMasterAnyway,
+  onMasterCharacterChange,
   onOpenAdaptive,
   onReferenceArtistChange,
   onReferenceTrackSelection,
@@ -851,12 +918,14 @@ function AnalysisSummaryPanel({
           adaptiveSectionRef={adaptiveSectionRef}
           advancedControlsOpen={advancedControlsOpen}
           loading={loading}
+          masterCharacter={masterCharacter}
           referenceArtist={referenceArtist}
           referenceTrackFile={referenceTrackFile}
           referenceTrackInputRef={referenceTrackInputRef}
           referenceTrackNotice={referenceTrackNotice}
           onAdaptiveIntentChange={onAdaptiveIntentChange}
           onAdvancedControlsOpenChange={onAdvancedControlsOpenChange}
+          onMasterCharacterChange={onMasterCharacterChange}
           onReferenceArtistChange={onReferenceArtistChange}
           onReferenceTrackSelection={onReferenceTrackSelection}
           onRunAdaptive={onRunAdaptive}
@@ -934,6 +1003,7 @@ export function UploadForm() {
   const [sourceUploadRef, setSourceUploadRef] = useState<SourceUploadRef | null>(null);
   const [showAdaptivePlaceholder, setShowAdaptivePlaceholder] = useState(false);
   const [adaptiveIntent, setAdaptiveIntent] = useState("");
+  const [masterCharacter, setMasterCharacter] = useState<MasterCharacter>(DEFAULT_MASTER_CHARACTER);
   const [advancedControlsOpen, setAdvancedControlsOpen] = useState(false);
   const [audioRestoration, setAudioRestoration] = useState<AudioRestorationUiState>({
     available: false,
@@ -1179,6 +1249,7 @@ export function UploadForm() {
     setSourceUploadRef(null);
     setShowAdaptivePlaceholder(false);
     setAdaptiveIntent("");
+    setMasterCharacter(DEFAULT_MASTER_CHARACTER);
     setAdvancedControlsOpen(false);
     setAudioRestoration({ available: false, recommendation: null });
     setAudioRestorationChoice("off");
@@ -1266,6 +1337,7 @@ export function UploadForm() {
     if (!keepPostAnalysisUi) {
       setShowAdaptivePlaceholder(false);
       setAdaptiveIntent("");
+      setMasterCharacter(DEFAULT_MASTER_CHARACTER);
       setConfirmedContinueWithStandard(false);
     }
     setStatus(
@@ -1374,6 +1446,7 @@ export function UploadForm() {
     console.log("[ADAPTIVE_UI] adaptive preview started");
     debugAdaptive("adaptive processing started", {
       hasIntent: adaptiveIntent.trim().length > 0,
+      masterCharacter,
       hasReferenceArtist: referenceArtist.trim().length > 0,
       hasReferenceTrack: Boolean(referenceTrackFile),
       genre,
@@ -1414,6 +1487,7 @@ export function UploadForm() {
         const artist = referenceArtist.trim();
         if (intent) formData.append("user_intent", intent);
         if (artist) formData.append("referenceArtist", artist);
+        formData.append("masterCharacter", masterCharacter);
         if (audioRestoration.available) {
           const restorationRequest = restorationChoiceToRequest(audioRestorationChoice);
           formData.append("applyAudioRestoration", String(restorationRequest.applyAudioRestoration));
@@ -1445,6 +1519,7 @@ export function UploadForm() {
             preset: genre,
             loudnessMode: loudness,
             user_intent: adaptiveIntent.trim() || undefined,
+            masterCharacter,
             ...(audioRestoration.available
               ? (() => {
                   const restorationRequest = restorationChoiceToRequest(audioRestorationChoice);
@@ -1615,6 +1690,7 @@ export function UploadForm() {
       }
       setAudioRestorationNotice(null);
       setAdaptiveIntent("");
+      setMasterCharacter(DEFAULT_MASTER_CHARACTER);
       setAdaptiveModeActive(false);
       setDecisionReport(null);
       setAdaptiveAiNotice(null);
@@ -1796,6 +1872,7 @@ export function UploadForm() {
           confirmedContinueWithStandard={confirmedContinueWithStandard}
           isProduction={isProduction}
           loading={loading}
+          masterCharacter={masterCharacter}
           masterReadiness={masterReadiness}
           masterReadinessAcknowledged={masterReadinessAcknowledged}
           audioRestoration={audioRestoration}
@@ -1819,6 +1896,7 @@ export function UploadForm() {
             setError(null);
             setStatus("Adaptive customization — add a short note about the sound you want, then run the free preview.");
           }}
+          onMasterCharacterChange={setMasterCharacter}
           onOpenAdaptive={() => {
             debugAdaptive("try adaptive preview", { adaptiveProcessing, loading });
             setShowAdaptivePlaceholder(true);
@@ -2706,8 +2784,60 @@ const adaptiveIntentTextareaStyle: React.CSSProperties = {
 };
 const adaptiveIntentHintStyle: React.CSSProperties = {
   margin: 0,
-  color: "#9eb0dd",
-  fontSize: "0.8rem"
+  color: "#9eb0d8",
+  fontSize: "0.82rem",
+  lineHeight: 1.45
+};
+const masterCharacterFieldsetStyle: React.CSSProperties = {
+  margin: 0,
+  padding: "12px 12px 10px",
+  borderRadius: "12px",
+  border: "1px solid rgba(126, 146, 220, 0.28)",
+  background: "rgba(10, 16, 30, 0.35)",
+  display: "grid",
+  gap: "10px"
+};
+const masterCharacterLegendStyle: React.CSSProperties = {
+  padding: "0 4px",
+  color: "#e7ecff",
+  fontSize: "0.95rem",
+  fontWeight: 700
+};
+const masterCharacterOptionsStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "8px"
+};
+const masterCharacterOptionStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "10px",
+  alignItems: "flex-start",
+  margin: 0,
+  padding: "10px 12px",
+  borderRadius: "10px",
+  border: "1px solid rgba(126, 146, 220, 0.22)",
+  background: "rgba(8, 12, 24, 0.55)",
+  cursor: "pointer"
+};
+const masterCharacterOptionSelectedStyle: React.CSSProperties = {
+  border: "1px solid rgba(158, 183, 255, 0.7)",
+  background: "rgba(40, 58, 110, 0.35)"
+};
+const masterCharacterRadioStyle: React.CSSProperties = {
+  marginTop: "3px",
+  flexShrink: 0
+};
+const masterCharacterOptionLabelStyle: React.CSSProperties = {
+  display: "block",
+  color: "#eef2ff",
+  fontWeight: 650,
+  fontSize: "0.92rem"
+};
+const masterCharacterOptionDescriptionStyle: React.CSSProperties = {
+  display: "block",
+  marginTop: "4px",
+  color: "#9eb0d8",
+  fontSize: "0.8rem",
+  lineHeight: 1.4
 };
 const audioRestorationSectionStyle: React.CSSProperties = {
   display: "grid",
