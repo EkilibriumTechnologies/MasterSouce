@@ -1,4 +1,5 @@
 import type { MasterJobAnalysis } from "@/lib/api/master-analysis";
+import type { MasteringDecisionReport } from "@/lib/audio/mastering-decision-report";
 import type { AdaptiveAnalysisDiagnostics } from "@/lib/audio/adaptive-track-analysis";
 import type {
   AudioArtifactProfile,
@@ -48,6 +49,7 @@ export type MasterAiResponse = {
   };
   readiness: AdaptiveReadinessSummary | null;
   adaptiveSettings: AdaptiveMasterSettingsSummary;
+  decisionReport: MasteringDecisionReport;
   validation: {
     correctivePasses: number;
     warnings: string[];

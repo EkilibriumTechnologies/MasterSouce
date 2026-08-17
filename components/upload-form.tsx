@@ -10,8 +10,10 @@ import { DownloadLimitModal } from "@/components/download-limit-modal";
 import { AdaptiveExportGate } from "@/components/adaptive-export-gate";
 import { EmailCaptureForm } from "@/components/email-capture-form";
 import { MasterReadyCallout } from "@/components/master-ready-callout";
+import { MasteringDecisionReportPanel } from "@/components/mastering-decision-report";
 import { PostMasterReleaseCallout } from "@/components/post-master-release-callout";
 import type { MasterAiResponse } from "@/lib/api/adaptive-master";
+import type { MasteringDecisionReport } from "@/lib/audio/mastering-decision-report";
 import type { PublicRestorationChoice } from "@/lib/audio/artifact-recommendation";
 import type { AudioRestorationStrength } from "@/lib/audio/audio-restoration-types";
 import type { MasterReadinessResult } from "@/lib/audio/master-readiness";
@@ -947,6 +949,7 @@ export function UploadForm() {
   const [referenceArtist, setReferenceArtist] = useState("");
   const [adaptiveProcessing, setAdaptiveProcessing] = useState(false);
   const [adaptiveModeActive, setAdaptiveModeActive] = useState(false);
+  const [decisionReport, setDecisionReport] = useState<MasteringDecisionReport | null>(null);
   /** Non-blocking info when adaptive preview used heuristic fallback (e.g. AI timeout). */
   const [adaptiveAiNotice, setAdaptiveAiNotice] = useState<string | null>(null);
   const [lastStandardResult, setLastStandardResult] = useState<MasterResponse | null>(null);
@@ -1185,6 +1188,7 @@ export function UploadForm() {
     setReferenceTrackNotice(null);
     setReferenceArtist("");
     setAdaptiveModeActive(false);
+    setDecisionReport(null);
     setAdaptiveAiNotice(null);
     setLastStandardResult(null);
     setConfirmedContinueWithStandard(false);
@@ -1255,6 +1259,7 @@ export function UploadForm() {
     setError(null);
     setLoading(true);
     setResult(null);
+    setDecisionReport(null);
     setWavDownloadUrl(null);
     setMp3DownloadUrl(null);
     setAudioRestorationNotice(null);
@@ -1312,6 +1317,7 @@ export function UploadForm() {
       setResult(masterPayload);
       setLastStandardResult(masterPayload);
     setAdaptiveModeActive(false);
+    setDecisionReport(null);
     setAdaptiveAiNotice(null);
     if (masterPayload.audioRestoration?.requested) {
       if (
@@ -1477,6 +1483,7 @@ export function UploadForm() {
         analysis: mergeAdaptiveAnalysisForComparison(adaptive.analysis)
       };
       setResult(mergedResult);
+      setDecisionReport(adaptive.decisionReport ?? null);
       setWavDownloadUrl(null);
     setMp3DownloadUrl(null);
       setAdaptiveModeActive(true);
@@ -1609,6 +1616,7 @@ export function UploadForm() {
       setAudioRestorationNotice(null);
       setAdaptiveIntent("");
       setAdaptiveModeActive(false);
+      setDecisionReport(null);
       setAdaptiveAiNotice(null);
       setLastStandardResult(null);
       setStatus("Analysis complete — review suggestions, then master with a preset or Adaptive.");
@@ -1967,6 +1975,10 @@ export function UploadForm() {
                   gap: "20px"
                 }}
               >
+                <MasteringDecisionReportPanel
+                  adaptiveResultExists={adaptiveModeActive}
+                  report={decisionReport}
+                />
                 <PostMasterReleaseCallout />
                 {(wavDownloadUrl || mp3DownloadUrl) ? (
                   <div style={finalMasterExportDownloadWrapStyle}>

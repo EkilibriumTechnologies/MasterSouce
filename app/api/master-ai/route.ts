@@ -9,6 +9,7 @@ import {
   sanitizeRestorationResultForResponse
 } from "@/lib/audio/mastering-source-restoration";
 import { toPublicMetrics } from "@/lib/audio/public-analysis";
+import { buildMasteringDecisionReport } from "@/lib/audio/mastering-decision-report";
 import { runAdaptiveMasteringPipeline } from "@/lib/audio/adaptive-mastering-pipeline";
 import {
   createAdaptiveTrackAnalyzer,
@@ -373,6 +374,12 @@ export async function POST(request: NextRequest) {
 
     const standardMetrics = toPublicMetrics(adaptive.baselineAnalysis);
     const adaptiveMetrics = adaptive.adaptiveAnalysis ? toPublicMetrics(adaptive.adaptiveAnalysis) : null;
+    const decisionReport = buildMasteringDecisionReport({
+      settings: adaptive.instructionSummary.settings,
+      baseline: adaptive.baselineAnalysis,
+      postMaster: adaptive.adaptiveAnalysis,
+      validationWarnings: adaptive.validation.warnings
+    });
 
     const payload: MasterAiResponse = {
       jobId,
@@ -412,6 +419,7 @@ export async function POST(request: NextRequest) {
           }
         : null,
       adaptiveSettings: adaptive.instructionSummary,
+      decisionReport,
       validation: adaptive.validation,
       ...(restorationAuthorized && restorationProfile
         ? {
