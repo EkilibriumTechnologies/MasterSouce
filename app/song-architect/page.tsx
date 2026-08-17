@@ -21,6 +21,12 @@ import type {
   SongDNA
 } from "@/lib/song-architect/types";
 import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
+import {
+  emptyFieldsFromBlueprint,
+  ReferenceTrackPanel,
+  type ReferenceTrackResult
+} from "@/components/song-architect/reference-track-panel";
+import type { ReferenceStyleBlueprint } from "@/lib/song-architect/reference-style-blueprint";
 
 type FormState = {
   preset: string;
@@ -117,7 +123,7 @@ function parseOptionalBpm(value: string): number | undefined {
   return bpm;
 }
 
-function toPayload(form: FormState): SongArchitectInput {
+function toPayload(form: FormState, referenceStyleBlueprint?: ReferenceStyleBlueprint): SongArchitectInput {
   const sonicControls = {
     ...(parseOptionalBpm(form.bpm) !== undefined ? { bpm: parseOptionalBpm(form.bpm) } : {}),
     ...(form.groove.trim() ? { groove: form.groove.trim() } : {}),
@@ -143,7 +149,8 @@ function toPayload(form: FormState): SongArchitectInput {
     mustInclude: csvToList(form.mustInclude),
     avoidWords: csvToList(form.avoidWords),
     userNotes: form.userNotes.trim() || undefined,
-    ...(Object.keys(sonicControls).length > 0 ? { sonicControls } : {})
+    ...(Object.keys(sonicControls).length > 0 ? { sonicControls } : {}),
+    ...(referenceStyleBlueprint ? { referenceStyleBlueprint } : {})
   };
 }
 
@@ -542,6 +549,7 @@ export default function SongArchitectPage() {
   const [verifyError, setVerifyError] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [pendingRetryAfterVerify, setPendingRetryAfterVerify] = useState(false);
+  const [referenceBlueprint, setReferenceBlueprint] = useState<ReferenceStyleBlueprint | undefined>(undefined);
 
   const selectedPreset = useMemo(
     () => SONG_ARCHITECT_PRESETS.find((preset) => preset.id === form.preset) ?? null,
@@ -630,7 +638,7 @@ export default function SongArchitectPage() {
 
   async function handleGenerate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const payload = toPayload(form);
+    const payload = toPayload(form, referenceBlueprint);
     await runGeneration(payload);
   }
 
@@ -664,7 +672,7 @@ export default function SongArchitectPage() {
       if (pendingRetryAfterVerify) {
         console.info("[song-architect] generation resumed after email access confirmation");
         setPendingRetryAfterVerify(false);
-        await runGeneration(toPayload(form));
+        await runGeneration(toPayload(form, referenceBlueprint));
       }
     } catch {
       setVerifyError("Could not confirm email access right now. Please try again.");
@@ -968,6 +976,23 @@ export default function SongArchitectPage() {
               />
             </label>
           </div>
+
+          <ReferenceTrackPanel
+            attached={Boolean(referenceBlueprint)}
+            onUse={(result: ReferenceTrackResult) => {
+              const fills = emptyFieldsFromBlueprint(result.blueprint);
+              setReferenceBlueprint(result.blueprint);
+              setForm((current) => ({
+                ...current,
+                genre: current.genre.trim() ? current.genre : fills.genre ?? current.genre,
+                emotion: current.emotion.trim() ? current.emotion : fills.emotion ?? current.emotion,
+                vocalStyle: current.vocalStyle.trim() ? current.vocalStyle : fills.vocalStyle ?? current.vocalStyle,
+                structure: current.structure.trim() ? current.structure : fills.structure ?? current.structure,
+                energyCurve: current.energyCurve.trim() ? current.energyCurve : fills.energyCurve ?? current.energyCurve
+              }));
+            }}
+            onClear={() => setReferenceBlueprint(undefined)}
+          />
 
           <label style={{ ...fieldLabelStyle, marginTop: "12px" }}>
             Notes (optional)

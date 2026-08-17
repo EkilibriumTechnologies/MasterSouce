@@ -8,6 +8,11 @@ import {
   resolveSonicWithReferences,
   toReferenceSources
 } from "@/lib/song-architect/reference-dna";
+import {
+  mergeReferenceDNA,
+  overlayBlueprintTempoOnSonic,
+  referenceDNAFromBlueprint
+} from "@/lib/song-architect/reference-style-blueprint";
 import { formatSonicExclusionsPlainText, inferSonicExclusions } from "@/lib/song-architect/sonic-exclusions";
 import { inferSonicDNA } from "@/lib/song-architect/sonic-inference";
 import { getSongLengthBlueprint } from "@/lib/song-architect/song-length";
@@ -75,25 +80,33 @@ export function buildSongDNA(input: SongArchitectResolvedInput): SongDNA {
   });
 
   const sources = toReferenceSources(input);
-  const reference = buildReferenceDNA(sources, {
+  const artistReference = buildReferenceDNA(sources, {
     genre: input.genre,
     emotion: composition.emotionalIntent,
     vocalStyle: composition.vocalStyle,
     energyCurve: composition.energyCurve,
     structure: composition.structure
   });
-  const sonic = resolveSonicWithReferences({
-    sonic: baseSonic,
-    reference,
-    userOverrides,
-    intent: {
-      genre: input.genre,
-      emotion: composition.emotionalIntent,
-      vocalStyle: composition.vocalStyle,
-      energyCurve: composition.energyCurve,
-      structure: composition.structure
-    }
-  });
+  const blueprintReference = input.referenceStyleBlueprint
+    ? referenceDNAFromBlueprint(input.referenceStyleBlueprint)
+    : undefined;
+  const reference = mergeReferenceDNA(artistReference, blueprintReference);
+  const sonic = overlayBlueprintTempoOnSonic(
+    resolveSonicWithReferences({
+      sonic: baseSonic,
+      reference,
+      userOverrides,
+      intent: {
+        genre: input.genre,
+        emotion: composition.emotionalIntent,
+        vocalStyle: composition.vocalStyle,
+        energyCurve: composition.energyCurve,
+        structure: composition.structure
+      }
+    }),
+    input.referenceStyleBlueprint,
+    userOverrides
+  );
   const harmony = inferHarmonyDNA({
     family,
     sonic,
@@ -124,7 +137,15 @@ export function buildSongDNA(input: SongArchitectResolvedInput): SongDNA {
     meta: {
       genreFamily: family,
       inferenceMode: userOverrides.length > 0 ? "mixed" : "automatic",
-      userOverrides
+      userOverrides,
+      ...(input.referenceStyleBlueprint
+        ? {
+            referenceStyleProvenance: {
+              analysisType: "metadata_reference_interpretation" as const,
+              directlyAnalyzedAudio: false as const
+            }
+          }
+        : {})
     }
   };
 }
@@ -229,6 +250,9 @@ export function formatSongDNAForPrompt(dna: SongDNA): string {
     ? formatSonicExclusionsPlainText(dna.sonicExclusions).split("\n").filter(Boolean)
     : [];
   const referenceLine = formatReferenceInfluenceForPrompt(dna.reference);
+  const provenanceLine = dna.meta.referenceStyleProvenance
+    ? "Reference Style Blueprint is a metadata interpretation, not measured audio. Use transformed characteristics to create something original; do not recreate a specific recording."
+    : undefined;
   const arrangementLines = dna.arrangement
     ? [
         dna.arrangement.globalArc ? `global arc: ${dna.arrangement.globalArc}` : undefined,
@@ -260,7 +284,8 @@ export function formatSongDNAForPrompt(dna: SongDNA): string {
           ...arrangementLines.map((line) => `- ${line}`)
         ]
       : []),
-    ...(referenceLine ? [`Reference influence: ${referenceLine}`] : [])
+    ...(referenceLine ? [`Reference influence: ${referenceLine}`] : []),
+    ...(provenanceLine ? [provenanceLine] : [])
   ].join("\n");
 }
 

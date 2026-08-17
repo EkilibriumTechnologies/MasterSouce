@@ -1,4 +1,5 @@
 import { CORE_SONGWRITING_RULES } from "@/lib/song-architect/rules";
+import { formatReferenceStyleGuidanceForPrompt } from "@/lib/song-architect/reference-style-blueprint";
 import { formatSongDNAForPrompt, toPromptSongDNA } from "@/lib/song-architect/song-dna";
 import { buildSongLengthPromptSection } from "@/lib/song-architect/song-length";
 import { compileSunoExportPrompt } from "@/lib/song-architect/suno-compiler";
@@ -41,6 +42,8 @@ Creative brief reading order:
 - Lyric constraints (avoid words, must-include, perspective, language) are separate from sonic constraints.
 - Sonic exclusions are production/instrument/vocal restrictions only. Never treat Avoid Words as sonic exclusions.
 - Never reuse sonic-exclusion wording as lyric imagery, chant lines, or hooks (for example, do not turn “festival EDM drops” or “no generic EDM drop” into phrases like “dance the drop”).
+- Reference Style Blueprint, when present, is optional metadata-based interpretation — not measured audio. It is subordinate to explicit user numeric, structural, and creative constraints, then to Song Architect settings / Song DNA.
+- Use transformed musical characteristics only. Do not name, clone, or recreate a specific recording.
 - exportPrompt is generated for schema compatibility only. The canonical Suno style prompt and blueprint are compiled from Song DNA after you return and will replace any model-created exportPrompt.
 
 Emotional intent vs sonic expression:
@@ -56,7 +59,13 @@ Preset and genre behavior:
 - Structure target (baseline; expand or adapt per length tier as needed): ${input.structure}
 - Energy curve target: ${input.energyCurve}
 - Language: ${input.language}
-
+${
+    input.referenceStyleBlueprint
+      ? `
+${formatReferenceStyleGuidanceForPrompt(input.referenceStyleBlueprint) ?? "Reference Style Blueprint characteristics are already reflected in Song DNA."}
+`
+      : ""
+  }
 Formatting contract:
 - Return JSON only.
 - Do not include markdown code fences.
@@ -79,8 +88,13 @@ export function buildUserPrompt(
   songDNA: SongDNA,
   options?: { candidateSlot?: "A" | "B" }
 ): string {
-  const { referenceArtists: _referenceArtists, references: _references, pronunciationOverrides: _overrides, ...generationInput } =
-    input;
+  const {
+    referenceArtists: _referenceArtists,
+    references: _references,
+    pronunciationOverrides: _overrides,
+    referenceStyleBlueprint: _referenceStyleBlueprint,
+    ...generationInput
+  } = input;
   return JSON.stringify(
     {
       requestType: "song_architect_blueprint",

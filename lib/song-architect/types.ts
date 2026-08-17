@@ -1,3 +1,5 @@
+import type { ReferenceStyleBlueprint } from "@/lib/song-architect/reference-style-blueprint";
+
 export type SongArchitectSongLength = "short" | "standard" | "extended" | "full";
 
 export type PronunciationOverride = {
@@ -19,6 +21,8 @@ export type SongArchitectSonicControls = {
   productionTexture?: string;
 };
 
+export type { ReferenceStyleBlueprint };
+
 export type SongArchitectInput = {
   preset?: string;
   songLength?: SongArchitectSongLength;
@@ -39,6 +43,8 @@ export type SongArchitectInput = {
   avoidWords?: string[];
   userNotes?: string;
   sonicControls?: SongArchitectSonicControls;
+  /** Optional Spotify metadata interpretation. Never overrides explicit user choices. */
+  referenceStyleBlueprint?: ReferenceStyleBlueprint;
   /** Future manual pronunciation overrides. Not required for generation. */
   pronunciationOverrides?: PronunciationOverride[];
 };
@@ -63,6 +69,7 @@ export type SongArchitectResolvedInput = {
   userNotes: string;
   sonicControls: SongArchitectSonicControls;
   pronunciationOverrides: PronunciationOverride[];
+  referenceStyleBlueprint?: ReferenceStyleBlueprint;
 };
 
 export type CompositionDNA = {
@@ -287,6 +294,10 @@ export type SongDNA = {
     genreFamily: SongDNAGenreFamily;
     inferenceMode: "automatic" | "mixed";
     userOverrides: Array<keyof SongArchitectSonicControls>;
+    referenceStyleProvenance?: {
+      analysisType: "metadata_reference_interpretation";
+      directlyAnalyzedAudio: false;
+    };
   };
 };
 

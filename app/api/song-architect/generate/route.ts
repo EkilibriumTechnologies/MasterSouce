@@ -12,6 +12,7 @@ import { partitionSongArchitectClientPayload } from "@/lib/song-architect/premiu
 import { normalizeSongArchitectOutput, parseSongArchitectCandidateFromRaw } from "@/lib/song-architect/normalize-output";
 import { buildRepairSystemPrompt, buildRepairUserPrompt, buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
 import { resolveSongArchitectInput } from "@/lib/song-architect/resolve-input";
+import { normalizeReferenceStyleBlueprint } from "@/lib/song-architect/reference-style-blueprint";
 import { buildSongDNA } from "@/lib/song-architect/song-dna";
 import { getSongLengthBlueprint, parseSongArchitectSongLength } from "@/lib/song-architect/song-length";
 import { resolveSongArchitectVerifiedContext } from "@/lib/song-architect/access";
@@ -58,6 +59,7 @@ const SongArchitectInputSchema = z.object({
   mustInclude: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
   avoidWords: z.array(z.string().trim().min(1).max(60)).max(10).optional(),
   userNotes: z.string().trim().max(700).optional(),
+  referenceStyleBlueprint: z.unknown().optional(),
   pronunciationOverrides: z
     .array(
       z.object({
@@ -559,6 +561,23 @@ export async function POST(request: NextRequest) {
         }
       : undefined;
 
+    const blueprint = parsed.data.referenceStyleBlueprint
+      ? normalizeReferenceStyleBlueprint(parsed.data.referenceStyleBlueprint)
+      : undefined;
+    if (parsed.data.referenceStyleBlueprint !== undefined && !blueprint) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: "invalid_payload",
+          code: "invalid_payload",
+          message: "Reference Style Blueprint did not pass validation."
+        },
+        { status: 400 }
+      );
+      attachSessionCookieIfNeeded(res, sessionPrep);
+      return res;
+    }
+
     const inputPayload: SongArchitectInput = {
       preset: parsed.data.preset,
       songLength: parsed.data.songLength,
@@ -578,7 +597,8 @@ export async function POST(request: NextRequest) {
       avoidWords: parsed.data.avoidWords,
       userNotes: parsed.data.userNotes,
       pronunciationOverrides: parsed.data.pronunciationOverrides,
-      sonicControls: parsed.data.sonicControls
+      sonicControls: parsed.data.sonicControls,
+      ...(blueprint ? { referenceStyleBlueprint: blueprint } : {})
     };
 
     const hasMeaningfulInput = Object.values(inputPayload).some((value) => {

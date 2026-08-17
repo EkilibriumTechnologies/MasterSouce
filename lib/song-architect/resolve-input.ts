@@ -1,5 +1,9 @@
 import { getSongArchitectPresetById } from "@/lib/song-architect/presets";
 import { isReferenceSourceType } from "@/lib/song-architect/reference-dna";
+import {
+  applyReferenceStyleGuidance,
+  normalizeReferenceStyleBlueprint
+} from "@/lib/song-architect/reference-style-blueprint";
 import { parseSongArchitectSongLength } from "@/lib/song-architect/song-length";
 import type {
   ReferenceSource,
@@ -88,27 +92,37 @@ export function resolveSongArchitectInput(input: SongArchitectInput): {
   presetUsed?: string;
 } {
   const preset = getSongArchitectPresetById(input.preset);
+  const blueprint = input.referenceStyleBlueprint
+    ? normalizeReferenceStyleBlueprint(input.referenceStyleBlueprint) ?? undefined
+    : undefined;
+  const guided = applyReferenceStyleGuidance({
+    defaults: DEFAULT_RESOLVED_INPUT,
+    presetDefaults: preset?.defaults,
+    explicit: input,
+    blueprint
+  });
   const merged: SongArchitectResolvedInput = {
     ...DEFAULT_RESOLVED_INPUT,
     ...(preset?.defaults ?? {}),
     ...(input.preset ? { preset: input.preset } : {}),
     songLength: parseSongArchitectSongLength(input.songLength),
-    ...(sanitizeText(input.genre, 40) ? { genre: sanitizeText(input.genre, 40)! } : {}),
+    ...(guided.genre ? { genre: guided.genre } : {}),
     ...(sanitizeText(input.theme, 160) ? { theme: sanitizeText(input.theme, 160)! } : {}),
     ...(sanitizeText(input.angle, 160) ? { angle: sanitizeText(input.angle, 160)! } : {}),
-    ...(sanitizeText(input.emotion, 100) ? { emotion: sanitizeText(input.emotion, 100)! } : {}),
+    ...(guided.emotion ? { emotion: guided.emotion } : {}),
     ...(sanitizeText(input.hookIdentity, 160) ? { hookIdentity: sanitizeText(input.hookIdentity, 160)! } : {}),
-    ...(sanitizeText(input.structure, 220) ? { structure: sanitizeText(input.structure, 220)! } : {}),
-    ...(sanitizeText(input.energyCurve, 180) ? { energyCurve: sanitizeText(input.energyCurve, 180)! } : {}),
+    ...(guided.structure ? { structure: guided.structure } : {}),
+    ...(guided.energyCurve ? { energyCurve: guided.energyCurve } : {}),
     ...(sanitizeText(input.language, 40) ? { language: sanitizeText(input.language, 40)! } : {}),
-    ...(sanitizeText(input.vocalStyle, 140) ? { vocalStyle: sanitizeText(input.vocalStyle, 140)! } : {}),
+    ...(guided.vocalStyle ? { vocalStyle: guided.vocalStyle } : {}),
     ...(input.lineDensity ? { lineDensity: input.lineDensity } : {}),
     ...(sanitizeStringArray(input.referenceArtists, 6, 80) ? { referenceArtists: sanitizeStringArray(input.referenceArtists, 6, 80)! } : {}),
     ...(sanitizeStringArray(input.mustInclude, 8, 80) ? { mustInclude: sanitizeStringArray(input.mustInclude, 8, 80)! } : {}),
     ...(sanitizeStringArray(input.avoidWords, 10, 60) ? { avoidWords: sanitizeStringArray(input.avoidWords, 10, 60)! } : {}),
     ...(sanitizeText(input.userNotes, 700) ? { userNotes: sanitizeText(input.userNotes, 700)! } : {}),
-    sonicControls: sanitizeSonicControls(input.sonicControls),
-    pronunciationOverrides: sanitizePronunciationOverrides(input.pronunciationOverrides)
+    sonicControls: Object.keys(guided.sonicControls).length > 0 ? guided.sonicControls : sanitizeSonicControls(input.sonicControls),
+    pronunciationOverrides: sanitizePronunciationOverrides(input.pronunciationOverrides),
+    ...(blueprint ? { referenceStyleBlueprint: blueprint } : {})
   };
 
   const explicitReferences = sanitizeReferences(input.references);
