@@ -20,6 +20,7 @@ import type {
   SongArchitectSongLength,
   SongDNA
 } from "@/lib/song-architect/types";
+import { GenerationMatchPanel } from "@/components/song-architect/generation-match-panel";
 import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
 import {
   emptyFieldsFromBlueprint,
@@ -1119,6 +1120,21 @@ export default function SongArchitectPage() {
               </div>
 
               {result.basic.songDNA ? <SongDNAOutputCard songDNA={result.basic.songDNA} /> : null}
+
+              {result.basic.songDNA ? (
+                <GenerationMatchPanel
+                  songDNA={result.basic.songDNA}
+                  stylePrompt={result.basic.stylePrompt}
+                  sunoBlueprint={result.basic.sunoBlueprint}
+                  getBillingEmail={getStoredBillingEmail}
+                  onEmailVerificationRequired={() => {
+                    setVerifyError("");
+                    setVerifyEmail(getStoredBillingEmail());
+                    setPendingRetryAfterVerify(false);
+                    setShowEmailVerifyModal(true);
+                  }}
+                />
+              ) : null}
 
               <div style={conceptCardStyle}>
                 <div style={outputCardHeaderStyle}>
