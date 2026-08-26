@@ -15,7 +15,12 @@ export const HOME_FAQ_ITEMS: HomeFaqItem[] = [
   {
     question: "Is this just for AI music?",
     answer:
-      "No. MasterSauce works for any mix — bedroom recordings, live instruments, full band productions, or AI-generated tracks. The genre presets cover Pop, Hip-Hop, EDM, Rock, Reggaeton, R&B, and Lo-Fi."
+      "No. MasterSauce works for any mix — bedroom recordings, live instruments, full band productions, or AI-generated tracks, including songs created with Suno. The genre presets cover Pop, Hip-Hop, EDM, Rock, Reggaeton, R&B, and Lo-Fi."
+  },
+  {
+    question: "Does MasterSauce work with songs created in Suno?",
+    answer:
+      "Yes. If you created your track in Suno, you can upload the export, review analysis and Master Readiness, then master with a preset, prompt, or reference. Song Architect can also help you shape lyrics, structure, and generation prompts before you generate."
   },
   {
     question: "Can I hear the result before paying anything?",

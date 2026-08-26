@@ -209,7 +209,12 @@ export default function BestMasteringForSunoAiSongsPage() {
           <h2 style={h2Style}>Try MasterSauce on Your Suno Track</h2>
           <p style={pStyle}>
             If you are creating songs in Suno and want a faster way to polish the final result, MasterSauce can help you
-            preview the difference before downloading.
+            preview the difference before downloading. For the full idea-to-release path — Song Architect, analysis,
+            Master Readiness, and mastering — see{" "}
+            <Link href="/suno-mastering" style={inlineLinkStyle}>
+              tools for Suno creators
+            </Link>
+            .
           </p>
           <p style={pStyle}>
             That makes it easier to hear whether your track sounds louder, cleaner, and more release-ready before you commit.

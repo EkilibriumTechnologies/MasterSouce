@@ -13,7 +13,7 @@ import { getHomeProductMetrics } from "@/lib/product-metrics";
 import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
 import { MobileMasterBanner } from "@/components/mobile-master-banner";
 import { getHomePageJsonLdGraph } from "@/lib/seo/home-json-ld";
-import { absoluteUrl, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
+import { absoluteUrl, SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
 import { SOCIAL_PREVIEW_ALT, SOCIAL_PREVIEW_SIZE } from "@/lib/og/social-preview";
 
 type HomePageProps = {
@@ -28,11 +28,11 @@ function getFirst(value: string | string[] | undefined): string | undefined {
 }
 
 export const metadata: Metadata = {
-  title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+  title: `${SITE_NAME} — Release-ready mastering for AI & Suno creators`,
   description: SITE_DESCRIPTION,
   alternates: { canonical: absoluteUrl("/") },
   openGraph: {
-    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    title: `${SITE_NAME} — Release-ready mastering for AI & Suno creators`,
     description: SITE_DESCRIPTION,
     url: absoluteUrl("/"),
     siteName: SITE_NAME,
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    title: `${SITE_NAME} — Release-ready mastering for AI & Suno creators`,
     description: SITE_DESCRIPTION,
     images: [absoluteUrl("/og-image.png")]
   }
@@ -113,11 +113,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             style={heroLogoImgStyle}
           />
         </div>
+        <p style={heroEyebrowStyle}>Create with Suno. Finish with MasterSauce.</p>
         <h1 style={h1Style}>Your track sounds finished today — not almost ready.</h1>
         <p style={subStyle}>
-          MasterSauce analyzes your audio before mastering, recommends a mastering profile, and offers optional AI Audio
-          Restoration when it may help — then preset, prompt-guided, or reference-guided mastering. Free MP3 previews;
-          premium plans unlock HD WAV exports. No plugins. No studio time.
+          Analyze, improve, master, and prepare AI-generated music for release. MasterSauce analyzes your audio before
+          mastering, recommends a mastering profile, and offers optional AI Audio Restoration when it may help — then
+          preset, prompt-guided, or reference-guided mastering. Free MP3 previews; premium plans unlock HD WAV exports.
+          No plugins. No studio time.
         </p>
         <div style={platformRowStyle} aria-label="Streaming platform optimization">
           <span style={platformLabelStyle}>Optimized for:</span>
@@ -153,6 +155,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             Start mastering
           </a>
         </div>
+        <p style={heroSunoLinkWrapStyle}>
+          <Link href="/suno-mastering" style={learnHintLinkStyle}>
+            Tools for Suno creators
+          </Link>
+        </p>
         <HeroStatsBar metrics={homeProductMetrics} className="home-hero-stats" />
         <style
           dangerouslySetInnerHTML={{
@@ -200,7 +207,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           loudness, and balance while keeping your original mix intact.
         </p>
         <p style={proseCenterStyle}>
-          Not ready to record yet? Try Song Architect — build your Suno or Udio blueprint first, then come back to master.
+          Not ready to record yet? Try{" "}
+          <Link href="/song-architect" style={learnHintLinkStyle}>
+            Song Architect
+          </Link>{" "}
+          — build your Suno or Udio blueprint first, then come back to master. Already have an export? See the workflow
+          for{" "}
+          <Link href="/suno-mastering" style={learnHintLinkStyle}>
+            mastering music created with Suno
+          </Link>
+          .
         </p>
         <p style={proseCenterStyle}>
           Upload free. Preview with MP3, download free MP3 masters, or export HD WAV on premium plans.
@@ -215,6 +231,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <p style={productFeatureCopyStyle}>
           Get a professional A&amp;R-style report for your song. This does not predict hits — it evaluates hook
           strength, production quality, replay value, playlist fit, and commercial readiness within your intended genre.
+          It works on recordings and AI-generated tracks, including songs created with Suno.
         </p>
         <div style={productCtaRowStyle}>
           <Link href="/ar-ai" style={ctaPrimaryStyle}>
@@ -245,8 +262,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </h2>
         <p style={proseCenterStyle}>
           Bedroom producers finishing tracks at odd hours. Independent artists self-releasing without a studio budget. AI
-          music creators on Suno and Udio who want every track to sound release-ready. Anyone who values speed, clarity, and
-          a clean path from mix to master — without rebuilding a signal chain every time.
+          music creators on Suno and Udio who want every track to sound release-ready — including people looking for{" "}
+          <Link href="/suno-mastering" style={learnHintLinkStyle}>
+            a finishing workflow built around Suno
+          </Link>
+          . Anyone who values speed, clarity, and a clean path from mix to master — without rebuilding a signal chain
+          every time.
         </p>
       </section>
 
@@ -262,7 +283,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⤴</div>
             <h3 style={stepTitleStyle}>Upload your mix</h3>
-            <p style={stepTextStyle}>WAV or MP3, drag-and-drop or browse — processed securely, not shared as a library.</p>
+            <p style={stepTextStyle}>
+              WAV or MP3 from a DAW, a Suno export, or another AI generator — processed securely, not shared as a library.
+            </p>
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⚙</div>
@@ -275,7 +298,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>🎧</div>
             <h3 style={stepTitleStyle}>Analyze, then A/B</h3>
-            <p style={stepTextStyle}>A quick read of your file, then unlimited before/after playback while you decide.</p>
+            <p style={stepTextStyle}>
+              A quick read of your file, including a Master Readiness check, then unlimited before/after playback while
+              you decide.
+            </p>
           </div>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⬇</div>
@@ -334,7 +360,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           Song Architect
         </Link>{" "}
         — build your complete song blueprint first. Genre, lyrics, hooks, and a ready-to-paste prompt before you hit
-        generate.
+        generate. After you export,{" "}
+        <Link href="/suno-mastering" style={learnHintLinkStyle}>
+          analyze and master your Suno songs
+        </Link>{" "}
+        in the same finishing workflow.
       </p>
 
       <footer style={footerStyle}>
@@ -348,6 +378,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <div style={footerLinksStyle}>
           <Link href="/learn" style={linkStyle}>
             Learn
+          </Link>
+          <Link href="/suno-mastering" style={linkStyle}>
+            For Suno creators
           </Link>
           <Link href="/about" style={linkStyle}>About</Link>
           <Link href="/terms" style={linkStyle}>Terms</Link>
@@ -456,6 +489,20 @@ const heroLogoImgStyle: React.CSSProperties = {
   flexShrink: 0,
   objectFit: "contain",
   imageRendering: "auto"
+};
+
+const heroEyebrowStyle: React.CSSProperties = {
+  margin: "0 auto 12px",
+  fontSize: "0.82rem",
+  fontWeight: 700,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: "#8eb4ff"
+};
+
+const heroSunoLinkWrapStyle: React.CSSProperties = {
+  margin: "12px 0 0",
+  fontSize: "0.92rem"
 };
 
 const h1Style: React.CSSProperties = {

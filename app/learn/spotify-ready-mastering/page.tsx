@@ -97,7 +97,12 @@ export default function SpotifyReadyMasteringPage() {
             <Link href="/learn/why-ai-songs-sound-bad" style={inlineLinkStyle}>
               why AI songs sound bad
             </Link>
-            . Then use this guide to dial in streaming-specific decisions.
+            . If you created the track in Suno, use the{" "}
+            <Link href="/suno-mastering" style={inlineLinkStyle}>
+              Suno mastering workflow
+            </Link>{" "}
+            to analyze, check Master Readiness, and prepare the file for streaming. Then use this guide to dial in
+            streaming-specific decisions.
           </p>
 
           <h2 style={h2Style}>LUFS and Why Spotify Loudness Normalization Matters</h2>

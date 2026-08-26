@@ -338,6 +338,13 @@ export default function ArAiPage() {
           Use the report as a creative decision tool — understand what feels strong, what may hold the song back, and what
           to improve before release.
         </p>
+        <p style={introSubStyle}>
+          Generated the track in Suno? After this report, you can{" "}
+          <Link href="/suno-mastering" style={inlineTextLinkStyle}>
+            analyze and master your Suno songs
+          </Link>{" "}
+          as part of the same finishing workflow.
+        </p>
       </header>
 
       {howItWorksOpen ? (
@@ -532,6 +539,13 @@ export default function ArAiPage() {
             Improve song structure with Song Architect
           </Link>
         </div>
+        <p style={crossLinkHintStyle}>
+          Looking for the full path from idea to release? See{" "}
+          <Link href="/suno-mastering" style={inlineTextLinkStyle}>
+            mastering music created with Suno
+          </Link>
+          .
+        </p>
       </section>
 
       {showEmailVerifyModal ? (
@@ -823,6 +837,13 @@ const introSubStyle: CSSProperties = {
   lineHeight: 1.6
 };
 
+const inlineTextLinkStyle: CSSProperties = {
+  color: "#a8b8f0",
+  textDecoration: "underline",
+  textDecorationColor: "rgba(143, 160, 230, 0.45)",
+  textUnderlineOffset: "3px"
+};
+
 const signalsListStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
@@ -863,6 +884,13 @@ const crossLinkRowStyle: CSSProperties = {
   justifyContent: "center",
   flexWrap: "wrap",
   gap: "10px"
+};
+
+const crossLinkHintStyle: CSSProperties = {
+  margin: "12px 0 0",
+  color: "#9ca8cc",
+  fontSize: "0.88rem",
+  lineHeight: 1.55
 };
 
 const crossLinkPrimaryStyle: CSSProperties = {

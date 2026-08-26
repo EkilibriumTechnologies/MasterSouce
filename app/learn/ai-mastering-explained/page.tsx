@@ -70,7 +70,12 @@ export default function AiMasteringExplainedPage() {
             <Link href="/learn/why-ai-songs-sound-bad" style={inlineLinkStyle}>
               why AI songs sound bad
             </Link>
-            . This guide explains what mastering is actually doing under the hood.
+            . If the song came from Suno, the{" "}
+            <Link href="/suno-mastering" style={inlineLinkStyle}>
+              finishing workflow for Suno creators
+            </Link>{" "}
+            covers analysis, Master Readiness, and mastering before you release. This guide explains what mastering is
+            actually doing under the hood.
           </p>
 
           <h2 style={h2Style}>Loudness: Competitive Level Without Killing the Song</h2>

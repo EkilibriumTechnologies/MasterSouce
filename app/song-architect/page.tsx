@@ -724,12 +724,19 @@ export default function SongArchitectPage() {
       <section style={compactIntroStyle} aria-labelledby="song-architect-heading">
         <p style={eyebrowStyle}>Song Architect</p>
         <h1 id="song-architect-heading" style={titleStyle}>
-          Turn rough ideas into stronger, more structured songs.
+          Build Better Suno Songs Before You Generate
         </h1>
         <p style={introBodyStyle}>
-          Song Architect helps you turn rough ideas, lyrics, hooks, or song concepts into stronger, more structured
-          songs. It can help with verse/chorus structure, emotional arc, hook clarity, genre fit, and release-ready
-          songwriting decisions — a creative decision tool, not a hit guarantee.
+          Shape lyrics, hooks, structure, vocal direction, and energy before you generate in Suno. The same blueprints
+          also work with Udio and other AI music generators. Song Architect helps with verse/chorus flow, energy
+          curves, genre guidance, and ready-to-use generation prompts — a creative decision tool, not a hit guarantee.
+        </p>
+        <p style={introBodyStyle}>
+          After you export,{" "}
+          <Link href="/suno-mastering" style={introLinkStyle}>
+            analyze and master your Suno songs
+          </Link>{" "}
+          in MasterSauce.
         </p>
         <div style={benefitsGridStyle} aria-label="What Song Architect helps with">
           {SONG_ARCHITECT_BENEFITS.map((item) => (
@@ -1198,6 +1205,13 @@ export default function SongArchitectPage() {
             Analyze release readiness
           </Link>
         </div>
+        <p style={bottomCtaHintStyle}>
+          Generating in Suno next? See the{" "}
+          <Link href="/suno-mastering" style={introLinkStyle}>
+            full finishing workflow for Suno creators
+          </Link>
+          .
+        </p>
       </section>
       {showEmailVerifyModal ? (
         <div style={modalBackdropStyle}>
@@ -1315,6 +1329,13 @@ const introBodyStyle: React.CSSProperties = {
   margin: "8px 0 0",
   color: "#aab8dc",
   lineHeight: 1.5
+};
+
+const introLinkStyle: React.CSSProperties = {
+  color: "#a8b8f0",
+  textDecoration: "underline",
+  textDecorationColor: "rgba(143, 160, 230, 0.45)",
+  textUnderlineOffset: "3px"
 };
 
 const howItWorksGridStyle: React.CSSProperties = {
@@ -1698,6 +1719,13 @@ const bottomCtaTextStyle: React.CSSProperties = {
   color: "#c9d4f5",
   fontWeight: 600,
   fontSize: "0.95rem"
+};
+
+const bottomCtaHintStyle: React.CSSProperties = {
+  margin: "12px 0 0",
+  color: "#9ca8cc",
+  fontSize: "0.88rem",
+  lineHeight: 1.55
 };
 
 const bottomCtaRowStyle: React.CSSProperties = {

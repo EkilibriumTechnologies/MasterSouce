@@ -132,6 +132,11 @@ export default function LearnHubPage() {
         <h1 style={h1Style}>Learn MasterSauce</h1>
         <p style={hubIntroStyle}>
           Guides for making AI-generated and independent music sound more professional, release-ready, and competitive.
+          If you create with Suno, start with the{" "}
+          <Link href="/suno-mastering" style={inlineLinkStyle}>
+            Suno mastering and song tools workflow
+          </Link>
+          .
         </p>
       </header>
 

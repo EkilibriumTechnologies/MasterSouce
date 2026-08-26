@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import { buildPageMetadata } from "@/lib/seo/page-metadata";
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "Song Architect | Improve Lyrics, Hooks, and Song Structure",
+  title: "Suno Song Architect | Prompts, Lyrics & Song Structure | MasterSauce",
   description:
-    "Turn rough ideas, lyrics, and song concepts into stronger, more structured songs. Build hooks, refine structure, and shape release-ready blueprints for Suno and Udio.",
+    "Build better Suno songs before you generate. Create structured lyrics, hooks, energy curves, vocal direction, genre guidance, and ready-to-use generation prompts.",
   path: "/song-architect",
   absoluteTitle: true
 });

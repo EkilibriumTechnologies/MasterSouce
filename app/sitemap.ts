@@ -9,6 +9,7 @@ const PATHS = [
   "/pricing",
   "/song-architect",
   "/ar-ai",
+  "/suno-mastering",
   "/terms",
   "/privacy",
   "/contact",
@@ -30,8 +31,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority:
       path === "/"
         ? 1
-        : path.startsWith("/learn")
-          ? 0.65
-          : 0.7
+        : path === "/suno-mastering"
+          ? 0.8
+          : path.startsWith("/learn")
+            ? 0.65
+            : 0.7
   }));
 }

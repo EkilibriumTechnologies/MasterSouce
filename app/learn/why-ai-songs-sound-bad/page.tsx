@@ -120,6 +120,10 @@ export default function WhyAiSongsSoundBadPage() {
             <Link href="/learn/best-mastering-for-suno-ai-songs" style={inlineLinkStyle}>
               mastering for Suno songs
             </Link>
+            , or the product workflow for{" "}
+            <Link href="/suno-mastering" style={inlineLinkStyle}>
+              analyzing and mastering Suno songs
+            </Link>
             . If your next release target is Spotify, jump to{" "}
             <Link href="/learn/spotify-ready-mastering" style={inlineLinkStyle}>
               how to make your track Spotify-ready

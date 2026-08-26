@@ -29,6 +29,6 @@ export const SITE_TAGLINE = "Release-ready mastering for modern creators";
 
 /** Default meta description — also used in JSON-LD where a short summary is needed. */
 export const SITE_DESCRIPTION =
-  "AI mastering with preset, prompt-guided, and reference-track guidance — upload a reference song or name an artist to steer tone and loudness. Free MP3 previews and downloads; premium plans unlock HD WAV exports. Built for independent artists and modern creators.";
+  "AI mastering and song tools for independent and AI music creators, including Suno creators. Analyze, improve, and master your tracks with preset, prompt-guided, or reference-guided mastering. Free MP3 previews; premium plans unlock HD WAV exports.";
 
 export const LEGAL_CONTACT_EMAIL = "consulting@ekilibriumtechnologies.com";

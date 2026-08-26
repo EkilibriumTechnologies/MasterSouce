@@ -50,16 +50,62 @@ function runHitAnalyzerMetadataTests() {
 function runHomepageMetadataTests() {
   const home = read("app/page.tsx");
   const metadataBlock = home.slice(home.indexOf("export const metadata"), home.indexOf("export default"));
+  const site = read("lib/site.ts");
 
   assertIncludes(metadataBlock, 'absoluteUrl("/og-image.png")', "homepage og:image");
   assertIncludes(metadataBlock, 'card: "summary_large_image"', "homepage twitter card");
   assertExcludes(metadataBlock, "mastersauce-logo.png", "homepage metadata must not use logo as og:image");
+  assertIncludes(metadataBlock, "Suno", "homepage title includes Suno");
+  assertIncludes(site, "Suno creators", "default site description mentions Suno creators");
+  assertIncludes(home, "Create with Suno. Finish with MasterSauce.", "homepage hero includes Suno eyebrow");
+  assertIncludes(home, 'href="/suno-mastering"', "homepage links to Suno landing page");
+}
+
+function runSongArchitectMetadataTests() {
+  const layout = read("app/song-architect/layout.tsx");
+  const page = read("app/song-architect/page.tsx");
+
+  assertIncludes(layout, "Suno Song Architect | Prompts, Lyrics & Song Structure | MasterSauce", "Song Architect title includes Suno");
+  assertIncludes(layout, "Build better Suno songs before you generate.", "Song Architect description includes Suno");
+  assertIncludes(layout, 'path: "/song-architect"', "Song Architect canonical path");
+  assertIncludes(layout, "buildPageMetadata", "Song Architect uses metadata helper");
+  assertIncludes(page, "Build Better Suno Songs Before You Generate", "Song Architect H1 includes Suno");
+  assertIncludes(page, "Udio", "Song Architect copy keeps broader generator compatibility");
+  assertIncludes(page, 'href="/suno-mastering"', "Song Architect links to Suno landing page");
+}
+
+function runSunoMasteringPageTests() {
+  const page = read("app/suno-mastering/page.tsx");
+  const sitemap = read("app/sitemap.ts");
+  const robots = read("app/robots.ts");
+
+  assertIncludes(page, "buildPageMetadata", "Suno mastering page uses metadata helper");
+  assertIncludes(page, "Suno Mastering & Song Tools | Master Your Suno Songs | MasterSauce", "Suno mastering unique title");
+  assertIncludes(page, 'const path = "/suno-mastering"', "Suno mastering canonical path");
+  assertIncludes(page, "path,", "Suno mastering passes path to metadata helper");
+  assertIncludes(page, "absoluteTitle: true", "Suno mastering title is absolute");
+  assertExcludes(page, "noIndex", "Suno mastering page must remain indexable");
+  assertIncludes(page, "Master, Analyze, and Improve Your Suno Songs", "Suno mastering H1");
+  assertIncludes(page, 'href="/song-architect"', "Suno mastering links to Song Architect");
+  assertIncludes(page, 'href="/ar-ai"', "Suno mastering links to Analyze Your Song");
+  assertIncludes(page, 'href="/#master"', "Suno mastering links to mastering");
+  assertIncludes(page, 'href="/pricing"', "Suno mastering links to pricing");
+  assertExcludes(page, "official Suno", "must not claim official Suno affiliation");
+  assertExcludes(page, "Suno partner", "must not claim Suno partnership");
+  assertExcludes(page, "built by Suno", "must not claim built by Suno");
+  assertExcludes(page, "integrated with Suno", "must not claim Suno integration");
+  assertIncludes(page, "not affiliated with", "includes independent-product language");
+  assertIncludes(sitemap, '"/suno-mastering"', "sitemap includes /suno-mastering");
+  assertIncludes(robots, "sitemap:", "robots points to sitemap");
+  assertExcludes(robots, "suno-mastering", "robots does not disallow /suno-mastering");
 }
 
 function run() {
   runPageMetadataHelperTests();
   runHitAnalyzerMetadataTests();
   runHomepageMetadataTests();
+  runSongArchitectMetadataTests();
+  runSunoMasteringPageTests();
   console.log("seo-metadata-invariants: ok");
 }
 
