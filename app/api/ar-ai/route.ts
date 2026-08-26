@@ -3,7 +3,7 @@ import { resolveHitAnalyzerAccess } from "@/lib/ar-ai/access";
 import { normalizeArAiReport } from "@/lib/ar-ai/normalize-output";
 import { ArAiOpenAIError, requestArAiEvaluationFromOpenAI } from "@/lib/ar-ai/openai";
 import { trackAnalysisToTechnicalMetrics } from "@/lib/ar-ai/prompts";
-import { recordHitAnalyzerReportEvent } from "@/lib/ar-ai/usage";
+import { consumeHitAnalyzerLifetimeSlot, consumeHitAnalyzerPeriodSlot, recordHitAnalyzerReportEvent } from "@/lib/ar-ai/usage";
 import { AR_AI_DEFAULT_GENRE } from "@/lib/ar-ai/types";
 import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
@@ -237,18 +237,69 @@ export async function POST(request: NextRequest) {
 
     const shouldCountUsage = Boolean(access.normalizedEmail) && !access.launchActive && !access.unlimited;
     if (access.normalizedEmail) {
-      await recordHitAnalyzerReportEvent({
-        normalizedEmail: access.normalizedEmail,
-        planId: access.planId,
-        status: "success",
-        counted: shouldCountUsage
-      }).catch((recordError) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[ar-ai] usage_event_record_failed", {
-            message: recordError instanceof Error ? recordError.message : String(recordError)
+      if (shouldCountUsage) {
+        const limit = access.usage?.limit;
+        const quotaPeriod = access.usage?.quotaPeriod;
+        if (limit == null || quotaPeriod == null || quotaPeriod === "unlimited") {
+          throw new Error("Counted Hit Analyzer access resolved without a finite quota limit.");
+        }
+
+        let consumed = false;
+        if (quotaPeriod === "lifetime") {
+          consumed = await consumeHitAnalyzerLifetimeSlot({
+            normalizedEmail: access.normalizedEmail,
+            planId: access.planId,
+            limit
+          });
+        } else {
+          const periodStartIso = access.usage?.periodStartIso;
+          const periodEndIso = access.usage?.periodEndIso;
+          if (!periodStartIso || !periodEndIso) {
+            throw new Error("Monthly Hit Analyzer access resolved without a usage window.");
+          }
+          consumed = await consumeHitAnalyzerPeriodSlot({
+            normalizedEmail: access.normalizedEmail,
+            planId: access.planId,
+            limit,
+            periodStart: new Date(periodStartIso),
+            periodEnd: new Date(periodEndIso)
           });
         }
-      });
+
+        if (!consumed) {
+          const exhaustedMessage =
+            access.planId === "free"
+              ? "You used both free song analyses. Upgrade to Creator or Pro for more Analyze Your Song access."
+              : "You reached your monthly Analyze Your Song limit. Upgrade your plan or wait for your next billing period.";
+          const res = NextResponse.json(
+            {
+              ok: false,
+              code: "hit_analyzer_quota_exhausted",
+              message: exhaustedMessage,
+              upgradeRequired: true,
+              limit,
+              remaining: 0
+            },
+            { status: 403 }
+          );
+          attachTrustedEmailAccessState(res, access.normalizedEmail);
+          attachSessionCookieIfNeeded(res, sessionPrep);
+          return res;
+        }
+      } else {
+        await recordHitAnalyzerReportEvent({
+          normalizedEmail: access.normalizedEmail,
+          planId: access.planId,
+          status: "success",
+          counted: false
+        }).catch((recordError) => {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[ar-ai] usage_event_record_failed", {
+              message: recordError instanceof Error ? recordError.message : String(recordError)
+            });
+          }
+        });
+      }
     }
 
     if (process.env.NODE_ENV !== "production") {

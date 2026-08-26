@@ -22,51 +22,89 @@ import {
 } from "@/lib/promo/fathers-day-2026";
 import { PromoBanner } from "@/components/promo/promo-banner";
 import { PromoCountdownTimer } from "@/components/promo/countdown-timer";
+import { formatHitAnalyzerLimitShort, getHitAnalyzerAllowanceLabel } from "@/lib/ar-ai/limits";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
-import { PlanId } from "@/lib/subscriptions/types";
+import { PlanId, PlanQuality } from "@/lib/subscriptions/types";
+import { MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
 import { formatMonthlyWavLimitLabel } from "@/lib/usage/download-quota-policy";
 
 const PLAN_ORDER: PlanId[] = ["free", "creator_monthly", "pro_studio_monthly"];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type PricingFeatureGroup = {
+  name: string;
+  items: string[];
+};
+
 function formatSongArchitectBlueprintFeature(monthlyLimit: number): string {
-  return `${monthlyLimit} Song Architect Blueprint${monthlyLimit === 1 ? "" : "s"} / Month`;
+  return `${monthlyLimit} Song Architect Blueprint${monthlyLimit === 1 ? "" : "s"} / month`;
+}
+
+function formatWavQualityLabel(quality: PlanQuality): string {
+  if (quality === "16bit") return "WAV 16-bit";
+  if (quality === "24bit") return "WAV 24-bit";
+  return "WAV 32-bit float";
+}
+
+function formatWavQualityShort(quality: PlanQuality): string {
+  if (quality === "16bit") return "16-bit";
+  if (quality === "24bit") return "24-bit";
+  return "32-bit float";
+}
+
+function formatWavComparisonLabel(cap: number | null): string {
+  if (cap === null) return "Unlimited";
+  if (cap === 1) return "1 / month";
+  return `${cap} / month`;
+}
+
+function buildPlanFeatureGroups(planId: PlanId): PricingFeatureGroup[] {
+  const plan = PLAN_DEFINITIONS[planId];
+  const isPaid = planId !== "free";
+  const analyzeItems = [getHitAnalyzerAllowanceLabel(planId), "Master Readiness"];
+  const createItems = [formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)];
+  if (isPaid) createItems.push("Advanced Song Architect output");
+
+  const masterItems = ["All 7 genre presets", "Unlimited mastering previews"];
+  if (isPaid) {
+    masterItems.push("Adaptive customization + exports");
+    masterItems.push("Unlimited A/B previews");
+  } else {
+    masterItems.push("Adaptive prompt previews");
+    masterItems.push("Unlimited A/B previews");
+  }
+  if (plan.priority) masterItems.push("Priority processing");
+
+  const exportItems = [
+    "Unlimited MP3 downloads",
+    formatMonthlyWavLimitLabel(plan.monthlyMastersLimit),
+    formatWavQualityLabel(plan.quality)
+  ];
+
+  return [
+    { name: "Analyze", items: analyzeItems },
+    { name: "Create", items: createItems },
+    { name: "Master", items: masterItems },
+    { name: "Export / Usage", items: exportItems }
+  ];
 }
 
 const PLAN_COPY: Record<
   PlanId,
   {
     positioning: string;
-    features: (plan: (typeof PLAN_DEFINITIONS)[PlanId]) => string[];
     ctaLabel: string;
     valueCallout?: string;
     ctaHint?: string;
   }
 > = {
   free: {
-    positioning: "Try MasterSauce and export a limited number of full-quality files — hear the master before you spend.",
-    features: () => [
-      "Unlimited MP3 downloads",
-      "1 free WAV download",
-      "WAV 16-bit",
-      "All 7 genre presets",
-      "No watermark",
-      formatSongArchitectBlueprintFeature(PLAN_DEFINITIONS.free.songArchitectGenerationsPerMonth)
-    ],
+    positioning: "Try the full MasterSauce workflow — analyze, design, master, and export before you spend.",
     ctaLabel: "Start free",
     ctaHint: "No card on file. Upgrade from checkout when you need more finals or adaptive exports."
   },
   creator_monthly: {
     positioning: "For artists releasing regularly — more WAV exports, 24-bit depth, and adaptive customization.",
-    features: (plan) => [
-      "Unlimited MP3 downloads",
-      formatMonthlyWavLimitLabel(plan.monthlyMastersLimit),
-      "WAV 24-bit",
-      "Unlimited A/B previews (never counted)",
-      "Adaptive customization + exports",
-      "All 7 genre presets",
-      formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
-    ],
     ctaLabel: "Choose Creator",
     valueCallout: "Sweet spot for steady output",
     ctaHint: "Adds adaptive steering plus higher bit depth."
@@ -74,25 +112,77 @@ const PLAN_COPY: Record<
   pro_studio_monthly: {
     positioning:
       "For serious creators who need the highest-quality exports, priority processing, and more premium tools each month.",
-    features: (plan) => [
-      "Unlimited MP3 downloads",
-      formatMonthlyWavLimitLabel(plan.monthlyMastersLimit),
-      "WAV 32-bit float",
-      "Unlimited A/B previews (never counted)",
-      "Adaptive customization + exports",
-      "Priority processing",
-      formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)
-    ],
     ctaLabel: "Choose Pro Studio",
     ctaHint: "Unlimited WAV exports plus float format."
   }
 };
 
+const FEATURE_GROUPS = [
+  {
+    name: "Analyze",
+    rows: [
+      [
+        "Analyze Your Song",
+        formatHitAnalyzerLimitShort("free"),
+        formatHitAnalyzerLimitShort("creator_monthly"),
+        formatHitAnalyzerLimitShort("pro_studio_monthly")
+      ],
+      ["Master Readiness", "Included", "Included", "Included"]
+    ]
+  },
+  {
+    name: "Create",
+    rows: [
+      [
+        "Song Architect",
+        `${PLAN_DEFINITIONS.free.songArchitectGenerationsPerMonth} / month`,
+        `${PLAN_DEFINITIONS.creator_monthly.songArchitectGenerationsPerMonth} / month`,
+        `${PLAN_DEFINITIONS.pro_studio_monthly.songArchitectGenerationsPerMonth} / month`
+      ],
+      ["Concept, lyrics + generation prompts", "Core output", "Advanced output", "Advanced output"]
+    ]
+  },
+  {
+    name: "Master",
+    rows: [
+      ["Genre preset mastering", "Included", "Included", "Included"],
+      ["Adaptive prompt previews", "Included", "Included", "Included"],
+      ["Adaptive WAV exports", "Upgrade required", "Included", "Included"],
+      ["A/B previews", "Unlimited", "Unlimited", "Unlimited"]
+    ]
+  },
+  {
+    name: "Export / Usage",
+    rows: [
+      ["MP3 downloads", "Unlimited", "Unlimited", "Unlimited"],
+      [
+        "WAV downloads",
+        formatWavComparisonLabel(PLAN_DEFINITIONS.free.monthlyMastersLimit),
+        formatWavComparisonLabel(PLAN_DEFINITIONS.creator_monthly.monthlyMastersLimit),
+        formatWavComparisonLabel(PLAN_DEFINITIONS.pro_studio_monthly.monthlyMastersLimit)
+      ],
+      [
+        "WAV quality",
+        formatWavQualityShort(PLAN_DEFINITIONS.free.quality),
+        formatWavQualityShort(PLAN_DEFINITIONS.creator_monthly.quality),
+        formatWavQualityShort(PLAN_DEFINITIONS.pro_studio_monthly.quality)
+      ],
+      ["WAV / MP3 upload size", MAX_UPLOAD_FILE_SIZE_LABEL, MAX_UPLOAD_FILE_SIZE_LABEL, MAX_UPLOAD_FILE_SIZE_LABEL],
+      [
+        "Priority processing",
+        PLAN_DEFINITIONS.free.priority ? "Included" : "—",
+        PLAN_DEFINITIONS.creator_monthly.priority ? "Included" : "—",
+        PLAN_DEFINITIONS.pro_studio_monthly.priority ? "Included" : "—"
+      ]
+    ]
+  }
+] as const;
+
 const PRICING_FAQ_ITEMS = [
   {
     question: "Which plan do I need for WAV?",
     answer:
-      "Every plan includes WAV exports. Free includes one full WAV download (16-bit). Creator adds a monthly WAV allowance at 24-bit. Pro Studio unlocks 32-bit float WAV and the highest export cap."
+      "Every plan includes WAV exports. Free includes 1 WAV download / month (16-bit). Creator adds 25 WAV downloads / month at 24-bit. Pro Studio unlocks unlimited 32-bit float WAV."
   },
   {
     question: "What is 32-bit float?",
@@ -100,9 +190,9 @@ const PRICING_FAQ_ITEMS = [
       "32-bit float WAV preserves more headroom and detail in the export file — useful when you need maximum fidelity for downstream editing, archival, or professional release workflows. Pro Studio includes 32-bit float exports."
   },
   {
-    question: "Can I use a reference track?",
+    question: "Does the free song-analysis allowance reset?",
     answer:
-      "Yes. Reference-guided mastering is available on every plan — upload a song you love or name an artist to steer tone and loudness before you preview or export."
+      "No. Free includes 2 Analyze Your Song analyses for the lifetime of the account. Creator and Pro Studio include 5 analyses per billing month."
   },
   {
     question: "Does Hit Analyzer predict hits?",
@@ -401,13 +491,9 @@ export function PricingSection() {
     <section id="pricing" style={sectionStyle} aria-labelledby="pricing-title">
       <p style={eyebrowStyle}>Pricing</p>
       <h2 id="pricing-title" style={titleStyle}>
-        Clear plans. Pay for finished exports.
+        The Complete AI Music Finishing Suite
       </h2>
-      <p style={subtitleStyle}>
-        Preview masters freely on every plan — you are never charged for listening. Free lets you try the full workflow
-        with limited exports. Creator and Pro Studio add higher WAV caps, reference-guided and adaptive mastering, and
-        deeper bit-depth formats when you are ready to ship.
-      </p>
+      <p style={subtitleStyle}>Analyze your song → understand readiness → design the next song → master → export</p>
       <div style={reassuranceBarStyle} aria-label="Pricing fairness highlights">
         <span style={reassuranceItemStyle}>Listen all you want</span>
         <span style={reassuranceDotStyle} aria-hidden="true">
@@ -485,13 +571,20 @@ export function PricingSection() {
               ) : null}
               <p style={descriptionStyle}>{planCopy.positioning}</p>
               {planCopy.valueCallout ? <p style={valueCalloutStyle}>{planCopy.valueCallout}</p> : null}
-              <ul style={featuresListStyle}>
-                {planCopy.features(plan).map((feature) => (
-                  <li key={feature} style={featureItemStyle}>
-                    {feature}
-                  </li>
+              <div style={featureGroupsWrapStyle}>
+                {buildPlanFeatureGroups(plan.id).map((group) => (
+                  <div key={group.name}>
+                    <p style={cardGroupLabelStyle}>{group.name}</p>
+                    <ul style={featuresListStyle}>
+                      {group.items.map((feature) => (
+                        <li key={feature} style={featureItemStyle}>
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
               {isFree ? (
                 <button type="button" disabled style={ctaNeutralStyle}>
                   {planCopy.ctaLabel}
@@ -523,6 +616,35 @@ export function PricingSection() {
           );
         })}
       </div>
+      <div style={comparisonStyle} aria-labelledby="feature-comparison-title">
+        <p id="feature-comparison-title" style={comparisonTitleStyle}>
+          Compare every plan
+        </p>
+        <p style={comparisonIntroStyle}>Limits are labeled as lifetime or monthly so you know exactly what resets.</p>
+        <div style={comparisonScrollerStyle}>
+          <div style={comparisonTableStyle} role="table" aria-label="MasterSauce plan feature comparison">
+            <div style={comparisonHeaderStyle} role="row">
+              <span role="columnheader">Feature</span>
+              <span role="columnheader">Free</span>
+              <span role="columnheader">Creator</span>
+              <span role="columnheader">Pro Studio</span>
+            </div>
+            {FEATURE_GROUPS.map((group) => (
+              <div key={group.name}>
+                <p style={comparisonGroupStyle}>{group.name}</p>
+                {group.rows.map(([feature, free, creator, pro]) => (
+                  <div key={feature} style={comparisonRowStyle} role="row">
+                    <strong role="rowheader">{feature}</strong>
+                    <span role="cell">{free}</span>
+                    <span role="cell">{creator}</span>
+                    <span role="cell">{pro}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
       <div style={creditPackStyle}>
         <p style={creditPackEyebrowStyle}>Need more finals this month?</p>
         <p style={creditPackTitleStyle}>Credit pack — $4 one-time</p>
@@ -540,11 +662,10 @@ export function PricingSection() {
         ))}
       </div>
       <div style={adaptiveCopyCardStyle}>
-        <p style={adaptiveCopyTitleStyle}>Premium mastering features</p>
+        <p style={adaptiveCopyTitleStyle}>Finish with the full toolkit</p>
         <p style={adaptiveCopyBodyStyle}>
-          <strong style={{ color: "#dbe5ff" }}>Reference-guided mastering</strong> — upload a reference or name an
-          artist to steer tone and loudness. <strong style={{ color: "#dbe5ff" }}>Adaptive customization</strong> — add a
-          short written brief and preview how the engine reshapes punch, tone, and dynamics.{" "}
+          <strong style={{ color: "#dbe5ff" }}>Adaptive prompt mastering</strong> — add a short written brief and preview
+          how the engine reshapes punch, tone, and dynamics.{" "}
           <strong style={{ color: "#dbe5ff" }}>32-bit float WAV</strong> on Pro Studio preserves extra headroom for
           serious release workflows.
         </p>
@@ -869,12 +990,26 @@ const valueCalloutStyle: React.CSSProperties = {
   padding: "5px 9px"
 };
 
+const featureGroupsWrapStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "12px"
+};
+
+const cardGroupLabelStyle: React.CSSProperties = {
+  margin: "0 0 6px",
+  color: "#8de8cb",
+  fontWeight: 700,
+  fontSize: "0.72rem",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em"
+};
+
 const featuresListStyle: React.CSSProperties = {
   margin: 0,
   padding: 0,
   listStyle: "none",
   display: "grid",
-  gap: "8px",
+  gap: "6px",
   color: "#ced8f9",
   fontSize: "0.9rem"
 };
@@ -922,6 +1057,70 @@ const ctaHintStyle: React.CSSProperties = {
   margin: "2px 0 0",
   color: "#8fa2d7",
   fontSize: "0.8rem",
+  lineHeight: 1.4
+};
+
+const comparisonStyle: React.CSSProperties = {
+  marginTop: "18px",
+  border: "1px solid rgba(109, 124, 194, 0.38)",
+  borderRadius: "16px",
+  padding: "16px",
+  background: "linear-gradient(160deg, rgba(15, 22, 40, 0.74), rgba(12, 19, 35, 0.82))"
+};
+
+const comparisonTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#dbe5ff",
+  fontWeight: 700,
+  fontSize: "1.05rem"
+};
+
+const comparisonIntroStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#a8b7e2",
+  lineHeight: 1.55,
+  fontSize: "0.92rem"
+};
+
+const comparisonScrollerStyle: React.CSSProperties = {
+  marginTop: "14px",
+  overflowX: "auto"
+};
+
+const comparisonTableStyle: React.CSSProperties = {
+  minWidth: "680px"
+};
+
+const comparisonHeaderStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(190px, 1.35fr) repeat(3, minmax(130px, 1fr))",
+  gap: "10px",
+  padding: "0 10px 10px",
+  color: "#dce6ff",
+  fontWeight: 700,
+  fontSize: "0.84rem"
+};
+
+const comparisonGroupStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  padding: "8px 10px",
+  color: "#8de8cb",
+  background: "rgba(24, 42, 55, 0.72)",
+  borderRadius: "8px",
+  fontWeight: 700,
+  fontSize: "0.78rem",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em"
+};
+
+const comparisonRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(190px, 1.35fr) repeat(3, minmax(130px, 1fr))",
+  gap: "10px",
+  padding: "9px 10px",
+  borderBottom: "1px solid rgba(89, 105, 158, 0.24)",
+  color: "#b8c5e8",
+  fontSize: "0.84rem",
   lineHeight: 1.4
 };
 

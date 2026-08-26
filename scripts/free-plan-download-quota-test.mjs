@@ -272,7 +272,7 @@ function runSourceInvariantTests() {
   assert.match(plans, /pro_studio_monthly:[\s\S]*?quality:\s*"32bit_float"/, "pro stays 32-bit float");
   assert.match(plans, /pro_studio_monthly:[\s\S]*?Unlimited WAV downloads/, "pro copy shows unlimited WAV");
   assertIncludes(plans, "Unlimited MP3 downloads", "free plan lists unlimited MP3 downloads");
-  assertIncludes(plans, "1 free WAV download", "free plan lists 1 free WAV download");
+  assertIncludes(plans, "1 WAV download / month", "free plan clearly labels monthly WAV allowance");
   assert.match(
     plans,
     /creator_monthly:[\s\S]*?Unlimited MP3 downloads/,
@@ -332,14 +332,14 @@ function runSourceInvariantTests() {
   assertIncludes(uploadForm, "Unlimited WAV downloads", "upload form shows unlimited quota label");
 
   const pricing = read("components/pricing-section.tsx");
-  assertIncludes(pricing, "Unlimited MP3 downloads", "pricing section shows unlimited MP3 downloads for free");
-  assertIncludes(pricing, "1 free WAV download", "pricing section shows 1 free WAV download");
+  assertIncludes(
+    pricing,
+    '["MP3 downloads", "Unlimited", "Unlimited", "Unlimited"]',
+    "pricing comparison shows unlimited MP3 downloads for every tier"
+  );
+  assertIncludes(pricing, "formatWavComparisonLabel", "pricing comparison formats WAV allowances from plan caps");
   assertIncludes(pricing, "formatMonthlyWavLimitLabel", "pricing section formats WAV limits from policy");
   assertIncludes(pricing, "Unlimited WAV exports plus float format", "pro plan checkout hint mentions unlimited");
-  const creatorMp3Matches = pricing.match(/creator_monthly:[\s\S]*?Unlimited MP3 downloads/g) ?? [];
-  assert.ok(creatorMp3Matches.length >= 1, "pricing section shows unlimited MP3 for creator");
-  const proMp3Matches = pricing.match(/pro_studio_monthly:[\s\S]*?Unlimited MP3 downloads/g) ?? [];
-  assert.ok(proMp3Matches.length >= 1, "pricing section shows unlimited MP3 for pro");
 
   const homeFaq = read("lib/seo/home-faq.ts");
   assertIncludes(homeFaq, "25 WAV downloads/month", "home FAQ mentions creator 25 WAV");

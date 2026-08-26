@@ -8,26 +8,17 @@ import { validateEmailAddress } from "@/lib/security/validate-email-address";
 import { isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
-import { countHitAnalyzerUsageAllTime, type HitAnalyzerUsageSnapshot } from "@/lib/ar-ai/usage";
+import {
+  countHitAnalyzerUsageAllTime,
+  countHitAnalyzerUsageInPeriod,
+  type HitAnalyzerUsageSnapshot
+} from "@/lib/ar-ai/usage";
+import { HIT_ANALYZER_TIER_LIMITS, resolveHitAnalyzerUsageWindow, type HitAnalyzerQuotaPeriod, type HitAnalyzerTierLimit } from "@/lib/ar-ai/limits";
+
+export { HIT_ANALYZER_TIER_LIMITS, getHitAnalyzerAllowanceLabel, getHitAnalyzerMonthlyAllowanceLabel, resolveHitAnalyzerUsageWindow } from "@/lib/ar-ai/limits";
 
 /** Default launch window end (UTC). One month from initial Hit Analyzer launch. */
 export const HIT_ANALYZER_DEFAULT_LAUNCH_END_DATE = "2026-07-30T23:59:59.999Z";
-
-/**
- * Hit Analyzer tier limits.
- * - free: 1 successful evaluation total (lifetime) per account/email
- * - paid tiers: unlimited (null)
- * Admin/owner override emails remain unlimited via resolveHitAnalyzerTierLimit.
- *
- * Counting policy: only successful evaluations recorded with counted=true
- * consume allowance. Failed OpenAI / validation / aborted paths do not count.
- * Free-tier enforcement queries all-time counted events for the normalized email.
- */
-export const HIT_ANALYZER_TIER_LIMITS: Record<PlanId, number | null> = {
-  free: 1,
-  creator_monthly: null,
-  pro_studio_monthly: null
-};
 
 export type HitAnalyzerLaunchCountdown = {
   launchActive: boolean;
@@ -133,15 +124,30 @@ export function buildHitAnalyzerLaunchCountdown(now: Date = new Date()): HitAnal
   };
 }
 
-export function resolveHitAnalyzerTierLimit(planId: PlanId, normalizedEmail?: string | null): number | null {
+export function resolveHitAnalyzerTierLimit(
+  planId: PlanId,
+  normalizedEmail?: string | null
+): HitAnalyzerTierLimit | null {
   if (isAdminEntitlementOverrideEmail(normalizedEmail)) return null;
   return HIT_ANALYZER_TIER_LIMITS[planId];
 }
 
-async function resolvePlanIdForEmail(normalizedEmail: string): Promise<PlanId> {
-  if (!isSupabaseConfigured()) return "free";
+type HitAnalyzerBillingContext = {
+  planId: PlanId;
+  billingPeriodStartIso: string | null;
+  billingPeriodEndIso: string | null;
+};
+
+async function resolveBillingContextForEmail(normalizedEmail: string): Promise<HitAnalyzerBillingContext> {
+  if (!isSupabaseConfigured()) {
+    return { planId: "free", billingPeriodStartIso: null, billingPeriodEndIso: null };
+  }
   const sub = await getBillingSubscriptionByEmail(normalizedEmail);
-  return sub?.planId ?? "free";
+  return {
+    planId: sub?.planId ?? "free",
+    billingPeriodStartIso: sub?.currentPeriodStart ?? null,
+    billingPeriodEndIso: sub?.currentPeriodEnd ?? null
+  };
 }
 
 function resolveBillingEmailHint(request: NextRequest, billingEmailHint?: string): string {
@@ -152,28 +158,62 @@ function resolveBillingEmailHint(request: NextRequest, billingEmailHint?: string
   return fromHeader || fromQuery || fromHint || fromCookie;
 }
 
-function buildQuotaExhaustedMessage(planId: PlanId): string {
+function buildQuotaExhaustedMessage(planId: PlanId, quotaPeriod: HitAnalyzerQuotaPeriod): string {
   if (planId === "free") {
-    return "You used your free Hit Analyzer evaluation. Upgrade to Creator or Pro for unlimited Song Analyzer access.";
+    return "You used both free song analyses. Upgrade to Creator or Pro for more Analyze Your Song access.";
+  }
+  if (quotaPeriod === "monthly") {
+    return "You reached your monthly Analyze Your Song limit. Upgrade your plan or wait for your next billing period.";
   }
   return "You reached your Hit Analyzer limit. Upgrade your plan to continue.";
 }
 
 export async function resolveHitAnalyzerUsageForEmail(normalizedEmail: string): Promise<HitAnalyzerUsageSnapshot> {
-  const planId = await resolvePlanIdForEmail(normalizedEmail);
+  const billing = await resolveBillingContextForEmail(normalizedEmail);
+  const planId = billing.planId;
   const adminUnlimited = isAdminEntitlementOverrideEmail(normalizedEmail);
   const tierLimit = resolveHitAnalyzerTierLimit(planId, normalizedEmail);
-  const unlimited = adminUnlimited || tierLimit == null;
-  const used = unlimited ? 0 : await countHitAnalyzerUsageAllTime(normalizedEmail);
-  const limit = unlimited || tierLimit == null ? null : tierLimit;
-  const remaining = unlimited || limit == null ? null : Math.max(limit - used, 0);
+
+  if (adminUnlimited || tierLimit == null) {
+    return {
+      used: 0,
+      limit: null,
+      remaining: null,
+      planId,
+      unlimited: true,
+      entitled: true,
+      quotaPeriod: "unlimited",
+      periodStartIso: null,
+      periodEndIso: null
+    };
+  }
+
+  const usageWindow = resolveHitAnalyzerUsageWindow(
+    tierLimit,
+    billing.billingPeriodStartIso,
+    billing.billingPeriodEndIso
+  );
+  const used =
+    tierLimit.period === "lifetime"
+      ? await countHitAnalyzerUsageAllTime(normalizedEmail)
+      : await countHitAnalyzerUsageInPeriod(
+          normalizedEmail,
+          usageWindow!.periodStart,
+          usageWindow!.periodEnd
+        );
+  const limit = tierLimit.limit;
+  const remaining = Math.max(limit - used, 0);
+
   return {
     used,
     limit,
     remaining,
     planId,
-    unlimited,
-    entitled: unlimited || (remaining != null && remaining > 0)
+    unlimited: false,
+    entitled: remaining > 0,
+    quotaPeriod: tierLimit.period,
+    periodStartIso: usageWindow?.periodStart.toISOString() ?? null,
+    periodEndIso: usageWindow?.periodEnd.toISOString() ?? null
   };
 }
 
@@ -263,10 +303,11 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
   }
 
   if (usage.remaining != null && usage.remaining <= 0) {
+    const quotaPeriod = usage.quotaPeriod === "unlimited" ? "lifetime" : usage.quotaPeriod;
     return {
       ok: false,
       code: "hit_analyzer_quota_exhausted",
-      message: buildQuotaExhaustedMessage(usage.planId),
+      message: buildQuotaExhaustedMessage(usage.planId, quotaPeriod),
       upgradeRequired: true,
       limit: usage.limit ?? 0,
       remaining: 0
@@ -282,15 +323,4 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
     unlimited: false,
     usage
   };
-}
-
-export function getHitAnalyzerAllowanceLabel(planId: PlanId): string {
-  const limit = HIT_ANALYZER_TIER_LIMITS[planId];
-  if (limit == null) return "Unlimited Song Analyzer";
-  return "1 Song Analyzer evaluation";
-}
-
-/** @deprecated Prefer getHitAnalyzerAllowanceLabel */
-export function getHitAnalyzerMonthlyAllowanceLabel(planId: PlanId): string {
-  return getHitAnalyzerAllowanceLabel(planId);
 }

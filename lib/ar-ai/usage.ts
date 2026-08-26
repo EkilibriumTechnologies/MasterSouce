@@ -1,6 +1,8 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import type { PlanId } from "@/lib/subscriptions/types";
 
+export type HitAnalyzerUsageQuotaPeriod = "lifetime" | "monthly" | "unlimited";
+
 export type HitAnalyzerUsageSnapshot = {
   used: number;
   limit: number | null;
@@ -8,6 +10,9 @@ export type HitAnalyzerUsageSnapshot = {
   planId: PlanId;
   unlimited: boolean;
   entitled: boolean;
+  quotaPeriod: HitAnalyzerUsageQuotaPeriod;
+  periodStartIso: string | null;
+  periodEndIso: string | null;
 };
 
 type HitAnalyzerReportEventStatus = "success" | "openai_failed" | "normalize_failed" | "technical_failed";
@@ -27,15 +32,29 @@ type SupabaseErrorLike = {
   hint?: string | null;
 };
 
-/** In-memory all-time counted usage when Supabase is not configured (local/dev/tests). */
-const localUsageByEmail = new Map<string, number>();
+type LocalUsageEvent = { createdAt: Date };
 
-function getLocalUsage(normalizedEmail: string): number {
-  return localUsageByEmail.get(normalizedEmail) ?? 0;
+/** In-memory counted usage when Supabase is not configured (local/dev/tests). */
+const localUsageEventsByEmail = new Map<string, LocalUsageEvent[]>();
+
+function getLocalUsageEvents(normalizedEmail: string): LocalUsageEvent[] {
+  return localUsageEventsByEmail.get(normalizedEmail) ?? [];
 }
 
-function incrementLocalUsage(normalizedEmail: string): void {
-  localUsageByEmail.set(normalizedEmail, getLocalUsage(normalizedEmail) + 1);
+function countLocalUsageAllTime(normalizedEmail: string): number {
+  return getLocalUsageEvents(normalizedEmail).length;
+}
+
+function countLocalUsageInPeriod(normalizedEmail: string, periodStart: Date, periodEnd: Date): number {
+  return getLocalUsageEvents(normalizedEmail).filter(
+    (event) => event.createdAt >= periodStart && event.createdAt < periodEnd
+  ).length;
+}
+
+function addLocalUsageEvent(normalizedEmail: string, createdAt: Date = new Date()): void {
+  const events = getLocalUsageEvents(normalizedEmail);
+  events.push({ createdAt });
+  localUsageEventsByEmail.set(normalizedEmail, events);
 }
 
 function buildSupabaseErrorMeta(error: SupabaseErrorLike | null | undefined): {
@@ -54,11 +73,11 @@ function buildSupabaseErrorMeta(error: SupabaseErrorLike | null | undefined): {
 
 /**
  * Count successful Hit Analyzer evaluations for an email across the full ledger
- * (no month filter). Only rows with counted=true are included.
+ * (no period filter). Only rows with counted=true are included.
  */
 export async function countHitAnalyzerUsageAllTime(normalizedEmail: string): Promise<number> {
   if (!isSupabaseConfigured()) {
-    return getLocalUsage(normalizedEmail);
+    return countLocalUsageAllTime(normalizedEmail);
   }
 
   const supabase = getSupabaseAdmin();
@@ -82,9 +101,46 @@ export async function countHitAnalyzerUsageAllTime(normalizedEmail: string): Pro
   return count ?? 0;
 }
 
-/** @deprecated Prefer countHitAnalyzerUsageAllTime — kept name alias for older imports/tests. */
-export async function countHitAnalyzerUsageThisMonth(normalizedEmail: string): Promise<number> {
-  return countHitAnalyzerUsageAllTime(normalizedEmail);
+/**
+ * Count successful Hit Analyzer evaluations within a usage window.
+ * Only rows with counted=true are included.
+ */
+export async function countHitAnalyzerUsageInPeriod(
+  normalizedEmail: string,
+  periodStart: Date,
+  periodEnd: Date
+): Promise<number> {
+  if (!isSupabaseConfigured()) {
+    return countLocalUsageInPeriod(normalizedEmail, periodStart, periodEnd);
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { count, error } = await supabase
+    .schema("public")
+    .from("hit_analyzer_report_events")
+    .select("id", { count: "exact", head: true })
+    .eq("email", normalizedEmail)
+    .eq("counted", true)
+    .gte("created_at", periodStart.toISOString())
+    .lt("created_at", periodEnd.toISOString());
+  if (error) {
+    const meta = buildSupabaseErrorMeta(error);
+    console.error("[ar-ai] usage_count_query_failed", {
+      table: "public.hit_analyzer_report_events",
+      filters: {
+        email: normalizedEmail,
+        counted: true,
+        scope: "period",
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString()
+      },
+      supabaseError: meta
+    });
+    throw new Error(
+      `Supabase public.hit_analyzer_report_events period count failed: message="${meta.message}" code="${meta.code ?? "unknown"}" details="${meta.details ?? ""}" hint="${meta.hint ?? ""}"`
+    );
+  }
+  return count ?? 0;
 }
 
 export async function recordHitAnalyzerReportEvent(input: HitAnalyzerReportEventInput): Promise<void> {
@@ -119,11 +175,131 @@ export async function recordHitAnalyzerReportEvent(input: HitAnalyzerReportEvent
   }
 
   if (input.counted && input.normalizedEmail) {
-    incrementLocalUsage(input.normalizedEmail);
+    addLocalUsageEvent(input.normalizedEmail);
   }
+}
+
+async function claimHitAnalyzerQuotaSlot(input: {
+  normalizedEmail: string;
+  planId: PlanId;
+  limit: number;
+  periodStart?: Date;
+  periodEnd?: Date;
+}): Promise<boolean> {
+  if (input.limit <= 0) return false;
+
+  if (!isSupabaseConfigured()) {
+    if (input.periodStart && input.periodEnd) {
+      const used = countLocalUsageInPeriod(input.normalizedEmail, input.periodStart, input.periodEnd);
+      if (used >= input.limit) return false;
+    } else {
+      const used = countLocalUsageAllTime(input.normalizedEmail);
+      if (used >= input.limit) return false;
+    }
+    addLocalUsageEvent(input.normalizedEmail);
+    return true;
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: inserted, error: insertError } = await supabase
+    .schema("public")
+    .from("hit_analyzer_report_events")
+    .insert({
+      email: input.normalizedEmail,
+      plan_id: input.planId,
+      status: "success",
+      counted: true,
+      error_code: null
+    })
+    .select("id")
+    .single();
+  if (insertError || !inserted?.id) {
+    const meta = buildSupabaseErrorMeta(insertError);
+    throw new Error(
+      `Supabase public.hit_analyzer_report_events slot insert failed: message="${meta.message}" code="${meta.code ?? "unknown"}" details="${meta.details ?? ""}" hint="${meta.hint ?? ""}"`
+    );
+  }
+
+  let winnersQuery = supabase
+    .schema("public")
+    .from("hit_analyzer_report_events")
+    .select("id")
+    .eq("email", input.normalizedEmail)
+    .eq("counted", true)
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(input.limit);
+
+  if (input.periodStart && input.periodEnd) {
+    winnersQuery = winnersQuery
+      .gte("created_at", input.periodStart.toISOString())
+      .lt("created_at", input.periodEnd.toISOString());
+  }
+
+  const { data: winningRows, error: selectError } = await winnersQuery;
+  if (selectError) {
+    const meta = buildSupabaseErrorMeta(selectError);
+    throw new Error(
+      `Supabase public.hit_analyzer_report_events slot check failed: message="${meta.message}" code="${meta.code ?? "unknown"}" details="${meta.details ?? ""}" hint="${meta.hint ?? ""}"`
+    );
+  }
+
+  if ((winningRows ?? []).some((row) => row.id === inserted.id)) return true;
+
+  const { error: releaseError } = await supabase
+    .schema("public")
+    .from("hit_analyzer_report_events")
+    .update({ counted: false, error_code: "quota_exhausted_concurrent" })
+    .eq("id", inserted.id);
+  if (releaseError) {
+    const meta = buildSupabaseErrorMeta(releaseError);
+    throw new Error(
+      `Supabase public.hit_analyzer_report_events slot release failed: message="${meta.message}" code="${meta.code ?? "unknown"}" details="${meta.details ?? ""}" hint="${meta.hint ?? ""}"`
+    );
+  }
+  return false;
+}
+
+/**
+ * Atomically claims one of the earliest lifetime usage slots for a free account.
+ * Concurrent direct API requests may all pass the initial read check, so each
+ * completed report inserts a counted row and only the first `limit` ledger rows
+ * remain valid. Later contenders are immediately uncounted and denied.
+ */
+export async function consumeHitAnalyzerLifetimeSlot(input: {
+  normalizedEmail: string;
+  planId: PlanId;
+  limit: number;
+}): Promise<boolean> {
+  return claimHitAnalyzerQuotaSlot(input);
+}
+
+/**
+ * Atomically claims one monthly usage slot within the billing/usage window.
+ * Uses the same concurrent-safe insert + winner selection pattern as lifetime.
+ */
+export async function consumeHitAnalyzerPeriodSlot(input: {
+  normalizedEmail: string;
+  planId: PlanId;
+  limit: number;
+  periodStart: Date;
+  periodEnd: Date;
+}): Promise<boolean> {
+  return claimHitAnalyzerQuotaSlot(input);
 }
 
 /** Test-only reset for in-memory usage ledger. */
 export function resetHitAnalyzerLocalUsageForTests(): void {
-  localUsageByEmail.clear();
+  localUsageEventsByEmail.clear();
+}
+
+/** Test-only helper to seed in-memory usage with explicit timestamps. */
+export function seedHitAnalyzerLocalUsageForTests(
+  normalizedEmail: string,
+  events: Array<{ createdAt: Date }>
+): void {
+  localUsageEventsByEmail.set(
+    normalizedEmail,
+    events.map((event) => ({ createdAt: event.createdAt }))
+  );
 }

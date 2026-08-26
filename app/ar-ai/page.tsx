@@ -94,6 +94,20 @@ function getPlanDisplayName(planId: string): string {
   return "Free";
 }
 
+function formatHitAnalyzerUsage(usage: HitAnalyzerUsage | null): string {
+  if (!usage) return "Free: 2 Analyze Your Song analyses — lifetime · Paid: 5 / month";
+  if (usage.unlimited) return `${getPlanDisplayName(usage.planId)}: Unlimited Analyze Your Song`;
+  if (usage.remaining === 0) {
+    return usage.planId === "free" ? "Free analyses used" : "Monthly analysis limit reached";
+  }
+  if (usage.planId === "free") {
+    if (usage.remaining === 1) return "1 lifetime analysis remaining";
+    return `${usage.remaining ?? 2} lifetime analyses remaining`;
+  }
+  if (usage.remaining === 1) return "1 analysis remaining this month";
+  return `${usage.remaining ?? 5} analyses remaining this month`;
+}
+
 function ratingColor(score: number): string {
   if (score >= 80) return "#8de8cb";
   if (score >= 70) return "#9eb6ff";
@@ -403,17 +417,7 @@ export default function ArAiPage() {
           ) : (
             <>
               <p style={launchBannerTitleStyle}>Hit Analyzer allowance</p>
-              <p style={launchBannerSubStyle}>
-                {usage?.unlimited
-                  ? `${getPlanDisplayName(usage.planId)}: Unlimited Song Analyzer`
-                  : usage
-                    ? `${getPlanDisplayName(usage.planId)}: ${
-                        usage.limit === 1
-                          ? "1 Song Analyzer evaluation"
-                          : `${usage.limit ?? "—"} evaluations`
-                      }${usage.remaining != null ? ` · ${usage.remaining} remaining` : ""}`
-                    : "Free: 1 Song Analyzer evaluation · Paid: Unlimited Song Analyzer"}
-              </p>
+              <p style={launchBannerSubStyle}>{formatHitAnalyzerUsage(usage)}</p>
             </>
           )}
         </div>
