@@ -19,6 +19,8 @@ import type {
  */
 export const REFERENCE_STYLE_ANALYSIS_METADATA = "metadata_reference_interpretation" as const;
 export const REFERENCE_STYLE_ANALYSIS_MEASURED = "measured_audio_analysis" as const;
+/** Schema version for saved-reference dedupe. Same user + track + version overwrites in place. */
+export const REFERENCE_STYLE_BLUEPRINT_VERSION = 1;
 
 export type ReferenceStyleAnalysisType =
   | typeof REFERENCE_STYLE_ANALYSIS_METADATA

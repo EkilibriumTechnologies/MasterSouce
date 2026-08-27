@@ -390,9 +390,16 @@ assertIncludes(limits, 'free: { limit: 2, period: "lifetime" }', "free analyzer 
 // 10. Reference Track remains outside this feature
 const referenceFiles = [
   "app/api/song-architect/reference-track/route.ts",
+  "app/api/song-architect/references/route.ts",
+  "app/api/song-architect/references/[id]/route.ts",
   "components/song-architect/reference-track-panel.tsx",
+  "components/song-architect/my-references-panel.tsx",
   "lib/song-architect/reference-style-blueprint.ts",
   "lib/song-architect/reference-track-service.ts",
+  "lib/song-architect/saved-reference.ts",
+  "lib/song-architect/saved-reference-access.ts",
+  "lib/song-architect/saved-reference-service.ts",
+  "lib/song-architect/saved-reference-store.ts",
   "lib/song-architect/spotify-metadata.ts",
   "lib/song-architect/spotify-url.ts"
 ];

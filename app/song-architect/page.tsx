@@ -21,6 +21,7 @@ import type {
   SongDNA
 } from "@/lib/song-architect/types";
 import { GenerationMatchPanel } from "@/components/song-architect/generation-match-panel";
+import { MyReferencesPanel } from "@/components/song-architect/my-references-panel";
 import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
 import {
   ReferenceTrackPanel,
@@ -550,6 +551,10 @@ export default function SongArchitectPage() {
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [pendingRetryAfterVerify, setPendingRetryAfterVerify] = useState(false);
   const [referenceBlueprint, setReferenceBlueprint] = useState<ReferenceStyleBlueprint | undefined>(undefined);
+  const [appliedReference, setAppliedReference] = useState<ReferenceTrackResult | null>(null);
+  const [appliedReferenceNonce, setAppliedReferenceNonce] = useState(0);
+  const [referencesRefreshKey, setReferencesRefreshKey] = useState(0);
+  const [billingEmail, setBillingEmail] = useState("");
 
   const selectedPreset = useMemo(
     () => SONG_ARCHITECT_PRESETS.find((preset) => preset.id === form.preset) ?? null,
@@ -577,7 +582,22 @@ export default function SongArchitectPage() {
 
   function persistBillingEmail(nextEmail: string): void {
     if (typeof window === "undefined") return;
-    sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, nextEmail.trim().toLowerCase());
+    const normalized = nextEmail.trim().toLowerCase();
+    sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, normalized);
+    setBillingEmail(normalized);
+  }
+
+  function openEmailAccess(options?: { retryGenerate?: boolean }) {
+    setVerifyError("");
+    setVerifyEmail(getStoredBillingEmail() || billingEmail);
+    setPendingRetryAfterVerify(Boolean(options?.retryGenerate));
+    setShowEmailVerifyModal(true);
+  }
+
+  function attachReference(result: ReferenceTrackResult) {
+    setReferenceBlueprint(result.blueprint);
+    setAppliedReference(result);
+    setAppliedReferenceNonce((current) => current + 1);
   }
 
   async function runGeneration(payload: SongArchitectInput): Promise<void> {
@@ -605,10 +625,7 @@ export default function SongArchitectPage() {
         if (data?.usage) setUsage(data.usage);
         if (data?.code === "email_verification_required") {
           console.info("[song-architect] email access confirmation required before generation");
-          setVerifyError("");
-          setVerifyEmail(storedBillingEmail);
-          setPendingRetryAfterVerify(true);
-          setShowEmailVerifyModal(true);
+          openEmailAccess({ retryGenerate: true });
           return;
         }
         setError(typeof data?.message === "string" ? data.message : "Song Architect generation is currently unavailable.");
@@ -669,6 +686,7 @@ export default function SongArchitectPage() {
       persistBillingEmail(normalizedEmail);
       setUsage(data.usage);
       setShowEmailVerifyModal(false);
+      setReferencesRefreshKey((current) => current + 1);
       if (pendingRetryAfterVerify) {
         console.info("[song-architect] generation resumed after email access confirmation");
         setPendingRetryAfterVerify(false);
@@ -684,6 +702,7 @@ export default function SongArchitectPage() {
   useEffect(() => {
     const storedBillingEmail = getStoredBillingEmail();
     if (!storedBillingEmail) return;
+    setBillingEmail(storedBillingEmail);
 
     void (async () => {
       try {
@@ -986,10 +1005,26 @@ export default function SongArchitectPage() {
 
           <ReferenceTrackPanel
             attached={Boolean(referenceBlueprint)}
+            getBillingEmail={getStoredBillingEmail}
+            appliedResult={appliedReference}
+            appliedNonce={appliedReferenceNonce}
+            onRequireAccess={() => openEmailAccess()}
+            onSaved={() => setReferencesRefreshKey((current) => current + 1)}
             onUse={(result: ReferenceTrackResult) => {
               setReferenceBlueprint(result.blueprint);
             }}
-            onClear={() => setReferenceBlueprint(undefined)}
+            onClear={() => {
+              setReferenceBlueprint(undefined);
+              setAppliedReference(null);
+            }}
+          />
+          <MyReferencesPanel
+            refreshNonce={referencesRefreshKey}
+            billingEmail={billingEmail}
+            onRequireAccess={() => openEmailAccess()}
+            onUse={(result: ReferenceTrackResult) => {
+              attachReference(result);
+            }}
           />
 
           <label style={{ ...fieldLabelStyle, marginTop: "12px" }}>
@@ -1118,10 +1153,7 @@ export default function SongArchitectPage() {
                   sunoBlueprint={result.basic.sunoBlueprint}
                   getBillingEmail={getStoredBillingEmail}
                   onEmailVerificationRequired={() => {
-                    setVerifyError("");
-                    setVerifyEmail(getStoredBillingEmail());
-                    setPendingRetryAfterVerify(false);
-                    setShowEmailVerifyModal(true);
+                    openEmailAccess();
                   }}
                 />
               ) : null}
@@ -1224,10 +1256,10 @@ export default function SongArchitectPage() {
           <div style={modalCardStyle} role="dialog" aria-modal="true" aria-labelledby="verify-song-architect-email-title">
             <p style={modalEyebrowStyle}>Confirmation Required</p>
             <h3 id="verify-song-architect-email-title" style={modalTitleStyle}>
-              Confirm email access to generate
+              Confirm email access
             </h3>
             <p style={modalBodyStyle}>
-              Song Architect generation is tied to confirmed email access and anti-abuse checks.
+              Song Architect is tied to confirmed email access and anti-abuse checks.
             </p>
             <form onSubmit={verifyEmailAndMaybeRetry} style={modalFormStyle}>
               <input

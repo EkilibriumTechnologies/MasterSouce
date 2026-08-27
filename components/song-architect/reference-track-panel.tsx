@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { MASTERSOUCE_BILLING_EMAIL_HEADER } from "@/lib/billing/client-key";
 import {
   formatLikelyTempoLabel,
   REFERENCE_STYLE_DISCLAIMER,
@@ -23,6 +24,11 @@ export type ReferenceTrackResult = {
 
 type Props = {
   attached: boolean;
+  getBillingEmail: () => string;
+  appliedResult?: ReferenceTrackResult | null;
+  appliedNonce?: number;
+  onRequireAccess: () => void;
+  onSaved: () => void;
   onUse: (result: ReferenceTrackResult) => void;
   onClear: () => void;
 };
@@ -30,6 +36,8 @@ type Props = {
 type AnalyzeResponse =
   | { ok: true; track: ReferenceTrackResult["track"]; blueprint: ReferenceStyleBlueprint }
   | { ok: false; code?: string; message?: string };
+
+type SaveStatus = "idle" | "saving" | "saved";
 
 function joinList(values: string[]): string {
   return values.filter(Boolean).join(" · ");
@@ -39,14 +47,35 @@ function inferredLabel(value: number | null, suffix = "/100"): string {
   return value === null ? "Not inferred" : `Inferred feel ${value}${suffix}`;
 }
 
-export function ReferenceTrackPanel({ attached, onUse, onClear }: Props) {
+export function ReferenceTrackPanel({
+  attached,
+  getBillingEmail,
+  appliedResult,
+  appliedNonce = 0,
+  onRequireAccess,
+  onSaved,
+  onUse,
+  onClear
+}: Props) {
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ReferenceTrackResult | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState("");
+
+  useEffect(() => {
+    if (!appliedResult || appliedNonce <= 0) return;
+    setResult(appliedResult);
+    setSaveStatus("saved");
+    setSaveError("");
+    setError("");
+  }, [appliedNonce, appliedResult]);
 
   async function analyzeReference() {
     setError("");
+    setSaveError("");
+    setSaveStatus("idle");
     setIsAnalyzing(true);
     try {
       const response = await fetch("/api/song-architect/reference-track", {
@@ -70,8 +99,45 @@ export function ReferenceTrackPanel({ attached, onUse, onClear }: Props) {
     }
   }
 
+  async function saveReference() {
+    if (!result || saveStatus === "saving" || saveStatus === "saved") return;
+    setSaveError("");
+    setSaveStatus("saving");
+    try {
+      const billingEmail = getBillingEmail();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (billingEmail) {
+        headers[MASTERSOUCE_BILLING_EMAIL_HEADER] = billingEmail;
+      }
+      const response = await fetch("/api/song-architect/references", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          blueprint: result.blueprint
+        })
+      });
+      const data = (await response.json()) as { ok?: boolean; code?: string; message?: string };
+      if (response.status === 403 && data.code === "email_verification_required") {
+        setSaveStatus("idle");
+        onRequireAccess();
+        return;
+      }
+      if (!response.ok || data.ok === false) {
+        setSaveStatus("idle");
+        setSaveError(typeof data.message === "string" ? data.message : "Could not save that reference.");
+        return;
+      }
+      setSaveStatus("saved");
+      onSaved();
+    } catch {
+      setSaveStatus("idle");
+      setSaveError("Could not save that reference right now.");
+    }
+  }
+
   const interpretation = result?.blueprint.interpretation;
   const tempoLabel = result ? formatLikelyTempoLabel(result.blueprint) : null;
+  const saveLabel = saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save Reference";
 
   return (
     <section style={sectionStyle} aria-label="Reference Track">
@@ -101,6 +167,8 @@ export function ReferenceTrackPanel({ attached, onUse, onClear }: Props) {
             onClick={() => {
               setResult(null);
               setError("");
+              setSaveError("");
+              setSaveStatus("idle");
               onClear();
             }}
           >
@@ -167,13 +235,24 @@ export function ReferenceTrackPanel({ attached, onUse, onClear }: Props) {
               priority.
             </p>
           ) : null}
-          <button
-            type="button"
-            style={useButtonStyle}
-            onClick={() => onUse(result)}
-          >
-            {attached ? "Using as Song Architect Reference" : "Use as Song Architect Reference"}
-          </button>
+          <div style={resultActionsStyle}>
+            <button
+              type="button"
+              style={useButtonStyle}
+              onClick={() => onUse(result)}
+            >
+              {attached ? "Using as Song Architect Reference" : "Use as Song Architect Reference"}
+            </button>
+            <button
+              type="button"
+              style={saveStatus === "saved" ? savedButtonStyle : secondaryButtonStyle}
+              onClick={() => void saveReference()}
+              disabled={saveStatus !== "idle"}
+            >
+              {saveLabel}
+            </button>
+          </div>
+          {saveError ? <p style={errorStyle}>{saveError}</p> : null}
         </div>
       ) : null}
     </section>
@@ -323,14 +402,29 @@ const attachedStyle: React.CSSProperties = {
   lineHeight: 1.45
 };
 
-const useButtonStyle: React.CSSProperties = {
+const resultActionsStyle: React.CSSProperties = {
   marginTop: "10px",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px"
+};
+
+const useButtonStyle: React.CSSProperties = {
   border: "1px solid rgba(141, 232, 203, 0.45)",
   borderRadius: "999px",
   background: "rgba(18, 36, 40, 0.88)",
   color: "#8de8cb",
   fontWeight: 700,
   padding: "8px 14px",
-  cursor: "pointer",
-  justifySelf: "start"
+  cursor: "pointer"
+};
+
+const savedButtonStyle: React.CSSProperties = {
+  border: "1px solid rgba(141, 232, 203, 0.35)",
+  borderRadius: "999px",
+  background: "rgba(18, 36, 40, 0.55)",
+  color: "#8de8cb",
+  fontWeight: 700,
+  padding: "8px 14px",
+  cursor: "default"
 };
