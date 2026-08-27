@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { useState } from "react";
 import {
-  deriveSongArchitectGuidanceFromBlueprint,
   formatLikelyTempoLabel,
   REFERENCE_STYLE_DISCLAIMER,
   type ReferenceStyleBlueprint
@@ -162,6 +161,12 @@ export function ReferenceTrackPanel({ attached, onUse, onClear }: Props) {
             <strong style={keyStyle}>Tonal character:</strong> {interpretation.likelyTonalCharacter ?? "Not inferred"}
           </p>
           <p style={provenanceStyle}>{REFERENCE_STYLE_DISCLAIMER}</p>
+          {attached ? (
+            <p style={attachedStyle}>
+              Attached as lower-priority creative guidance. Explicit inputs and Song Architect settings still take
+              priority.
+            </p>
+          ) : null}
           <button
             type="button"
             style={useButtonStyle}
@@ -173,23 +178,6 @@ export function ReferenceTrackPanel({ attached, onUse, onClear }: Props) {
       ) : null}
     </section>
   );
-}
-
-export function emptyFieldsFromBlueprint(blueprint: ReferenceStyleBlueprint): {
-  genre?: string;
-  emotion?: string;
-  vocalStyle?: string;
-  structure?: string;
-  energyCurve?: string;
-} {
-  const guidance = deriveSongArchitectGuidanceFromBlueprint(blueprint);
-  return {
-    ...(guidance.genre ? { genre: guidance.genre } : {}),
-    ...(guidance.emotion ? { emotion: guidance.emotion } : {}),
-    ...(guidance.vocalStyle ? { vocalStyle: guidance.vocalStyle } : {}),
-    ...(guidance.structure ? { structure: guidance.structure } : {}),
-    ...(guidance.energyCurve ? { energyCurve: guidance.energyCurve } : {})
-  };
 }
 
 const sectionStyle: React.CSSProperties = {
@@ -324,6 +312,13 @@ const keyStyle: React.CSSProperties = {
 const provenanceStyle: React.CSSProperties = {
   margin: "10px 0 0",
   color: "#8de8cb",
+  fontSize: "0.78rem",
+  lineHeight: 1.45
+};
+
+const attachedStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#c9d7ff",
   fontSize: "0.78rem",
   lineHeight: 1.45
 };

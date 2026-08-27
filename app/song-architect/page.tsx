@@ -23,7 +23,6 @@ import type {
 import { GenerationMatchPanel } from "@/components/song-architect/generation-match-panel";
 import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
 import {
-  emptyFieldsFromBlueprint,
   ReferenceTrackPanel,
   type ReferenceTrackResult
 } from "@/components/song-architect/reference-track-panel";
@@ -988,16 +987,7 @@ export default function SongArchitectPage() {
           <ReferenceTrackPanel
             attached={Boolean(referenceBlueprint)}
             onUse={(result: ReferenceTrackResult) => {
-              const fills = emptyFieldsFromBlueprint(result.blueprint);
               setReferenceBlueprint(result.blueprint);
-              setForm((current) => ({
-                ...current,
-                genre: current.genre.trim() ? current.genre : fills.genre ?? current.genre,
-                emotion: current.emotion.trim() ? current.emotion : fills.emotion ?? current.emotion,
-                vocalStyle: current.vocalStyle.trim() ? current.vocalStyle : fills.vocalStyle ?? current.vocalStyle,
-                structure: current.structure.trim() ? current.structure : fills.structure ?? current.structure,
-                energyCurve: current.energyCurve.trim() ? current.energyCurve : fills.energyCurve ?? current.energyCurve
-              }));
             }}
             onClear={() => setReferenceBlueprint(undefined)}
           />

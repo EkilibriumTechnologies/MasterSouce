@@ -2,12 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
-import {
-  generateReferenceStyleBlueprint,
-  ReferenceStyleBlueprintError
-} from "@/lib/song-architect/reference-style-blueprint";
-import { resolveSpotifyTrackMetadata, SpotifyMetadataError } from "@/lib/song-architect/spotify-metadata";
-import { parseSpotifyTrackUrl } from "@/lib/song-architect/spotify-url";
+import { createReferenceTrackFromUrl } from "@/lib/song-architect/reference-track-service";
 
 const RequestSchema = z.object({
   url: z.string().trim().min(1).max(500)
@@ -59,59 +54,24 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    const urlResult = parseSpotifyTrackUrl(parsed.data.url);
-    if (!urlResult.ok) {
-      const status = 400;
-      const res = jsonError(status, urlResult.code, urlResult.message);
+    const result = await createReferenceTrackFromUrl({ url: parsed.data.url });
+    if (!result.ok) {
+      const res = jsonError(result.status, result.code, result.message);
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
 
-    const track = await resolveSpotifyTrackMetadata(urlResult.trackId);
-    const blueprint = await generateReferenceStyleBlueprint({ track });
     const res = NextResponse.json(
       {
         ok: true,
-        track: {
-          id: track.id,
-          title: track.title,
-          artists: track.artists,
-          album: track.album ?? null,
-          artworkUrl: track.artworkUrl ?? null,
-          durationMs: track.durationMs,
-          url: track.url
-        },
-        blueprint
+        track: result.track,
+        blueprint: result.blueprint
       },
       { status: 200 }
     );
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   } catch (error) {
-    if (error instanceof SpotifyMetadataError) {
-      const mapped =
-        error.code === "missing_credentials"
-          ? jsonError(503, "missing_spotify_config", "Spotify is not configured on this server.")
-          : error.code === "not_found"
-            ? jsonError(404, "spotify_not_found", "That Spotify track could not be found.")
-            : error.code === "auth_failed"
-              ? jsonError(503, "spotify_auth_failed", "Spotify authentication failed.")
-              : error.code === "malformed_track_id"
-                ? jsonError(400, "malformed_track_id", error.message)
-                : jsonError(503, "spotify_unavailable", "Spotify metadata is temporarily unavailable.");
-      attachSessionCookieIfNeeded(mapped, sessionPrep);
-      return mapped;
-    }
-
-    if (error instanceof ReferenceStyleBlueprintError) {
-      const mapped =
-        error.code === "rate_limit"
-          ? jsonError(429, "generation_failed", "Reference Style Blueprint generation is temporarily unavailable. Please retry.")
-          : jsonError(503, "generation_failed", "Reference Style Blueprint generation is temporarily unavailable. Please retry.");
-      attachSessionCookieIfNeeded(mapped, sessionPrep);
-      return mapped;
-    }
-
     if (process.env.NODE_ENV !== "production") {
       console.error("[song-architect] reference_track_failed", error instanceof Error ? error.message : error);
     }

@@ -62,6 +62,8 @@ function hostLooksLikeSpotify(hostname: string): boolean {
   );
 }
 
+const PATH_PREFIXES = new Set(["embed", "open"]);
+
 function resourceFromPath(pathname: string): { type: string; id: string } | null {
   const parts = pathname
     .split("/")
@@ -70,8 +72,13 @@ function resourceFromPath(pathname: string): { type: string; id: string } | null
   if (parts.length === 0) return null;
 
   let index = 0;
-  if (parts[0].toLowerCase().startsWith("intl-")) {
-    index = 1;
+  while (index < parts.length) {
+    const part = parts[index].toLowerCase();
+    if (part.startsWith("intl-") || PATH_PREFIXES.has(part)) {
+      index += 1;
+      continue;
+    }
+    break;
   }
   if (index >= parts.length) return null;
   const type = parts[index]?.toLowerCase();

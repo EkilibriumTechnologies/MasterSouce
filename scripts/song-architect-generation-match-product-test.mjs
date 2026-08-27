@@ -392,6 +392,7 @@ const referenceFiles = [
   "app/api/song-architect/reference-track/route.ts",
   "components/song-architect/reference-track-panel.tsx",
   "lib/song-architect/reference-style-blueprint.ts",
+  "lib/song-architect/reference-track-service.ts",
   "lib/song-architect/spotify-metadata.ts",
   "lib/song-architect/spotify-url.ts"
 ];

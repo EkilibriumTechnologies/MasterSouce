@@ -12,11 +12,16 @@ import path from "node:path";
 
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/song-architect/prompts";
 import {
+  formatReferenceStyleGuidanceForPrompt,
   generateReferenceStyleBlueprint,
   normalizeReferenceStyleBlueprint,
   REFERENCE_STYLE_ANALYSIS_METADATA,
   REFERENCE_STYLE_DISCLAIMER
 } from "@/lib/song-architect/reference-style-blueprint";
+import {
+  createReferenceTrackFromUrl,
+  serializeReferenceTrackResult
+} from "@/lib/song-architect/reference-track-service";
 import { resolveSongArchitectInput } from "@/lib/song-architect/resolve-input";
 import { buildSongDNA } from "@/lib/song-architect/song-dna";
 import {
@@ -91,6 +96,12 @@ function runParserTests() {
 
   const uri = parseSpotifyTrackUrl(`spotify:track:${TRACK_ID}`);
   assert.equal(uri.ok && uri.trackId, TRACK_ID);
+
+  const embed = parseSpotifyTrackUrl(`https://open.spotify.com/embed/track/${TRACK_ID}`);
+  assert.equal(embed.ok && embed.trackId, TRACK_ID);
+
+  const embedIntl = parseSpotifyTrackUrl(`https://open.spotify.com/embed/intl-es/track/${TRACK_ID}`);
+  assert.equal(embedIntl.ok && embedIntl.trackId, TRACK_ID);
 
   const bare = parseSpotifyTrackUrl(TRACK_ID);
   assert.equal(bare.ok && bare.trackId, TRACK_ID);
@@ -225,6 +236,30 @@ function runBlueprintValidationTests() {
   assert.equal(rounded?.interpretation.energy, 85);
   assert.equal(rounded?.interpretation.likelyTempoRange, null);
   assert.equal(rounded?.interpretation.likelyTonalCharacter, "minor-leaning");
+
+  const sentenceKey = normalizeReferenceStyleBlueprint({
+    ...valid,
+    interpretation: {
+      ...valid.interpretation,
+      likelyTonalCharacter: "nocturnal pop in A minor"
+    }
+  });
+  assert.equal(sentenceKey?.interpretation.likelyTonalCharacter, "minor-leaning");
+
+  const identityStripped = normalizeReferenceStyleBlueprint({
+    ...valid,
+    interpretation: {
+      ...valid.interpretation,
+      creativeSummary: "Clone this song by The Weeknd. Recreate Blinding Lights with identical drums.",
+      productionPalette: ["The Weeknd synths", "punchy modern drums"]
+    }
+  });
+  assert.doesNotMatch(identityStripped?.interpretation.creativeSummary ?? "", /the weeknd|blinding lights|clone this song|recreate/i);
+  assert.ok(!(identityStripped?.interpretation.productionPalette ?? []).some((item) => /the weeknd/i.test(item)));
+
+  const guidance = formatReferenceStyleGuidanceForPrompt(valid);
+  assert.match(guidance ?? "", /high-energy feel|dark cinematic electronic/i);
+  assert.doesNotMatch(guidance ?? "", /the weeknd|blinding lights/i);
 
   const nullable = normalizeReferenceStyleBlueprint({
     ...valid,
@@ -363,6 +398,101 @@ function runPrecedenceTests() {
   assert.match(system, /metadata interpretation|metadata-based interpretation/i);
 }
 
+async function runApiServiceTests() {
+  resetSpotifyTokenCacheForTests();
+  const secret = "super-secret-value-do-not-leak";
+  const env = {
+    SPOTIFY_CLIENT_ID: "spotify-client-id",
+    SPOTIFY_CLIENT_SECRET: secret
+  };
+
+  const malformed = await createReferenceTrackFromUrl({ url: "not a url", env: {} });
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.ok === false && malformed.code, "malformed_url");
+  assert.equal(malformed.ok === false && malformed.status, 400);
+  assert.doesNotMatch(serializeReferenceTrackResult(malformed), /spotify-client-id|super-secret|Bearer |access_token/i);
+
+  const playlist = await createReferenceTrackFromUrl({
+    url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+    env: {}
+  });
+  assert.equal(playlist.ok, false);
+  assert.equal(playlist.ok === false && playlist.code, "unsupported_spotify_url");
+
+  const missing = await createReferenceTrackFromUrl({
+    url: `https://open.spotify.com/track/${TRACK_ID}`,
+    env: {}
+  });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.ok === false && missing.code, "missing_spotify_config");
+  assert.match(missing.ok === false ? missing.message : "", /not configured/i);
+
+  const trackPayload = {
+    id: TRACK_ID,
+    name: "Blinding Lights",
+    duration_ms: 200040,
+    artists: [{ name: "The Weeknd" }],
+    album: {
+      name: "After Hours",
+      images: [{ url: "https://i.scdn.co/image/ab", width: 300 }]
+    },
+    external_urls: { spotify: `https://open.spotify.com/track/${TRACK_ID}` }
+  };
+
+  const fetchImpl = async (url, init) => {
+    const href = String(url);
+    if (href.includes("accounts.spotify.com/api/token")) {
+      assert.match(String(init?.headers?.Authorization ?? ""), /^Basic /);
+      return new Response(JSON.stringify({ access_token: "token-should-not-leak", expires_in: 3600 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    if (href.includes(`/v1/tracks/${TRACK_ID}`)) {
+      return new Response(JSON.stringify(trackPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    if (href.includes("api.spotify.com") && href.includes("audio")) {
+      assert.fail("must not call Spotify audio endpoints");
+    }
+    return new Response(JSON.stringify({ error: "unexpected" }), { status: 500 });
+  };
+
+  const success = await createReferenceTrackFromUrl({
+    url: `https://open.spotify.com/track/${TRACK_ID}`,
+    env,
+    fetchImpl,
+    completeJson: async () => ({
+      interpretation: {
+        genreDirection: ["dark cinematic electronic"],
+        mood: ["nocturnal"],
+        energy: 80,
+        darknessBrightness: 20,
+        organicElectronicBalance: 70,
+        heaviness: 35,
+        rhythmicCharacter: ["mid-tempo pulse"],
+        vocalCharacter: ["intimate stacked hook"],
+        productionPalette: ["dark synths"],
+        arrangementDirection: ["intro", "chorus"],
+        likelyTempoRange: { min: 118, max: 132 },
+        likelyTonalCharacter: "minor-leaning nocturnal pop",
+        creativeSummary: "Original nocturnal electronic direction with a wide chorus lift."
+      }
+    })
+  });
+  assert.equal(success.ok, true);
+  if (!success.ok) return;
+  assert.equal(success.track.title, "Blinding Lights");
+  assert.equal(success.blueprint.provenance.directlyAnalyzedAudio, false);
+  assert.equal(success.blueprint.provenance.analysisType, REFERENCE_STYLE_ANALYSIS_METADATA);
+  const serialized = serializeReferenceTrackResult(success);
+  assert.doesNotMatch(serialized, new RegExp(secret));
+  assert.doesNotMatch(serialized, /spotify-client-id|token-should-not-leak|SPOTIFY_CLIENT|Bearer /i);
+  assert.doesNotMatch(serialized, /audio-analysis|audio_features/);
+}
+
 function runSourceInvariantTests() {
   const parser = read("lib/song-architect/spotify-url.ts");
   assert.match(parser, /parseSpotifyTrackUrl/);
@@ -370,11 +500,19 @@ function runSourceInvariantTests() {
   assert.match(metadata, /SPOTIFY_CLIENT_ID/);
   assert.match(metadata, /client_credentials/);
   assert.doesNotMatch(metadata, /audio-analysis|audio_features/);
+  const service = read("lib/song-architect/reference-track-service.ts");
+  assert.match(service, /createReferenceTrackFromUrl/);
+  assert.match(service, /generateReferenceStyleBlueprint/);
+  assert.doesNotMatch(service, /generation-match|evaluateGenerationMatch|runGenerationMatchFromTrackAnalysis/);
+  assert.doesNotMatch(service, /hit_analyzer|recordHitAnalyzer|@\/lib\/ar-ai\/usage|mastering-pipeline|adaptive-mastering|stripe/i);
   const route = read("app/api/song-architect/reference-track/route.ts");
-  assert.match(route, /parseSpotifyTrackUrl/);
-  assert.match(route, /generateReferenceStyleBlueprint/);
+  assert.match(route, /createReferenceTrackFromUrl/);
+  assert.doesNotMatch(route, /generation-match|evaluateGenerationMatch|runGenerationMatchFromTrackAnalysis/);
+  assert.doesNotMatch(route, /hit_analyzer|recordHitAnalyzer|@\/lib\/ar-ai\/usage|mastering-pipeline|adaptive-mastering|STRIPE_/);
   const page = read("app/song-architect/page.tsx");
   assert.match(page, /ReferenceTrackPanel/);
+  assert.match(page, /referenceBlueprint/);
+  assert.doesNotMatch(page, /emptyFieldsFromBlueprint/);
   const panel = read("components/song-architect/reference-track-panel.tsx");
   assert.match(panel, /Use as Song Architect Reference/);
   assert.match(panel, /Analyze Reference/);
@@ -388,5 +526,6 @@ await runMetadataResolverTests();
 runBlueprintValidationTests();
 await runBlueprintGenerationTests();
 runPrecedenceTests();
+await runApiServiceTests();
 runSourceInvariantTests();
 console.log("song architect reference track tests passed");

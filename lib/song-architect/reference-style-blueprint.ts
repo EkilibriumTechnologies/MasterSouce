@@ -97,10 +97,50 @@ function uniqueStrings(values: Array<string | undefined>, maxItems: number, item
   return out;
 }
 
-function sanitizeStringList(value: unknown, maxItems = STRING_LIST_MAX, itemMax = STRING_ITEM_MAX): string[] {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function identityPhrasesFromSource(source: { title?: string; artists?: string[] }, fallback?: SpotifyTrackMetadata): string[] {
+  return uniqueStrings([source.title, fallback?.title, ...(source.artists ?? []), ...(fallback?.artists ?? [])], 16, 180).filter(
+    (phrase) => phrase.length >= 3
+  );
+}
+
+function stripIdentityPhrases(value: string, phrases: string[]): string {
+  let next = value;
+  for (const phrase of phrases) {
+    next = next.replace(new RegExp(`\\b${escapeRegExp(phrase)}\\b`, "ig"), " ");
+  }
+  return next.replace(/\s{2,}/g, " ").replace(/\s+([,;:.])/g, "$1").replace(/^[,;.\-\s]+|[,;.\-\s]+$/g, "").trim();
+}
+
+function stripCloneLanguage(value: string): string {
+  return value
+    .replace(/\b(?:clone|copy|recreate|duplicate|identical to|make it sound like)\b[^.;]*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[,;.\-\s]+|[,;.\-\s]+$/g, "")
+    .trim();
+}
+
+function sanitizeCharacteristicText(value: string | undefined, phrases: string[], maxLength: number): string | undefined {
+  if (!value) return undefined;
+  const cleaned = stripCloneLanguage(stripIdentityPhrases(value, phrases));
+  if (!cleaned) return undefined;
+  return cleaned.slice(0, maxLength);
+}
+
+function sanitizeStringList(
+  value: unknown,
+  maxItems = STRING_LIST_MAX,
+  itemMax = STRING_ITEM_MAX,
+  phrases: string[] = []
+): string[] {
   if (!Array.isArray(value)) return [];
   return uniqueStrings(
-    value.map((item) => (typeof item === "string" ? item : undefined)),
+    value.map((item) =>
+      typeof item === "string" ? sanitizeCharacteristicText(item, phrases, itemMax) : undefined
+    ),
     maxItems,
     itemMax
   );
@@ -119,18 +159,55 @@ function clampScale(value: unknown): number | null {
 }
 
 function looksLikeExactConcertKey(value: string): boolean {
-  return /^[A-G](?:#|b|♯|♭)?\s*(?:major|minor|maj|min|m)$/i.test(value.trim());
+  return /^(?:key(?:\s+of)?\s+)?[A-G](?:#|b|♯|♭)?\s*(?:major|minor|maj|min|m)$/i.test(value.trim());
 }
 
 function softenTonalCharacter(value: string | null): string | null {
   if (!value) return null;
-  if (looksLikeExactConcertKey(value)) {
+  if (looksLikeExactConcertKey(value) || /\b[A-G](?:#|b|♯|♭)?\s*(?:major|minor)\b/i.test(value)) {
     return /minor|\bm\b/i.test(value) ? "minor-leaning" : "major-leaning";
   }
-  if (/\b\d+(?:\.\d+)?\s*hz\b/i.test(value) || /\bkey:\s*[A-G]/i.test(value)) {
+  if (/\b\d+(?:\.\d+)?\s*hz\b/i.test(value) || /\b(?:lufs|true\s*peak|stereo\s*width|spectral)\b/i.test(value)) {
     return null;
   }
   return value.slice(0, TONAL_MAX);
+}
+
+function formatInferredFeel(interpretation: ReferenceStyleBlueprint["interpretation"]): string[] {
+  const parts: Array<string | undefined> = [];
+  if (interpretation.energy !== null) {
+    parts.push(
+      interpretation.energy <= 35
+        ? "restrained energy feel"
+        : interpretation.energy <= 65
+          ? "mid-energy feel"
+          : "high-energy feel"
+    );
+  }
+  if (interpretation.darknessBrightness !== null) {
+    parts.push(
+      interpretation.darknessBrightness <= 40
+        ? "dark-leaning production"
+        : interpretation.darknessBrightness >= 60
+          ? "brighter production"
+          : "balanced dark/bright production"
+    );
+  }
+  if (interpretation.organicElectronicBalance !== null) {
+    parts.push(
+      interpretation.organicElectronicBalance <= 40
+        ? "organic / acoustic-leaning textures"
+        : interpretation.organicElectronicBalance >= 60
+          ? "electronic-leaning textures"
+          : "hybrid organic-electronic textures"
+    );
+  }
+  if (interpretation.heaviness !== null) {
+    parts.push(
+      interpretation.heaviness <= 35 ? "lighter weight" : interpretation.heaviness >= 70 ? "weighty, dense pressure" : "moderate weight"
+    );
+  }
+  return uniqueStrings(parts, 4, 80);
 }
 
 function sanitizeTempoRange(value: unknown): { min: number; max: number } | null {
@@ -193,10 +270,17 @@ export function normalizeReferenceStyleBlueprint(raw: unknown, fallbackTrack?: S
     fallbackTrack?.id ??
     "";
   const title = sanitizeOptionalText(sourceObj.title, 180) ?? fallbackTrack?.title ?? "";
-  const artists = sanitizeStringList(sourceObj.artists, 8, 80);
+  const artists = uniqueStrings(
+    (Array.isArray(sourceObj.artists) ? sourceObj.artists : []).map((item) =>
+      typeof item === "string" ? item : undefined
+    ),
+    8,
+    80
+  );
   const resolvedArtists = artists.length > 0 ? artists : fallbackTrack?.artists ?? [];
   if (!trackId || !title || resolvedArtists.length === 0) return null;
 
+  const identityPhrases = identityPhrasesFromSource({ title, artists: resolvedArtists }, fallbackTrack);
   const album = sanitizeOptionalText(sourceObj.album, 160) ?? fallbackTrack?.album;
   const artworkUrl = sanitizeOptionalText(sourceObj.artworkUrl, 500) ?? fallbackTrack?.artworkUrl;
   const durationMs =
@@ -205,8 +289,11 @@ export function normalizeReferenceStyleBlueprint(raw: unknown, fallbackTrack?: S
       : fallbackTrack?.durationMs;
   const spotifyUrl = sanitizeOptionalText(sourceObj.spotifyUrl, 300) ?? fallbackTrack?.url;
   const creativeSummary =
-    sanitizeOptionalText(interpretationObj.creativeSummary, SUMMARY_MAX) ??
-    "Original production direction inspired by the reference's musical characteristics.";
+    sanitizeCharacteristicText(
+      sanitizeOptionalText(interpretationObj.creativeSummary, SUMMARY_MAX),
+      identityPhrases,
+      SUMMARY_MAX
+    ) ?? "Original production direction inspired by the reference's musical characteristics.";
 
   return {
     source: {
@@ -220,18 +307,24 @@ export function normalizeReferenceStyleBlueprint(raw: unknown, fallbackTrack?: S
       ...(spotifyUrl ? { spotifyUrl } : {})
     },
     interpretation: {
-      genreDirection: sanitizeStringList(interpretationObj.genreDirection, 6, 40),
-      mood: sanitizeStringList(interpretationObj.mood, 6, 40),
+      genreDirection: sanitizeStringList(interpretationObj.genreDirection, 6, 40, identityPhrases),
+      mood: sanitizeStringList(interpretationObj.mood, 6, 40, identityPhrases),
       energy: clampScale(interpretationObj.energy),
       darknessBrightness: clampScale(interpretationObj.darknessBrightness),
       organicElectronicBalance: clampScale(interpretationObj.organicElectronicBalance),
       heaviness: clampScale(interpretationObj.heaviness),
-      rhythmicCharacter: sanitizeStringList(interpretationObj.rhythmicCharacter),
-      vocalCharacter: sanitizeStringList(interpretationObj.vocalCharacter),
-      productionPalette: sanitizeStringList(interpretationObj.productionPalette),
-      arrangementDirection: sanitizeStringList(interpretationObj.arrangementDirection),
+      rhythmicCharacter: sanitizeStringList(interpretationObj.rhythmicCharacter, STRING_LIST_MAX, STRING_ITEM_MAX, identityPhrases),
+      vocalCharacter: sanitizeStringList(interpretationObj.vocalCharacter, STRING_LIST_MAX, STRING_ITEM_MAX, identityPhrases),
+      productionPalette: sanitizeStringList(interpretationObj.productionPalette, STRING_LIST_MAX, STRING_ITEM_MAX, identityPhrases),
+      arrangementDirection: sanitizeStringList(interpretationObj.arrangementDirection, STRING_LIST_MAX, STRING_ITEM_MAX, identityPhrases),
       likelyTempoRange: sanitizeTempoRange(interpretationObj.likelyTempoRange),
-      likelyTonalCharacter: softenTonalCharacter(sanitizeOptionalText(interpretationObj.likelyTonalCharacter, TONAL_MAX) ?? null),
+      likelyTonalCharacter: softenTonalCharacter(
+        sanitizeCharacteristicText(
+          sanitizeOptionalText(interpretationObj.likelyTonalCharacter, TONAL_MAX),
+          identityPhrases,
+          TONAL_MAX
+        ) ?? null
+      ),
       creativeSummary
     },
     provenance: createReferenceStyleProvenance()
@@ -384,6 +477,7 @@ export function formatReferenceStyleGuidanceForPrompt(blueprint?: ReferenceStyle
     [
       ...interpretation.genreDirection,
       ...interpretation.mood,
+      ...formatInferredFeel(interpretation),
       ...interpretation.productionPalette,
       ...interpretation.rhythmicCharacter,
       ...interpretation.vocalCharacter,
