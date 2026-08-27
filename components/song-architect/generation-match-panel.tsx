@@ -155,13 +155,15 @@ export function GenerationMatchPanel({
   const skippedDimensions = match?.dimensions.filter((dimension) => dimension.status === "not_evaluable") ?? [];
 
   return (
-    <section style={cardStyle} aria-label="Generation Match">
+    <section id="generation-match" style={cardStyle} aria-label="Generation Match">
       <div style={headerStyle}>
-        <p style={headingStyle}>Generation Match</p>
+        <p style={eyebrowStyle}>Generation Match</p>
       </div>
+      <p style={headingStyle}>Did the generation follow your blueprint?</p>
       <p style={bodyStyle}>
-        After you generate this song in Suno, Udio, or another tool, upload that audio to see how closely it matches
-        the intended Song DNA. This is a design-match check, not a prediction of commercial success.
+        After you generate this song in Suno, Udio, or another music generator, upload the track. MasterSauce compares
+        the available audio evidence against the intended Song DNA. This is a design-match check, not a quality score
+        and not a prediction of commercial success. Only measured or evaluable dimensions count.
       </p>
 
       <label style={fileLabelStyle}>
@@ -260,19 +262,21 @@ export function GenerationMatchPanel({
 
           {improvedPrompt ? (
             <div>
+              <p style={sectionHeadingStyle}>Improve the next generation</p>
+              <p style={mutedStyle}>
+                MasterSauce keeps the original creative direction and adds corrections based on detected deviations.
+                This derived prompt keeps the original Song DNA unchanged. Copy it into Suno, Udio, or another music
+                generator for the next generation.
+              </p>
               <button
                 type="button"
                 style={secondaryButtonStyle}
                 onClick={() => setShowImprovedPrompt((current) => !current)}
               >
-                Improve Generation Prompt
+                {showImprovedPrompt ? "Hide correction prompt" : "Improve Generation Prompt"}
               </button>
               {showImprovedPrompt ? (
                 <>
-                  <p style={mutedStyle}>
-                    This derived prompt keeps the original Song DNA unchanged. Copy it into Suno or Udio for the next
-                    generation.
-                  </p>
                   <button type="button" style={copyButtonStyle} onClick={() => void handleCopyImprovedPrompt()}>
                     {copied ? "Copied ✓" : "Copy Improved Prompt"}
                   </button>
@@ -291,7 +295,9 @@ const cardStyle: React.CSSProperties = {
   border: "1px solid rgba(141, 232, 203, 0.28)",
   borderRadius: "12px",
   padding: "10px",
-  background: "linear-gradient(160deg, rgba(16, 36, 32, 0.92), rgba(14, 20, 38, 0.88))"
+  background: "linear-gradient(160deg, rgba(16, 36, 32, 0.92), rgba(14, 20, 38, 0.88))",
+  scrollMarginTop: "16px",
+  minWidth: 0
 };
 
 const headerStyle: React.CSSProperties = {
@@ -301,13 +307,21 @@ const headerStyle: React.CSSProperties = {
   gap: "8px"
 };
 
-const headingStyle: React.CSSProperties = {
+const eyebrowStyle: React.CSSProperties = {
   margin: 0,
   color: "#8de8cb",
   fontWeight: 700,
-  fontSize: "0.8rem",
+  fontSize: "0.72rem",
   textTransform: "uppercase",
   letterSpacing: "0.08em"
+};
+
+const headingStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#f0f5ff",
+  fontWeight: 700,
+  fontSize: "0.95rem",
+  letterSpacing: "0.01em"
 };
 
 const bodyStyle: React.CSSProperties = {
@@ -328,7 +342,8 @@ const fileLabelStyle: React.CSSProperties = {
 
 const fileInputStyle: React.CSSProperties = {
   color: "#c9d7ff",
-  fontSize: "0.78rem"
+  fontSize: "0.78rem",
+  maxWidth: "100%"
 };
 
 const fileNameStyle: React.CSSProperties = {

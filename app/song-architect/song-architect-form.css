@@ -1,0 +1,10 @@
+/* Song Architect design-form grid: stack until the viewport can fit two comfortable columns. */
+.sa-field-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1280px) {
+  .sa-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -126,7 +126,8 @@ export function MyReferencesPanel({ refreshNonce, billingEmail, onRequireAccess,
   return (
     <section style={sectionStyle} aria-label="My References">
       <p style={headingStyle}>My References</p>
-      <p style={hintStyle}>Saved Style Blueprints you can reuse in Song Architect. Private to your verified email.</p>
+      <p style={hintStyle}>Reuse a saved creative direction.</p>
+      <p style={privacyStyle}>Private to your verified email.</p>
       {needsAccess ? (
         <button type="button" style={accessButtonStyle} onClick={onRequireAccess}>
           Confirm email access
@@ -134,7 +135,7 @@ export function MyReferencesPanel({ refreshNonce, billingEmail, onRequireAccess,
       ) : null}
       {!needsAccess && isLoading ? <p style={mutedStyle}>Loading saved references…</p> : null}
       {!needsAccess && !isLoading && references.length === 0 && !error ? (
-        <p style={mutedStyle}>No saved references yet. Analyze a track, then optionally save it.</p>
+        <p style={mutedStyle}>No saved references yet.</p>
       ) : null}
       {error ? <p style={errorStyle}>{error}</p> : null}
       {!needsAccess ? (
@@ -177,26 +178,33 @@ export function MyReferencesPanel({ refreshNonce, billingEmail, onRequireAccess,
 }
 
 const sectionStyle: React.CSSProperties = {
-  marginTop: "12px",
-  padding: "12px",
+  marginTop: "10px",
+  padding: "10px 12px",
   borderRadius: "14px",
-  border: "1px solid rgba(118, 136, 210, 0.28)",
-  background: "linear-gradient(155deg, rgba(16, 22, 40, 0.94), rgba(10, 16, 32, 0.86))"
+  border: "1px solid rgba(118, 136, 210, 0.18)",
+  background: "rgba(12, 18, 34, 0.45)"
 };
 
 const headingStyle: React.CSSProperties = {
   margin: 0,
-  color: "#e8edff",
+  color: "#c9d7ff",
   fontWeight: 700,
-  fontSize: "0.88rem",
+  fontSize: "0.82rem",
   letterSpacing: "0.02em"
 };
 
 const hintStyle: React.CSSProperties = {
-  margin: "8px 0 0",
+  margin: "6px 0 0",
   color: "#a7b6dc",
-  fontSize: "0.82rem",
-  lineHeight: 1.5
+  fontSize: "0.78rem",
+  lineHeight: 1.45
+};
+
+const privacyStyle: React.CSSProperties = {
+  margin: "4px 0 0",
+  color: "#8fa0cf",
+  fontSize: "0.72rem",
+  lineHeight: 1.4
 };
 
 const accessButtonStyle: React.CSSProperties = {

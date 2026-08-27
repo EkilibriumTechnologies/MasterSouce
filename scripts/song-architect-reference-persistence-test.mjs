@@ -408,6 +408,7 @@ function runSourceInvariantTests() {
   assertIncludes(panel, "/api/song-architect/references", "panel posts to save API");
   assertExcludes(panel, "ownerEmail", "panel does not send ownerEmail");
   assertIncludes(library, "My References", "library panel exists");
+  assertIncludes(library, "Reuse a saved creative direction", "library is positioned as convenience");
   assertIncludes(library, "Use Reference", "library can reuse a saved blueprint");
   assertIncludes(library, "Confirm email access", "unverified users see existing email-access action");
   assertIncludes(library, "/api/song-architect/references", "library lists via the references API");

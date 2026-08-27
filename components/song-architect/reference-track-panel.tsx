@@ -140,12 +140,17 @@ export function ReferenceTrackPanel({
   const saveLabel = saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save Reference";
 
   return (
-    <section style={sectionStyle} aria-label="Reference Track">
-      <p style={headingStyle}>Reference Track</p>
+    <section id="reference-track" style={sectionStyle} aria-label="Reference Track">
+      <div style={headingRowStyle}>
+        <p style={headingStyle}>Reference Track</p>
+        <span style={optionalBadgeStyle}>Optional</span>
+      </div>
       <p style={hintStyle}>
-        Paste a Spotify track URL to get a Style Blueprint inspired by its musical characteristics. Song Architect will
-        use it to create something original — not a copy of the recording.
+        Use a track you like as creative inspiration. MasterSauce interprets musical characteristics and turns them into
+        lower-priority creative guidance for Song Architect.
       </p>
+      <p style={microcopyStyle}>Inspiration, not a replica. Explicit Song Architect choices always win.</p>
+      <p style={provenanceStyle}>{REFERENCE_STYLE_DISCLAIMER}</p>
       <label style={labelStyle}>
         Spotify track URL
         <input
@@ -228,11 +233,9 @@ export function ReferenceTrackPanel({
           <p style={rowStyle}>
             <strong style={keyStyle}>Tonal character:</strong> {interpretation.likelyTonalCharacter ?? "Not inferred"}
           </p>
-          <p style={provenanceStyle}>{REFERENCE_STYLE_DISCLAIMER}</p>
           {attached ? (
             <p style={attachedStyle}>
-              Attached as lower-priority creative guidance. Explicit inputs and Song Architect settings still take
-              priority.
+              Attached as lower-priority creative guidance. Explicit Song Architect choices still take priority.
             </p>
           ) : null}
           <div style={resultActionsStyle}>
@@ -260,19 +263,37 @@ export function ReferenceTrackPanel({
 }
 
 const sectionStyle: React.CSSProperties = {
-  marginTop: "12px",
+  marginTop: 0,
   padding: "12px",
   borderRadius: "14px",
-  border: "1px solid rgba(118, 136, 210, 0.35)",
-  background: "linear-gradient(155deg, rgba(18, 26, 48, 0.95), rgba(10, 16, 32, 0.88))"
+  border: "1px solid rgba(118, 136, 210, 0.28)",
+  background: "rgba(14, 21, 38, 0.55)"
+};
+
+const headingRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "8px",
+  flexWrap: "wrap"
 };
 
 const headingStyle: React.CSSProperties = {
   margin: 0,
-  color: "#e8edff",
+  color: "#d7e3ff",
   fontWeight: 700,
-  fontSize: "0.88rem",
+  fontSize: "0.86rem",
   letterSpacing: "0.02em"
+};
+
+const optionalBadgeStyle: React.CSSProperties = {
+  fontSize: "0.7rem",
+  fontWeight: 600,
+  color: "#9aa8cf",
+  border: "1px solid rgba(136, 154, 212, 0.35)",
+  borderRadius: "999px",
+  padding: "3px 8px",
+  background: "rgba(13, 21, 40, 0.65)"
 };
 
 const hintStyle: React.CSSProperties = {
@@ -280,6 +301,13 @@ const hintStyle: React.CSSProperties = {
   color: "#a7b6dc",
   fontSize: "0.82rem",
   lineHeight: 1.5
+};
+
+const microcopyStyle: React.CSSProperties = {
+  margin: "4px 0 0",
+  color: "#9aa8cf",
+  fontSize: "0.78rem",
+  lineHeight: 1.45
 };
 
 const labelStyle: React.CSSProperties = {
@@ -292,6 +320,7 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
+  boxSizing: "border-box",
   borderRadius: "10px",
   border: "1px solid rgba(84, 104, 156, 0.4)",
   background: "rgba(11, 18, 35, 0.72)",

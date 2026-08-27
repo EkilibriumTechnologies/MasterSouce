@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import "@/components/brand/mastersauce-brand-header.css";
+import "./song-architect-form.css";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER, MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import { trackSongArchitectFunnelEvent } from "@/lib/song-architect/analytics";
 import type { SongArchitectClientPayload } from "@/lib/song-architect/premium-output";
@@ -417,7 +418,7 @@ const songLengthBadgeStyle: React.CSSProperties = {
 
 const songLengthGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 148px), 1fr))",
   gap: "8px"
 };
 
@@ -466,8 +467,7 @@ const songLengthCardLabelStyle: React.CSSProperties = {
 const songLengthCardHintStyle: React.CSSProperties = {
   color: "#9eb6ff",
   fontSize: "0.76rem",
-  fontWeight: 600,
-  whiteSpace: "nowrap"
+  fontWeight: 600
 };
 
 const songLengthCardDescStyle: React.CSSProperties = {
@@ -481,7 +481,9 @@ const advancedSonicDetailsStyle: React.CSSProperties = {
   padding: "10px 12px 12px",
   borderRadius: "14px",
   border: "1px solid rgba(118, 136, 210, 0.28)",
-  background: "rgba(10, 16, 32, 0.55)"
+  background: "rgba(10, 16, 32, 0.55)",
+  minWidth: 0,
+  maxWidth: "100%"
 };
 
 const advancedSonicSummaryStyle: React.CSSProperties = {
@@ -537,6 +539,14 @@ const SONG_ARCHITECT_BENEFITS = [
     title: "Use it before generating, recording, or mastering",
     body: "Start with a blueprint, then move into Suno, Udio, your DAW, and MasterSauce mastering."
   }
+] as const;
+
+const CREATOR_WORKFLOW_STEPS = [
+  { title: "Find a direction", detail: "Reference Track · optional" },
+  { title: "Design the song", detail: "Song Architect" },
+  { title: "Generate externally", detail: "Suno, Udio, or another generator" },
+  { title: "Check the result", detail: "Generation Match" },
+  { title: "Improve the next generation", detail: "Correction prompt" }
 ] as const;
 
 export default function SongArchitectPage() {
@@ -757,6 +767,27 @@ export default function SongArchitectPage() {
           </Link>{" "}
           in MasterSauce.
         </p>
+        <div style={workflowStyle} aria-labelledby="creator-workflow-heading">
+          <p id="creator-workflow-heading" style={workflowHeadingStyle}>
+            Your creation workflow
+          </p>
+          <p style={workflowLeadStyle}>
+            One creator path from inspiration to the next generation. Use any step — nothing here is locked in sequence.
+          </p>
+          <ol style={workflowListStyle}>
+            {CREATOR_WORKFLOW_STEPS.map((step, index) => (
+              <li key={step.title} style={workflowItemStyle}>
+                <span style={workflowNumberStyle} aria-hidden="true">
+                  {index + 1}
+                </span>
+                <span>
+                  <span style={workflowTitleStyle}>{step.title}</span>
+                  <span style={workflowDetailStyle}>{step.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
         <div style={benefitsGridStyle} aria-label="What Song Architect helps with">
           {SONG_ARCHITECT_BENEFITS.map((item) => (
             <article key={item.title} style={benefitCardStyle}>
@@ -765,34 +796,41 @@ export default function SongArchitectPage() {
             </article>
           ))}
         </div>
-        <div style={howItWorksGridStyle} aria-label="How Song Architect works">
-          <article style={howItWorksStepStyle}>
-            <p style={howItWorksTitleStyle}>Step 1 — 🎚️ Pick a preset or build custom</p>
-            <p style={howItWorksBodyStyle}>
-              Choose from Radio Pop, Dark Trap, Festival EDM, and more — or configure every detail yourself.
-            </p>
-          </article>
-          <article style={howItWorksStepStyle}>
-            <p style={howItWorksTitleStyle}>Step 2 — ⚙️ Generate your blueprint</p>
-            <p style={howItWorksBodyStyle}>
-              Song Architect writes your concept, style prompt, lyrics, and a ready-to-paste export prompt in one pass.
-            </p>
-          </article>
-          <article style={howItWorksStepStyle}>
-            <p style={howItWorksTitleStyle}>Step 3 — 🎵 Paste into Suno or Udio</p>
-            <p style={howItWorksBodyStyle}>
-              Copy your export prompt directly into Suno or Udio and create. When your track is ready, master it free on
-              MasterSauce.
-            </p>
-          </article>
-        </div>
       </section>
 
       <section style={workspaceGridStyle} aria-label="Song Architect tool">
         <form onSubmit={handleGenerate} style={panelStyle}>
+          <ReferenceTrackPanel
+            attached={Boolean(referenceBlueprint)}
+            getBillingEmail={getStoredBillingEmail}
+            appliedResult={appliedReference}
+            appliedNonce={appliedReferenceNonce}
+            onRequireAccess={() => openEmailAccess()}
+            onSaved={() => setReferencesRefreshKey((current) => current + 1)}
+            onUse={(result: ReferenceTrackResult) => {
+              setReferenceBlueprint(result.blueprint);
+            }}
+            onClear={() => {
+              setReferenceBlueprint(undefined);
+              setAppliedReference(null);
+            }}
+          />
+          <MyReferencesPanel
+            refreshNonce={referencesRefreshKey}
+            billingEmail={billingEmail}
+            onRequireAccess={() => openEmailAccess()}
+            onUse={(result: ReferenceTrackResult) => {
+              attachReference(result);
+            }}
+          />
+
           <div style={rowHeaderStyle}>
-            <h2 style={panelTitleStyle}>Input</h2>
+            <h2 style={panelTitleStyle}>Design the song</h2>
           </div>
+          <p style={designLeadStyle}>
+            This is the primary step. Set genre, mood, structure, energy, vocals, exclusions, and creative constraints.
+            A reference is optional guidance — these choices always take priority.
+          </p>
           {usage ? (
             <p style={usage.remaining <= 0 ? usageLineWarningStyle : usageLineStyle}>
               {getUsageMessage(usage)} <span style={usagePlanStyle}>({getPlanDisplayName(usage.planId)} plan)</span>
@@ -843,7 +881,7 @@ export default function SongArchitectPage() {
             </div>
           </div>
 
-          <div style={fieldGridStyle}>
+          <div className="sa-field-grid" style={fieldGridStyle}>
             <label style={fieldLabelStyle}>
               Preset
               <select
@@ -1003,30 +1041,6 @@ export default function SongArchitectPage() {
             </label>
           </div>
 
-          <ReferenceTrackPanel
-            attached={Boolean(referenceBlueprint)}
-            getBillingEmail={getStoredBillingEmail}
-            appliedResult={appliedReference}
-            appliedNonce={appliedReferenceNonce}
-            onRequireAccess={() => openEmailAccess()}
-            onSaved={() => setReferencesRefreshKey((current) => current + 1)}
-            onUse={(result: ReferenceTrackResult) => {
-              setReferenceBlueprint(result.blueprint);
-            }}
-            onClear={() => {
-              setReferenceBlueprint(undefined);
-              setAppliedReference(null);
-            }}
-          />
-          <MyReferencesPanel
-            refreshNonce={referencesRefreshKey}
-            billingEmail={billingEmail}
-            onRequireAccess={() => openEmailAccess()}
-            onUse={(result: ReferenceTrackResult) => {
-              attachReference(result);
-            }}
-          />
-
           <label style={{ ...fieldLabelStyle, marginTop: "12px" }}>
             Notes (optional)
             <textarea
@@ -1042,7 +1056,7 @@ export default function SongArchitectPage() {
             <p style={advancedSonicHintStyle}>
               Optional. Defaults stay automatic — Song Architect infers Sonic DNA from genre, emotion, and vocal style.
             </p>
-            <div style={fieldGridStyle}>
+            <div className="sa-field-grid" style={fieldGridStyle}>
               <label style={fieldLabelStyle}>
                 BPM / Auto
                 <input
@@ -1106,17 +1120,34 @@ export default function SongArchitectPage() {
         </form>
 
         <aside style={panelStyle} aria-live="polite">
-          <h2 style={panelTitleStyle}>Output</h2>
+          <h2 style={panelTitleStyle}>Your blueprint</h2>
           {!result ? (
             <p style={emptyStateStyle}>
-              Configure your inputs and generate. Your concept, style prompt, and lyrics appear here. Creator plans unlock
-              advanced export and mastering guidance.
+              Design the song and generate. Your concept, Song DNA, and generation prompt appear here. Then copy a
+              prompt into Suno, Udio, or another music generator and come back to check Generation Match. Creator plans
+              unlock advanced export and mastering guidance.
             </p>
           ) : (
             <div style={outputStackStyle}>
               {result.premiumLocked ? (
                 <PostSuccessUpgradeCta planId={result.planId} remaining={usage?.remaining ?? 0} />
               ) : null}
+
+              <div style={nextStepCardStyle}>
+                <p style={outputHeadingStyle}>Now generate this in your music generator</p>
+                <ol style={nextStepListStyle}>
+                  <li>Copy the generation prompt below.</li>
+                  <li>Generate in Suno, Udio, or another music generator.</li>
+                  <li>Come back with the result.</li>
+                  <li>
+                    Use{" "}
+                    <a href="#generation-match" style={introLinkStyle}>
+                      Generation Match
+                    </a>{" "}
+                    to see how closely the generation followed your design.
+                  </li>
+                </ol>
+              </div>
 
               <div style={conceptCardStyle}>
                 <p style={outputHeadingStyle}>Concept</p>
@@ -1145,18 +1176,6 @@ export default function SongArchitectPage() {
               </div>
 
               {result.basic.songDNA ? <SongDNAOutputCard songDNA={result.basic.songDNA} /> : null}
-
-              {result.basic.songDNA ? (
-                <GenerationMatchPanel
-                  songDNA={result.basic.songDNA}
-                  stylePrompt={result.basic.stylePrompt}
-                  sunoBlueprint={result.basic.sunoBlueprint}
-                  getBillingEmail={getStoredBillingEmail}
-                  onEmailVerificationRequired={() => {
-                    openEmailAccess();
-                  }}
-                />
-              ) : null}
 
               <div style={conceptCardStyle}>
                 <div style={outputCardHeaderStyle}>
@@ -1229,12 +1248,24 @@ export default function SongArchitectPage() {
               ) : result.premium ? (
                 <PremiumOutputSections premium={result.premium} />
               ) : null}
+
+              {result.basic.songDNA ? (
+                <GenerationMatchPanel
+                  songDNA={result.basic.songDNA}
+                  stylePrompt={result.basic.stylePrompt}
+                  sunoBlueprint={result.basic.sunoBlueprint}
+                  getBillingEmail={getStoredBillingEmail}
+                  onEmailVerificationRequired={() => {
+                    openEmailAccess();
+                  }}
+                />
+              ) : null}
             </div>
           )}
         </aside>
       </section>
       <section style={bottomCtaWrapStyle} aria-label="Next steps after Song Architect">
-        <p style={bottomCtaTextStyle}>Track blueprint ready?</p>
+        <p style={bottomCtaTextStyle}>Already generated? Check the match, then finish the track.</p>
         <div style={bottomCtaRowStyle}>
           <Link href="/" style={bottomCtaPrimaryStyle}>
             Master this song
@@ -1244,7 +1275,7 @@ export default function SongArchitectPage() {
           </Link>
         </div>
         <p style={bottomCtaHintStyle}>
-          Generating in Suno next? See the{" "}
+          Generating in Suno, Udio, or another music generator? Come back to Generation Match first, then see the{" "}
           <Link href="/suno-mastering" style={introLinkStyle}>
             full finishing workflow for Suno creators
           </Link>
@@ -1343,7 +1374,8 @@ const compactIntroStyle: React.CSSProperties = {
   borderRadius: "18px",
   boxShadow: "0 12px 28px rgba(2, 4, 12, 0.32)",
   background: "linear-gradient(145deg, rgba(22, 29, 48, 0.9), rgba(12, 17, 30, 0.9))",
-  padding: "14px 16px"
+  padding: "14px 16px",
+  minWidth: 0
 };
 
 const eyebrowStyle: React.CSSProperties = {
@@ -1376,39 +1408,80 @@ const introLinkStyle: React.CSSProperties = {
   textUnderlineOffset: "3px"
 };
 
-const howItWorksGridStyle: React.CSSProperties = {
+const workflowStyle: React.CSSProperties = {
   marginTop: "12px",
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: "10px"
+  minWidth: 0
 };
 
-const howItWorksStepStyle: React.CSSProperties = {
-  border: "1px solid rgba(110, 128, 190, 0.24)",
-  borderRadius: "12px",
-  background: "rgba(14, 21, 38, 0.68)",
-  padding: "10px"
-};
-
-const howItWorksTitleStyle: React.CSSProperties = {
+const workflowHeadingStyle: React.CSSProperties = {
   margin: 0,
-  color: "#d7e3ff",
+  color: "#e8edff",
   fontWeight: 700,
-  fontSize: "0.83rem",
-  lineHeight: 1.4
+  fontSize: "0.86rem",
+  letterSpacing: "0.02em"
 };
 
-const howItWorksBodyStyle: React.CSSProperties = {
+const workflowLeadStyle: React.CSSProperties = {
   margin: "6px 0 0",
-  color: "#a7b6dc",
-  fontSize: "0.83rem",
-  lineHeight: 1.5
+  color: "#9aa8cf",
+  fontSize: "0.78rem",
+  lineHeight: 1.45
+};
+
+const workflowListStyle: React.CSSProperties = {
+  listStyle: "none",
+  margin: "10px 0 0",
+  padding: 0,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 148px), 1fr))",
+  gap: "8px"
+};
+
+const workflowItemStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "8px",
+  minWidth: 0,
+  padding: "8px 9px",
+  borderRadius: "12px",
+  border: "1px solid rgba(110, 128, 190, 0.22)",
+  background: "rgba(14, 21, 38, 0.55)"
+};
+
+const workflowNumberStyle: React.CSSProperties = {
+  flexShrink: 0,
+  width: "20px",
+  height: "20px",
+  borderRadius: "999px",
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(154, 132, 255, 0.22)",
+  color: "#d7e3ff",
+  fontSize: "0.7rem",
+  fontWeight: 700,
+  lineHeight: 1
+};
+
+const workflowTitleStyle: React.CSSProperties = {
+  display: "block",
+  color: "#e8edff",
+  fontWeight: 700,
+  fontSize: "0.78rem",
+  lineHeight: 1.35
+};
+
+const workflowDetailStyle: React.CSSProperties = {
+  display: "block",
+  marginTop: "2px",
+  color: "#9aa8cf",
+  fontSize: "0.72rem",
+  lineHeight: 1.4
 };
 
 const benefitsGridStyle: React.CSSProperties = {
   marginTop: "14px",
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
   gap: "10px"
 };
 
@@ -1437,7 +1510,7 @@ const benefitBodyStyle: React.CSSProperties = {
 const workspaceGridStyle: React.CSSProperties = {
   display: "grid",
   gap: "12px",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
   alignItems: "start"
 };
 
@@ -1446,7 +1519,8 @@ const panelStyle: React.CSSProperties = {
   borderRadius: "18px",
   boxShadow: "0 14px 30px rgba(2, 4, 12, 0.36)",
   background: "linear-gradient(145deg, rgba(22, 29, 48, 0.92), rgba(12, 17, 30, 0.92))",
-  padding: "14px"
+  padding: "14px",
+  minWidth: 0
 };
 
 const rowHeaderStyle: React.CSSProperties = {
@@ -1454,7 +1528,15 @@ const rowHeaderStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: "10px",
-  flexWrap: "wrap"
+  flexWrap: "wrap",
+  marginTop: "16px"
+};
+
+const designLeadStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#a7b6dc",
+  fontSize: "0.82rem",
+  lineHeight: 1.5
 };
 
 const panelTitleStyle: React.CSSProperties = {
@@ -1467,19 +1549,26 @@ const panelTitleStyle: React.CSSProperties = {
 const fieldGridStyle: React.CSSProperties = {
   marginTop: "12px",
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-  gap: "10px"
+  gap: "10px",
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0
 };
 
 const fieldLabelStyle: React.CSSProperties = {
   display: "grid",
   gap: "6px",
   color: "#cad6f6",
-  fontSize: "0.82rem"
+  fontSize: "0.82rem",
+  minWidth: 0,
+  maxWidth: "100%"
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
   borderRadius: "10px",
   border: "1px solid rgba(84, 104, 156, 0.4)",
   background: "rgba(11, 18, 35, 0.72)",
@@ -1664,6 +1753,21 @@ const conceptCardStyle: React.CSSProperties = {
   borderRadius: "12px",
   padding: "10px",
   background: "rgba(14, 20, 38, 0.8)"
+};
+
+const nextStepCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(141, 232, 203, 0.28)",
+  borderRadius: "12px",
+  padding: "10px 12px",
+  background: "linear-gradient(160deg, rgba(16, 36, 32, 0.88), rgba(14, 20, 38, 0.86))"
+};
+
+const nextStepListStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  paddingLeft: "18px",
+  color: "#c5d4ef",
+  fontSize: "0.82rem",
+  lineHeight: 1.55
 };
 
 const outputHeadingStyle: React.CSSProperties = {
