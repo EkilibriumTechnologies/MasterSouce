@@ -270,7 +270,11 @@ export default function SunoMasteringPage() {
           </ul>
           <p style={pStyle}>
             Use it to decide what feels strong, what may be holding the song back, and what to improve before you master
-            or release.
+            or release. For a focused overview of that report, see the{" "}
+            <Link href="/suno-song-analyzer" style={inlineLinkStyle}>
+              Suno Song Analyzer
+            </Link>
+            .
           </p>
         </section>
 

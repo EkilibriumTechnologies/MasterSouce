@@ -10,6 +10,7 @@ const PATHS = [
   "/song-architect",
   "/ar-ai",
   "/suno-mastering",
+  "/suno-song-analyzer",
   "/terms",
   "/privacy",
   "/contact",
@@ -31,7 +32,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority:
       path === "/"
         ? 1
-        : path === "/suno-mastering"
+        : path === "/suno-mastering" || path === "/suno-song-analyzer"
           ? 0.8
           : path.startsWith("/learn")
             ? 0.65

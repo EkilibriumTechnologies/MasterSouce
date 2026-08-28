@@ -108,6 +108,50 @@ function runSunoMasteringPageTests() {
   assertExcludes(robots, "suno-mastering", "robots does not disallow /suno-mastering");
 }
 
+function runSunoSongAnalyzerPageTests() {
+  const page = read("app/suno-song-analyzer/page.tsx");
+  const sitemap = read("app/sitemap.ts");
+  const robots = read("app/robots.ts");
+  const site = read("lib/site.ts");
+  const existingPages = [
+    read("app/ar-ai/layout.tsx"),
+    read("app/suno-mastering/page.tsx"),
+    read("app/learn/best-mastering-for-suno-ai-songs/page.tsx"),
+    read("app/learn/why-ai-songs-sound-bad/page.tsx")
+  ].join("\n");
+  const expectedTitle = "Suno Song Analyzer | Analyze AI-Generated Music | MasterSauce";
+  const expectedDescription =
+    "Upload a Suno-generated track for an A&R-style report on production quality, hooks, replay value, playlist fit, and release readiness before mastering or release.";
+
+  assertIncludes(page, "buildPageMetadata", "Suno song analyzer uses metadata helper");
+  assertIncludes(page, `const title = "${expectedTitle}"`, "Suno song analyzer unique title");
+  assertIncludes(page, expectedDescription, "Suno song analyzer unique description");
+  assertIncludes(page, 'const path = "/suno-song-analyzer"', "Suno song analyzer canonical path");
+  assertIncludes(page, "absoluteTitle: true", "Suno song analyzer uses absolute title");
+  assertIncludes(page, "absoluteUrl(path)", "Suno song analyzer schema uses canonical URL");
+  assertIncludes(site, '"https://www.mastersauce.ai"', "Suno song analyzer canonical resolves to production www host");
+  assertExcludes(page, "localhost", "Suno song analyzer has no localhost canonical");
+  assertExcludes(page, "noIndex", "Suno song analyzer remains indexable");
+  assert.equal((page.match(/<h1\b/g) ?? []).length, 1, "Suno song analyzer must have exactly one H1");
+  assertIncludes(page, ">Suno Song Analyzer</h1>", "Suno song analyzer H1 matches primary keyword");
+  assert.ok(!existingPages.includes(expectedTitle), "Suno song analyzer title must be unique among related pages");
+  assert.ok(!existingPages.includes(expectedDescription), "Suno song analyzer description must be unique among related pages");
+  assertIncludes(page, "const faqItems: FaqItem[]", "Suno song analyzer has one visible FAQ source");
+  assertIncludes(page, "<FAQSchema", "Suno song analyzer emits FAQPage schema");
+  assertIncludes(page, "<FaqSection items={faqItems}", "Suno song analyzer renders matching visible FAQ");
+  assertIncludes(page, "faq={faqItems}", "Suno song analyzer schema uses the visible FAQ source");
+  assert.equal((page.match(/question: "/g) ?? []).length, 5, "Suno song analyzer has five FAQ questions");
+  assertIncludes(page, 'href="/ar-ai"', "Suno song analyzer links to the actual Hit Analyzer");
+  assertIncludes(page, 'href="/suno-mastering"', "Suno song analyzer links to Suno mastering");
+  assertIncludes(page, 'href="/song-architect"', "Suno song analyzer links to Song Architect");
+  assertIncludes(page, 'href="/pricing"', "Suno song analyzer links to pricing");
+  assertIncludes(page, 'href="/#master"', "Suno song analyzer links to mastering workspace");
+  assertIncludes(page, "not affiliated with", "Suno song analyzer includes independent-product disclaimer");
+  assertIncludes(sitemap, '"/suno-song-analyzer"', "sitemap includes Suno song analyzer");
+  assertIncludes(robots, 'allow: "/"', "robots permits public routes");
+  assertExcludes(robots, "suno-song-analyzer", "robots does not disallow Suno song analyzer");
+}
+
 function runApexWwwRedirectConfigTests() {
   const middleware = read("middleware.ts");
   const nextConfig = read("next.config.mjs");
@@ -132,6 +176,7 @@ function run() {
   runHomepageMetadataTests();
   runSongArchitectMetadataTests();
   runSunoMasteringPageTests();
+  runSunoSongAnalyzerPageTests();
   runApexWwwRedirectConfigTests();
   console.log("seo-metadata-invariants: ok");
 }
