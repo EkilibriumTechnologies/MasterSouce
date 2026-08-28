@@ -39,6 +39,18 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        source: "/",
+        has: [{ type: "host", value: "mastersauce.ai" }],
+        destination: "https://www.mastersauce.ai/",
+        permanent: true
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "mastersauce.ai" }],
+        destination: "https://www.mastersauce.ai/:path*",
+        permanent: true
+      },
+      {
         source: "/old-path",
         destination: "/new-path",
         permanent: true,

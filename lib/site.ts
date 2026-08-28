@@ -1,6 +1,6 @@
 /**
  * Canonical site URL for metadata, sitemap, and absolute links.
- * Set NEXT_PUBLIC_SITE_URL in production (e.g. https://mastersauce.app).
+ * Set NEXT_PUBLIC_SITE_URL in production (e.g. https://www.mastersauce.ai).
  * Falls back to NEXT_PUBLIC_APP_URL (Stripe redirects), then VERCEL_URL, then localhost.
  */
 export function getSiteUrlString(): string {

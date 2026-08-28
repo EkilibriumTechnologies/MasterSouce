@@ -100,12 +100,31 @@ function runSunoMasteringPageTests() {
   assertExcludes(robots, "suno-mastering", "robots does not disallow /suno-mastering");
 }
 
+function runApexWwwRedirectConfigTests() {
+  const middleware = read("middleware.ts");
+  const nextConfig = read("next.config.mjs");
+  const helper = read("lib/http/apex-www-redirect.ts");
+
+  assertIncludes(helper, 'APEX_PUBLIC_HOST = "mastersauce.ai"', "apex hostname constant");
+  assertIncludes(helper, 'CANONICAL_PUBLIC_HOST = "www.mastersauce.ai"', "canonical www hostname constant");
+  assertIncludes(middleware, "apexToWwwRedirectUrl", "middleware uses apex redirect helper");
+  assertIncludes(middleware, 'request.headers.get("x-forwarded-host")', "middleware reads Railway x-forwarded-host");
+  assertIncludes(middleware, "NextResponse.redirect(destination, 301)", "middleware issues permanent 301");
+  assertExcludes(middleware, "www.mastersauce.ai\")", "middleware does not hardcode a host compare that would loop www");
+  assertIncludes(helper, "x-forwarded-host", "helper documents forwarded-host detection");
+  assertIncludes(helper, "resolveRequestHostname", "helper resolves host behind proxies");
+  assertIncludes(nextConfig, 'value: "mastersauce.ai"', "next.config matches apex host");
+  assertIncludes(nextConfig, "https://www.mastersauce.ai/:path*", "next.config preserves path when redirecting apex");
+  assertExcludes(nextConfig, 'value: "www.mastersauce.ai"', "next.config does not redirect www onto itself");
+}
+
 function run() {
   runPageMetadataHelperTests();
   runHitAnalyzerMetadataTests();
   runHomepageMetadataTests();
   runSongArchitectMetadataTests();
   runSunoMasteringPageTests();
+  runApexWwwRedirectConfigTests();
   console.log("seo-metadata-invariants: ok");
 }
 
