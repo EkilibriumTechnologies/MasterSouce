@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { trackEvent } from "@/lib/analytics/ab-comparison";
 import { trackMasteringFunnelEvent } from "@/lib/analytics/mastering-funnel";
 import { trackSubscriptionButtonClick } from "@/lib/analytics/subscription-button";
-import { getGaClientId } from "@/lib/analytics/gtag";
+import { getGaClientId, resolveBeginCheckoutCatalogId, trackGa4BeginCheckout } from "@/lib/analytics/gtag";
 import { MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import {
   getSubscriptionPlanMetadata,
@@ -355,7 +355,21 @@ export function PricingSection() {
         throw new Error("Missing subscription plan metadata.");
       }
     }
-    const ga_client_id = await getGaClientId();
+    let ga_client_id: string | null = null;
+    try {
+      const catalogId = resolveBeginCheckoutCatalogId({
+        kind: nextSelection.kind,
+        planId: nextSelection.kind === "subscription" ? nextSelection.planId : "credit_pack"
+      });
+      if (catalogId) trackGa4BeginCheckout(catalogId);
+    } catch {
+      /* begin_checkout must never block Stripe Checkout */
+    }
+    try {
+      ga_client_id = await getGaClientId();
+    } catch {
+      ga_client_id = null;
+    }
     const body =
       nextSelection.kind === "credit_pack"
         ? {

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { trackGa4PurchaseFromCheckoutSession, trackGa4PurchaseFromPaidSubscriptionInvoice } from "@/lib/analytics/stripe-ga4-purchase";
+import {
+  handleGa4CheckoutSessionCompleted,
+  trackGa4PurchaseFromPaidSubscriptionInvoice
+} from "@/lib/analytics/stripe-ga4-purchase";
 import { appendCreditPackLedgerEntry, hasProcessedStripeEvent, persistStripeBillingEvent } from "@/lib/billing/store";
 import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel-server";
 import { reconcileStripeSubscription } from "@/lib/billing/stripe-reconcile";
@@ -143,7 +146,7 @@ export async function POST(request: NextRequest) {
         }
       }
       try {
-        await trackGa4PurchaseFromCheckoutSession(session);
+        await handleGa4CheckoutSessionCompleted(session, { stripe });
       } catch (ga4Err) {
         const message = ga4Err instanceof Error ? ga4Err.message : String(ga4Err);
         console.warn("[GA4_PURCHASE] failed", { scope: "checkout_session_completed", message });
@@ -214,12 +217,12 @@ export async function POST(request: NextRequest) {
           })
         );
       }
-      if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
+      if (event.type === "invoice.paid") {
         try {
-          await trackGa4PurchaseFromPaidSubscriptionInvoice(invoice);
+          await trackGa4PurchaseFromPaidSubscriptionInvoice(invoice, { stripe });
         } catch (ga4Err) {
           const message = ga4Err instanceof Error ? ga4Err.message : String(ga4Err);
-          console.warn("[GA4_PURCHASE] failed", { scope: "invoice_paid_or_payment_succeeded", message });
+          console.warn("[GA4_PURCHASE] failed", { scope: "invoice_paid", message });
         }
       }
     }

@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { sanitizeGa4ClientId } from "@/lib/analytics/ga4-client-id";
 import { getAdaptiveEntitlementByEmail } from "@/lib/billing/store";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { getStripeClient, getStripeCreditPackPriceId, getStripePriceIdForPlan } from "@/lib/stripe/server";
 import { logMasteringFunnelEvent, normalizeEmailForFunnelLog } from "@/lib/analytics/mastering-funnel-server";
 
 const optionalGaClientId = z.preprocess((val) => {
-  if (val == null) return undefined;
-  if (typeof val !== "string") return undefined;
-  const t = val.trim().slice(0, 120);
-  return t.length > 0 ? t : undefined;
-}, z.string().max(120).optional());
+  const sanitized = sanitizeGa4ClientId(val);
+  return sanitized ?? undefined;
+}, z.string().max(64).optional());
 
 const BodySchema = z.discriminatedUnion("kind", [
   z.object({

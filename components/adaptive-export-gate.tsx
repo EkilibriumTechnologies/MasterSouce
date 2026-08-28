@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { getGaClientId } from "@/lib/analytics/gtag";
+import { getGaClientId, trackGa4BeginCheckout } from "@/lib/analytics/gtag";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
 import {
   MASTERSOUCE_ADAPTIVE_CHECKOUT_SESSION_KEY,
@@ -203,11 +203,21 @@ export function AdaptiveExportGate({
       file_id: fileId
     });
     try {
+      trackGa4BeginCheckout(ADAPTIVE_CHECKOUT_PLAN_ID);
+    } catch {
+      /* begin_checkout must never block Stripe Checkout */
+    }
+    try {
       sessionStorage.setItem(MASTERSOUCE_BILLING_EMAIL_KEY, trimmed);
       savePendingAdaptiveExport(pendingCheckoutSnapshot);
 
       const checkoutMetadata = getSubscriptionPlanMetadata(ADAPTIVE_CHECKOUT_PLAN_ID);
-      const ga_client_id = await getGaClientId();
+      let ga_client_id: string | null = null;
+      try {
+        ga_client_id = await getGaClientId();
+      } catch {
+        ga_client_id = null;
+      }
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
