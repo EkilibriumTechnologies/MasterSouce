@@ -36,16 +36,23 @@ function runPageMetadataHelperTests() {
 
 function runHitAnalyzerMetadataTests() {
   const layout = read("app/ar-ai/layout.tsx");
+  const page = read("app/ar-ai/page.tsx");
   const helper = read("lib/seo/page-metadata.ts");
 
-  const expectedTitle = "MasterSauce Hit Analyzer | A&R-Style Release Readiness Report";
+  const expectedTitle = "AI Song Analyzer & A&R Report | MasterSauce";
   const expectedDescription =
-    "Get a professional A&R-style report for your song. It does not predict hits — it evaluates hook strength, production quality, replay value, playlist fit, and commercial readiness.";
+    "Analyze your song with AI for an A&R-style report on hook strength, production quality, replay value, playlist fit, and release readiness. No hit predictions.";
 
-  assertIncludes(layout, expectedTitle, "Hit Analyzer og:title");
-  assertIncludes(layout, expectedDescription, "Hit Analyzer og:description");
-  assertIncludes(layout, 'path: "/ar-ai"', "Hit Analyzer canonical path");
+  assertIncludes(layout, expectedTitle, "Hit Analyzer title");
+  assertIncludes(layout, expectedDescription, "Hit Analyzer description");
+  assertIncludes(layout, 'const path = "/ar-ai"', "Hit Analyzer canonical path");
   assertIncludes(layout, "buildPageMetadata", "Hit Analyzer uses metadata helper");
+  assertIncludes(layout, "getProductWebAppJsonLd", "Hit Analyzer emits product web-app schema");
+  assert.equal((page.match(/<h1\b/g) ?? []).length, 1, "Hit Analyzer must have exactly one H1");
+  assertIncludes(page, "AI Song Analyzer — MasterSauce Hit Analyzer", "Hit Analyzer H1 matches primary intent");
+  assertIncludes(page, 'href="/#master"', "Hit Analyzer links to mastering workspace");
+  assertIncludes(page, 'href="/pricing"', "Hit Analyzer links to pricing");
+  assertIncludes(page, 'href="/song-architect"', "Hit Analyzer links to Song Architect");
   assertExcludes(layout, "mastersauce-logo.png", "Hit Analyzer layout must not set logo as og:image");
   assertIncludes(helper, 'DEFAULT_SOCIAL_PREVIEW_PATH = "/og-image.png"', "helper default og:image");
 }
@@ -68,13 +75,64 @@ function runSongArchitectMetadataTests() {
   const layout = read("app/song-architect/layout.tsx");
   const page = read("app/song-architect/page.tsx");
 
-  assertIncludes(layout, "Suno Song Architect | Prompts, Lyrics & Song Structure | MasterSauce", "Song Architect title includes Suno");
-  assertIncludes(layout, "Build better Suno songs before you generate.", "Song Architect description includes Suno");
-  assertIncludes(layout, 'path: "/song-architect"', "Song Architect canonical path");
+  assertIncludes(layout, "AI Song Structure Generator & Songwriting Planner | MasterSauce", "Song Architect unique title");
+  assertIncludes(layout, "Plan a song before you generate it.", "Song Architect description matches planning intent");
+  assertIncludes(layout, 'const path = "/song-architect"', "Song Architect canonical path");
   assertIncludes(layout, "buildPageMetadata", "Song Architect uses metadata helper");
-  assertIncludes(page, "Build Better Suno Songs Before You Generate", "Song Architect H1 includes Suno");
+  assertIncludes(layout, "getProductWebAppJsonLd", "Song Architect emits product web-app schema");
+  assert.equal((page.match(/<h1\b/g) ?? []).length, 1, "Song Architect must have exactly one H1");
+  assertIncludes(page, "AI Song Structure Generator for Better Song Blueprints", "Song Architect H1 matches primary intent");
   assertIncludes(page, "Udio", "Song Architect copy keeps broader generator compatibility");
   assertIncludes(page, 'href="/suno-mastering"', "Song Architect links to Suno landing page");
+  assertIncludes(page, 'href="/ar-ai"', "Song Architect links to Hit Analyzer");
+  assertIncludes(page, 'href="/#master"', "Song Architect links to mastering workspace");
+  assertIncludes(page, 'href="/pricing"', "Song Architect links to pricing");
+}
+
+function runProductSchemaAndIndexabilityTests() {
+  const arLayout = read("app/ar-ai/layout.tsx");
+  const architectLayout = read("app/song-architect/layout.tsx");
+  const schemaHelper = read("lib/seo/product-web-app-json-ld.ts");
+  const sitemap = read("app/sitemap.ts");
+  const robots = read("app/robots.ts");
+  const relatedMetadata = [
+    read("app/page.tsx"),
+    read("app/suno-mastering/page.tsx"),
+    read("app/suno-song-analyzer/page.tsx"),
+    read("app/learn/page.tsx"),
+    read("app/learn/why-ai-songs-sound-bad/page.tsx"),
+    read("app/learn/best-mastering-for-suno-ai-songs/page.tsx"),
+    read("app/learn/spotify-ready-mastering/page.tsx"),
+    read("app/learn/ai-mastering-explained/page.tsx")
+  ].join("\n");
+
+  const arTitle = "AI Song Analyzer & A&R Report | MasterSauce";
+  const arDescription =
+    "Analyze your song with AI for an A&R-style report on hook strength, production quality, replay value, playlist fit, and release readiness. No hit predictions.";
+  const architectTitle = "AI Song Structure Generator & Songwriting Planner | MasterSauce";
+  const architectDescription =
+    "Plan a song before you generate it. Build structure, lyrics, hooks, energy curves, vocal direction, genre guidance, and prompts for Suno, Udio, and other AI music tools.";
+
+  assert.notEqual(arTitle, architectTitle, "target product titles must be unique");
+  assert.notEqual(arDescription, architectDescription, "target product descriptions must be unique");
+  assert.ok(!relatedMetadata.includes(arTitle), "Hit Analyzer title must be unique among related pages");
+  assert.ok(!relatedMetadata.includes(arDescription), "Hit Analyzer description must be unique among related pages");
+  assert.ok(!relatedMetadata.includes(architectTitle), "Song Architect title must be unique among related pages");
+  assert.ok(!relatedMetadata.includes(architectDescription), "Song Architect description must be unique among related pages");
+  assertExcludes(arLayout, "noIndex", "Hit Analyzer remains indexable");
+  assertExcludes(architectLayout, "noIndex", "Song Architect remains indexable");
+  assertExcludes(arLayout, "localhost", "Hit Analyzer has no localhost canonical");
+  assertExcludes(architectLayout, "localhost", "Song Architect has no localhost canonical");
+  assertIncludes(sitemap, '"/ar-ai"', "sitemap includes Hit Analyzer");
+  assertIncludes(sitemap, '"/song-architect"', "sitemap includes Song Architect");
+  assertExcludes(robots, "ar-ai", "robots does not disallow Hit Analyzer");
+  assertExcludes(robots, "song-architect", "robots does not disallow Song Architect");
+  assertIncludes(schemaHelper, '"@type": "WebPage"', "product schema includes WebPage");
+  assertIncludes(schemaHelper, '"@type": "WebApplication"', "product schema includes WebApplication");
+  assertIncludes(schemaHelper, "featureList", "product schema describes visible features");
+  assertExcludes(schemaHelper, "AggregateRating", "product schema has no unsupported ratings");
+  assertExcludes(schemaHelper, '"@type": "Review"', "product schema has no unsupported reviews");
+  assertExcludes(schemaHelper, '"@type": "Offer"', "product schema has no unsupported offer");
 }
 
 function runSunoMasteringPageTests() {
@@ -175,6 +233,7 @@ function run() {
   runHitAnalyzerMetadataTests();
   runHomepageMetadataTests();
   runSongArchitectMetadataTests();
+  runProductSchemaAndIndexabilityTests();
   runSunoMasteringPageTests();
   runSunoSongAnalyzerPageTests();
   runApexWwwRedirectConfigTests();

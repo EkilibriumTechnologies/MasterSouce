@@ -753,12 +753,13 @@ export default function SongArchitectPage() {
       <section style={compactIntroStyle} aria-labelledby="song-architect-heading">
         <p style={eyebrowStyle}>Song Architect</p>
         <h1 id="song-architect-heading" style={titleStyle}>
-          Build Better Suno Songs Before You Generate
+          AI Song Structure Generator for Better Song Blueprints
         </h1>
         <p style={introBodyStyle}>
-          Shape lyrics, hooks, structure, vocal direction, and energy before you generate in Suno. The same blueprints
-          also work with Udio and other AI music generators. Song Architect helps with verse/chorus flow, energy
-          curves, genre guidance, and ready-to-use generation prompts — a creative decision tool, not a hit guarantee.
+          Plan lyrics, hooks, structure, vocal direction, and energy before you generate. Song Architect is an AI
+          songwriting planner for verse/chorus flow, energy curves, genre guidance, and ready-to-use generation prompts.
+          Use the blueprint in Suno, Udio, or another AI music generator — it is a creative decision tool, not a hit
+          guarantee.
         </p>
         <p style={introBodyStyle}>
           After you export,{" "}
@@ -1267,7 +1268,7 @@ export default function SongArchitectPage() {
       <section style={bottomCtaWrapStyle} aria-label="Next steps after Song Architect">
         <p style={bottomCtaTextStyle}>Already generated? Check the match, then finish the track.</p>
         <div style={bottomCtaRowStyle}>
-          <Link href="/" style={bottomCtaPrimaryStyle}>
+          <Link href="/#master" style={bottomCtaPrimaryStyle}>
             Master this song
           </Link>
           <Link href="/ar-ai" style={bottomCtaSecondaryStyle}>
@@ -1279,7 +1280,11 @@ export default function SongArchitectPage() {
           <Link href="/suno-mastering" style={introLinkStyle}>
             full finishing workflow for Suno creators
           </Link>
-          .
+          , or{" "}
+          <Link href="/pricing" style={introLinkStyle}>
+            compare plans
+          </Link>{" "}
+          for more blueprints and exports.
         </p>
       </section>
       {showEmailVerifyModal ? (

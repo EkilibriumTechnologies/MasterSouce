@@ -325,7 +325,7 @@ export default function ArAiPage() {
       <header style={heroStyle}>
         <span style={releaseBadgeStyle}>A&amp;R RELEASE READINESS</span>
         <div style={titleRowStyle}>
-          <h1 style={h1Style}>MasterSauce Hit Analyzer</h1>
+          <h1 style={h1Style}>AI Song Analyzer — MasterSauce Hit Analyzer</h1>
           <button
             type="button"
             style={howItWorksButtonStyle}
@@ -337,9 +337,9 @@ export default function ArAiPage() {
           </button>
         </div>
         <p style={introStyle}>
-          MasterSauce Hit Analyzer does not predict whether a song will become a hit. It gives a professional A&amp;R-style
-          release readiness report based on audio feature analysis, commercial songwriting principles, music psychology, and
-          modern streaming behavior.
+          This AI song analyzer does not predict whether a song will become a hit. MasterSauce Hit Analyzer gives a
+          professional A&amp;R-style release readiness report based on audio feature analysis, commercial songwriting
+          principles, music psychology, and modern streaming behavior.
         </p>
         <ul style={signalsListStyle} aria-label="What the report evaluates">
           {HIT_ANALYZER_SIGNALS.map((signal) => (
@@ -536,7 +536,7 @@ export default function ArAiPage() {
       <section style={crossLinkSectionStyle} aria-label="Related MasterSauce tools">
         <p style={crossLinkHeadingStyle}>Next steps after your report</p>
         <div style={crossLinkRowStyle}>
-          <Link href="/" style={crossLinkPrimaryStyle}>
+          <Link href="/#master" style={crossLinkPrimaryStyle}>
             Master this track
           </Link>
           <Link href="/song-architect" style={crossLinkSecondaryStyle}>
@@ -548,7 +548,11 @@ export default function ArAiPage() {
           <Link href="/suno-mastering" style={inlineTextLinkStyle}>
             mastering music created with Suno
           </Link>
-          .
+          , or{" "}
+          <Link href="/pricing" style={inlineTextLinkStyle}>
+            compare plans
+          </Link>{" "}
+          for more analyses and exports.
         </p>
       </section>
 
