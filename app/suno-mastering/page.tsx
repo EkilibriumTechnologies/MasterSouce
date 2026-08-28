@@ -30,30 +30,35 @@ import {
 } from "../learn/learn-styles";
 
 const path = "/suno-mastering";
-const title = "Suno Mastering & Song Tools | Master Your Suno Songs | MasterSauce";
+const title = "AI Mastering for Suno Songs | MasterSauce";
 const description =
-  "If you created your track in Suno, MasterSauce gives you a workflow for shaping the idea, analyzing the export, checking Master Readiness, and preparing the final track for release.";
+  "Analyze and master music created with Suno. Check tonal balance, dynamics, loudness, and Master Readiness before preparing your AI-generated song for release.";
 
 const faqItems: FaqItem[] = [
   {
-    question: "How do I master a song created with Suno?",
+    question: "Do Suno songs need mastering?",
     answer:
-      "Export the track from Suno, upload it to MasterSauce, review analysis and Master Readiness, A/B the master, then download the version you want to release. Free MP3 previews are available before you export; premium plans unlock HD WAV."
+      "Not every song needs the same amount of processing, but a track created with Suno can still benefit from mastering. A mastering pass can improve tonal balance, control dynamics and loudness, and help the track translate more consistently across playback systems. Compare the original and mastered versions before deciding."
   },
   {
-    question: "Can I improve a Suno song before I generate it?",
+    question: "Can I master a Suno song before Spotify distribution?",
     answer:
-      "Yes. Song Architect helps you shape lyrics, hooks, structure, vocal direction, energy, genre guidance, and generation prompts before you paste them into Suno. The same blueprints also work with Udio and other AI music generators."
+      "Yes. Export the finished song from Suno, upload it to MasterSauce, review the analysis and Master Readiness notes, then A/B the master before downloading the file you plan to send to your distributor. Mastering can prepare a track for streaming, but it does not guarantee acceptance, playback level, or performance on Spotify."
   },
   {
-    question: "Does Analyze Your Song tell me if a Suno track will be a hit?",
+    question: "Should I use WAV when mastering an AI-generated song?",
     answer:
-      "No. Hit Analyzer is an A&R-style release-readiness report, not a hit prediction. It looks at signals such as hook strength, production quality, replay value, arrangement, playlist fit, and commercial readiness so you can decide what to improve."
+      "Use a WAV export when one is available because it preserves more source quality than a compressed MP3. MasterSauce accepts both WAV and MP3, so you can still master an MP3 when that is the source you have."
   },
   {
-    question: "Is MasterSauce only for Suno?",
+    question: "What does MasterSauce analyze before mastering?",
     answer:
-      "No. MasterSauce is built for independent and AI music creators more broadly. Songs created with Suno are a natural fit, but the same tools work for Udio, DAW mixes, and other recordings."
+      "MasterSauce analyzes the uploaded audio and shows a Master Readiness assessment for mix conditions such as low-end balance, harshness, dynamics, and headroom. The workflow also uses the track analysis to recommend a mastering profile. These are practical signals to review, not an absolute score of musical quality."
+  },
+  {
+    question: "Is MasterSauce part of Suno?",
+    answer:
+      "No. Suno is a third-party AI music creation platform. MasterSauce is an independent product and is not affiliated with or endorsed by Suno. There is no sponsorship, partnership, or official integration."
   }
 ];
 
@@ -83,21 +88,111 @@ export default function SunoMasteringPage() {
         <header style={heroStyle}>
           <MasterSauceBrandHeroLogo priority />
           <p style={eyebrowStyle}>For Suno creators</p>
-          <h1 style={{ ...h1Style, maxWidth: "28ch" }}>Master, Analyze, and Improve Your Suno Songs</h1>
+          <h1 style={{ ...h1Style, maxWidth: "28ch" }}>AI Mastering for Suno Songs</h1>
           <p style={heroIntroStyle}>
-            MasterSauce is the production layer around AI-generated music. If you created your track in Suno, you get a
-            workflow for shaping the idea first, judging the export honestly, and preparing the final file for release.
+            AI-generated music can still need a finishing pass after generation. Tonal balance, dynamics, loudness,
+            headroom, and translation across playback systems all affect whether a track feels ready to release.
           </p>
-          <p style={heroTaglineStyle}>Create with Suno. Finish with MasterSauce.</p>
+          <p style={heroTaglineStyle}>
+            MasterSauce analyzes your Suno export, checks Master Readiness, and lets you compare the original with a
+            mastered version before you choose what to release.
+          </p>
+          <div style={{ ...ctaRowStyle, marginTop: "24px" }}>
+            <Link href="/#master" style={ctaPrimaryStyle}>
+              Master a Suno song
+            </Link>
+            <Link href="/ar-ai" style={ctaSecondaryStyle}>
+              Analyze Your Song
+            </Link>
+          </div>
         </header>
 
-        <section style={articleStyle} aria-labelledby="suno-workflow-heading">
-          <h2 id="suno-workflow-heading" style={h2Style}>
-            The workflow for Suno creators
+        <section style={articleStyle} aria-labelledby="why-master-suno-heading">
+          <h2 id="why-master-suno-heading" style={h2Style}>
+            Why a generated Suno track may still need mastering
           </h2>
           <p style={pStyle}>
-            Generation gets you a song. Finishing is a different job. MasterSauce sits around that Suno export so you can
-            improve the idea, check the result, and master with your own ears in the loop.
+            Suno is a third-party platform for creating music with AI. Generation can produce a complete song, but the
+            exported audio may still sound too bright, muddy, compressed, quiet, or inconsistent next to finished releases.
+            Those are source-dependent issues, so the right amount of mastering differs from track to track.
+          </p>
+          <p style={pStyle}>
+            Mastering is the final quality-control and polish stage. It can refine tonal balance, manage peaks and
+            dynamics, set a suitable loudness direction, and help the song translate across earbuds, speakers, cars, and
+            streaming playback. It cannot rewrite the arrangement or repair every problem in the generated source.
+          </p>
+        </section>
+
+        <section style={contentSectionStyle} aria-labelledby="suno-analysis-heading">
+          <h2 id="suno-analysis-heading" style={h2Style}>
+            Analyze the track before mastering
+          </h2>
+          <p style={pStyle}>
+            Upload the finished Suno export to the real{" "}
+            <Link href="/#master" style={inlineLinkStyle}>
+              MasterSauce mastering workflow
+            </Link>
+            . Track analysis provides measurements used by the mastering workflow and recommends a mastering profile.
+            Master Readiness then surfaces practical mix conditions such as low-end balance, harshness, dynamics, and
+            headroom.
+          </p>
+          <p style={pStyle}>
+            Treat those notes as decision support, not a verdict. If the analysis finds a source issue, you can improve
+            the export first or continue and judge the result with your own ears. Incomplete analysis does not block the
+            mastering workflow.
+          </p>
+        </section>
+
+        <section style={contentSectionStyle} aria-labelledby="suno-mastering-workflow-heading">
+          <h2 id="suno-mastering-workflow-heading" style={h2Style}>
+            An adaptive mastering workflow for AI-generated music
+          </h2>
+          <p style={pStyle}>
+            Choose a genre preset and loudness direction for a fast recommended master, or describe the result you want
+            with prompt-guided mastering. You can also add an optional reference track or artist to guide tone, loudness,
+            and balance. When analysis suggests it may help, optional AI Audio Restoration can run before mastering.
+          </p>
+          <p style={pStyle}>Listen for more than volume when you compare the original and master:</p>
+          <ul style={listStyle}>
+            <li style={listItemStyle}>tonal balance: controlled low end, clear mids, and smoother highs</li>
+            <li style={listItemStyle}>dynamics: stable energy without flattening the song&apos;s impact</li>
+            <li style={listItemStyle}>loudness: a confident level without unnecessary clipping or harshness</li>
+            <li style={listItemStyle}>translation: a consistent result across different playback systems</li>
+          </ul>
+          <p style={pStyle}>
+            A/B the original and mastered previews before you commit. Free MP3 masters are available, while premium plans
+            unlock HD WAV exports. Mastering should improve the track; if it does not, keep the original or revise the
+            source.
+          </p>
+        </section>
+
+        <section style={contentSectionStyle} aria-labelledby="suno-release-heading">
+          <h2 id="suno-release-heading" style={h2Style}>
+            Prepare a Suno song for streaming release
+          </h2>
+          <p style={pStyle}>
+            Use the highest-quality source Suno makes available to you. WAV is recommended when possible because it avoids
+            adding another layer of lossy compression before mastering, but MasterSauce also accepts MP3 files.
+          </p>
+          <p style={pStyle}>
+            A balanced master can help a track hold up on Spotify and other streaming services, but no mastering tool can
+            guarantee a platform&apos;s acceptance, normalization behavior, playlist placement, or commercial result. Your
+            distributor&apos;s current delivery requirements still apply. For more context, read{" "}
+            <Link href="/learn/spotify-ready-mastering" style={inlineLinkStyle}>
+              how to prepare a track for Spotify
+            </Link>
+            .
+          </p>
+        </section>
+
+        <section style={contentSectionStyle} aria-labelledby="suno-workflow-heading">
+          <h2 id="suno-workflow-heading" style={h2Style}>
+            How MasterSauce fits the Suno creation workflow
+          </h2>
+          <p style={pStyle}>
+            Use only the parts you need. Song Architect can help shape the song before generation, Analyze Your Song can
+            provide an A&amp;R-style release-readiness report after generation, and the mastering workflow handles the final
+            analysis, comparison, and export.
           </p>
           <ol style={workflowListStyle} aria-label="Song Architect to release workflow">
             {WORKFLOW_STEPS.map((step, index) => (
@@ -179,74 +274,22 @@ export default function SunoMasteringPage() {
           </p>
         </section>
 
-        <section style={contentSectionStyle} aria-labelledby="suno-readiness-heading">
-          <h2 id="suno-readiness-heading" style={h2Style}>
-            Master Readiness
-          </h2>
-          <p style={pStyle}>
-            When you{" "}
-            <Link href="/#master" style={inlineLinkStyle}>
-              upload for mastering
-            </Link>
-            , Master Readiness is a heuristic check of mix issues — things like low-end, harshness, dynamics, and
-            headroom. It is a readiness assessment, not an absolute music-quality score.
-          </p>
-          <p style={pStyle}>
-            You may see notes suggesting the mix is ready, that minor issues showed up, or that it is worth improving
-            the mix first. Incomplete analysis never blocks you. Review the notes, then master anyway or go back and
-            fix the source.
-          </p>
-        </section>
-
-        <section style={contentSectionStyle} aria-labelledby="suno-mastering-heading">
-          <h2 id="suno-mastering-heading" style={h2Style}>
-            Mastering
-          </h2>
-          <p style={pStyle}>
-            MasterSauce helps prepare AI-generated tracks — including music created with Suno — for release. Choose a
-            genre preset, describe the sound you want, or add an optional reference track or artist. Optional AI Audio
-            Restoration can run first when the analysis suggests it may help.
-          </p>
-          <p style={pStyle}>What you can actually do here:</p>
-          <ul style={listStyle}>
-            <li style={listItemStyle}>A/B the original and mastered versions before you commit</li>
-            <li style={listItemStyle}>download free MP3 masters</li>
-            <li style={listItemStyle}>export HD WAV on premium plans</li>
-            <li style={listItemStyle}>aim for playback on Spotify, Apple Music, and YouTube</li>
-          </ul>
-          <p style={pStyle}>
-            Mastering does not rewrite the song. It is the last polish pass so the export feels clearer, more balanced,
-            and closer to release. Compare with your own ears — if it does not lift the track, do not export.
-          </p>
-          <p style={pStyle}>
-            For a deeper walkthrough of common export issues, read{" "}
-            <Link href="/learn/best-mastering-for-suno-ai-songs" style={inlineLinkStyle}>
-              Best Mastering for Suno AI Songs
-            </Link>{" "}
-            and{" "}
-            <Link href="/learn/spotify-ready-mastering" style={inlineLinkStyle}>
-              how to prepare a track for Spotify
-            </Link>
-            .
-          </p>
-        </section>
-
         <section style={ctaSectionStyle} aria-labelledby="suno-landing-cta-heading">
           <h2 id="suno-landing-cta-heading" style={ctaHeadingStyle}>
-            Finish the next Suno song in MasterSauce
+            Master your Suno song before release
           </h2>
           <p style={ctaBodyStyle}>
-            Start with a stronger blueprint, analyze the export, then master the version you actually want to release.
+            Upload the export, review Master Readiness, and compare the original with the master before downloading.
           </p>
           <div style={ctaRowStyle}>
-            <Link href="/song-architect" style={ctaPrimaryStyle}>
-              Open Song Architect
-            </Link>
-            <Link href="/#master" style={ctaSecondaryStyle}>
+            <Link href="/#master" style={ctaPrimaryStyle}>
               Master a Suno song
             </Link>
-            <Link href="/ar-ai" style={ctaTertiaryStyle}>
+            <Link href="/ar-ai" style={ctaSecondaryStyle}>
               Analyze Your Song
+            </Link>
+            <Link href="/song-architect" style={ctaTertiaryStyle}>
+              Open Song Architect
             </Link>
           </div>
           <p style={{ ...ctaBodyStyle, marginTop: "18px", marginBottom: 0, fontSize: "0.92rem" }}>
@@ -261,8 +304,8 @@ export default function SunoMasteringPage() {
         <FaqSection items={faqItems} />
 
         <p style={trademarkStyle}>
-          Suno is a trademark of its respective owner. MasterSauce is an independent product and is not affiliated with,
-          endorsed by, or partnered with Suno.
+          Suno is a trademark of its respective owner. MasterSauce is an independent product and is not affiliated with or
+          endorsed by Suno. There is no sponsorship, partnership, or official integration.
         </p>
       </main>
     </>

@@ -18,6 +18,7 @@ function assertExcludes(content, needle, context) {
 
 function runPageMetadataHelperTests() {
   const helper = read("lib/seo/page-metadata.ts");
+  const site = read("lib/site.ts");
 
   assertIncludes(helper, 'DEFAULT_SOCIAL_PREVIEW_PATH = "/og-image.png"', "default social preview path");
   assertIncludes(helper, "socialImagePath", "optional page-specific social image");
@@ -29,6 +30,8 @@ function runPageMetadataHelperTests() {
   assertIncludes(helper, "twitter:", "twitter block");
   assertIncludes(helper, "images: [socialImageUrl]", "twitter images array");
   assertIncludes(helper, "alternates: { canonical: url }", "absolute canonical URL");
+  assertIncludes(site, '"https://www.mastersauce.ai"', "canonical production fallback");
+  assertExcludes(site, '"http://localhost:3000"', "canonical helper must not fall back to localhost");
 }
 
 function runHitAnalyzerMetadataTests() {
@@ -80,12 +83,17 @@ function runSunoMasteringPageTests() {
   const robots = read("app/robots.ts");
 
   assertIncludes(page, "buildPageMetadata", "Suno mastering page uses metadata helper");
-  assertIncludes(page, "Suno Mastering & Song Tools | Master Your Suno Songs | MasterSauce", "Suno mastering unique title");
+  assertIncludes(page, "AI Mastering for Suno Songs | MasterSauce", "Suno mastering unique title");
   assertIncludes(page, 'const path = "/suno-mastering"', "Suno mastering canonical path");
   assertIncludes(page, "path,", "Suno mastering passes path to metadata helper");
   assertIncludes(page, "absoluteTitle: true", "Suno mastering title is absolute");
   assertExcludes(page, "noIndex", "Suno mastering page must remain indexable");
-  assertIncludes(page, "Master, Analyze, and Improve Your Suno Songs", "Suno mastering H1");
+  assertIncludes(page, "AI Mastering for Suno Songs", "Suno mastering H1");
+  assertIncludes(page, "Do Suno songs need mastering?", "Suno mastering visible FAQ covers need");
+  assertIncludes(page, "Can I master a Suno song before Spotify distribution?", "Suno mastering visible FAQ covers distribution");
+  assertIncludes(page, "Should I use WAV when mastering an AI-generated song?", "Suno mastering visible FAQ covers source format");
+  assertIncludes(page, "What does MasterSauce analyze before mastering?", "Suno mastering visible FAQ covers analysis");
+  assertIncludes(page, "Is MasterSauce part of Suno?", "Suno mastering visible FAQ covers affiliation");
   assertIncludes(page, 'href="/song-architect"', "Suno mastering links to Song Architect");
   assertIncludes(page, 'href="/ar-ai"', "Suno mastering links to Analyze Your Song");
   assertIncludes(page, 'href="/#master"', "Suno mastering links to mastering");

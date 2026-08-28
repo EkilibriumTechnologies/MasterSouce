@@ -1,14 +1,14 @@
 /**
  * Canonical site URL for metadata, sitemap, and absolute links.
  * Set NEXT_PUBLIC_SITE_URL in production (e.g. https://www.mastersauce.ai).
- * Falls back to NEXT_PUBLIC_APP_URL (Stripe redirects), then VERCEL_URL, then localhost.
+ * Falls back to NEXT_PUBLIC_APP_URL (Stripe redirects), then VERCEL_URL, then the canonical production host.
  */
 export function getSiteUrlString(): string {
   const raw =
     process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/^\/+/, "")}` : "") ||
-    "http://localhost:3000";
+    "https://www.mastersauce.ai";
   const normalized = raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
   return normalized.replace(/\/+$/, "");
 }
