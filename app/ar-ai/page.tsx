@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import "@/components/brand/mastersauce-brand-header.css";
+import { trackHitAnalyzerEvent, type HitAnalyzerFunnelEvent } from "@/lib/ar-ai/analytics";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER, MASTERSOUCE_BILLING_EMAIL_KEY } from "@/lib/billing/client-key";
 import type { ArAiReport } from "@/lib/ar-ai/types";
 
@@ -136,12 +137,14 @@ export default function ArAiPage() {
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
   const [launch, setLaunch] = useState<HitAnalyzerLaunchInfo | null>(null);
   const [usage, setUsage] = useState<HitAnalyzerUsage | null>(null);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
   const [emailRequired, setEmailRequired] = useState(false);
   const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState("");
   const [verifyError, setVerifyError] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [pendingRetryAfterVerify, setPendingRetryAfterVerify] = useState(false);
+  const postReportCtaViewedRef = useRef(false);
 
   const canSubmit = useMemo(() => Boolean(audioFile) && !isSubmitting, [audioFile, isSubmitting]);
 
@@ -162,6 +165,7 @@ export default function ArAiPage() {
       if (data.launch) setLaunch(data.launch);
       if (data.ok) {
         setUsage(data.usage);
+        setCurrentPlanId(data.planId);
         setEmailRequired(data.emailRequired);
       } else if (typeof data.emailRequired === "boolean") {
         setEmailRequired(data.emailRequired);
@@ -187,6 +191,18 @@ export default function ArAiPage() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [howItWorksOpen]);
 
+  useEffect(() => {
+    if (!report || postReportCtaViewedRef.current) return;
+    postReportCtaViewedRef.current = true;
+    trackHitAnalyzerEvent("hit_analyzer_post_report_cta_viewed", {
+      source_component: "post_report_cta",
+      plan_id: currentPlanId ?? undefined,
+      remaining_allowance: usage?.remaining ?? undefined,
+      user_tier: currentPlanId ?? undefined,
+      result_state: "success"
+    });
+  }, [currentPlanId, report, usage]);
+
   async function runAnalysis(): Promise<void> {
     if (!audioFile) {
       setError("Please upload an audio file (WAV or MP3).");
@@ -197,6 +213,7 @@ export default function ArAiPage() {
     setError("");
     setUpgradeRequired(false);
     setReport(null);
+    postReportCtaViewedRef.current = false;
 
     const storedBillingEmail = getStoredBillingEmail();
     const payload = new FormData();
@@ -213,6 +230,34 @@ export default function ArAiPage() {
       headers[MASTERSOUCE_BILLING_EMAIL_HEADER] = storedBillingEmail;
     }
 
+    let terminalTracked = false;
+    const trackTerminal = (
+      eventName: Extract<
+        HitAnalyzerFunnelEvent,
+        "hit_analyzer_succeeded" | "hit_analyzer_failed" | "hit_analyzer_quota_blocked"
+      >,
+      resultState: string,
+      remainingAllowance?: number
+    ) => {
+      if (terminalTracked) return;
+      terminalTracked = true;
+      trackHitAnalyzerEvent(eventName, {
+        source_component: "analysis_request",
+        plan_id: currentPlanId ?? undefined,
+        remaining_allowance: remainingAllowance,
+        user_tier: currentPlanId ?? undefined,
+        result_state: resultState
+      });
+    };
+
+    trackHitAnalyzerEvent("hit_analyzer_started", {
+      source_component: "analysis_form",
+      plan_id: currentPlanId ?? undefined,
+      remaining_allowance: usage?.remaining ?? undefined,
+      user_tier: currentPlanId ?? undefined,
+      result_state: "started"
+    });
+
     try {
       const response = await fetch("/api/ar-ai", {
         method: "POST",
@@ -225,6 +270,7 @@ export default function ArAiPage() {
 
       if (!response.ok) {
         if (data.code === "email_verification_required") {
+          trackTerminal("hit_analyzer_failed", "email_verification_required");
           setVerifyError("");
           setVerifyEmail(storedBillingEmail);
           setPendingRetryAfterVerify(true);
@@ -232,6 +278,7 @@ export default function ArAiPage() {
           return;
         }
         if (data.code === "hit_analyzer_quota_exhausted") {
+          trackTerminal("hit_analyzer_quota_blocked", "quota_blocked", 0);
           setUpgradeRequired(Boolean(data.upgradeRequired));
           setError(data.message || "You reached your Hit Analyzer limit.");
           if (typeof data.limit === "number") {
@@ -250,15 +297,21 @@ export default function ArAiPage() {
           }
           return;
         }
+        trackTerminal("hit_analyzer_failed", "request_failed");
         setError(data.message || data.error || "A&R evaluation failed. Please try again.");
         return;
       }
 
       if ("overallRating" in data && data.overallRating) {
         setReport(data);
+        trackTerminal("hit_analyzer_succeeded", "success");
         void refreshAccess(storedBillingEmail);
+      } else {
+        trackTerminal("hit_analyzer_failed", "invalid_report");
+        setError("A&R evaluation returned an invalid report. Please try again.");
       }
     } catch {
+      trackTerminal("hit_analyzer_failed", "network_error");
       setError("Network error while submitting your track. Please check your connection and retry.");
     } finally {
       setIsSubmitting(false);
@@ -533,28 +586,47 @@ export default function ArAiPage() {
 
       {report ? <ArAiReportView report={report} /> : null}
 
-      <section style={crossLinkSectionStyle} aria-label="Related MasterSauce tools">
-        <p style={crossLinkHeadingStyle}>Next steps after your report</p>
-        <div style={crossLinkRowStyle}>
-          <Link href="/#master" style={crossLinkPrimaryStyle}>
-            Master this track
-          </Link>
-          <Link href="/song-architect" style={crossLinkSecondaryStyle}>
-            Improve song structure with Song Architect
-          </Link>
-        </div>
-        <p style={crossLinkHintStyle}>
-          Looking for the full path from idea to release? See{" "}
-          <Link href="/suno-mastering" style={inlineTextLinkStyle}>
-            mastering music created with Suno
-          </Link>
-          , or{" "}
-          <Link href="/pricing" style={inlineTextLinkStyle}>
-            compare plans
-          </Link>{" "}
-          for more analyses and exports.
-        </p>
-      </section>
+      {report ? (
+        <section style={crossLinkSectionStyle} aria-label="Next steps after your report">
+          <p style={crossLinkHeadingStyle}>Next steps after your report</p>
+          <div style={crossLinkRowStyle}>
+            <Link
+              href="/?source=hit-analyzer#master"
+              style={crossLinkPrimaryStyle}
+              onClick={() =>
+                trackHitAnalyzerEvent("hit_analyzer_master_cta_clicked", {
+                  source_component: "post_report_cta",
+                  plan_id: currentPlanId ?? undefined,
+                  user_tier: currentPlanId ?? undefined,
+                  result_state: "success"
+                })
+              }
+            >
+              Master this track
+            </Link>
+            {currentPlanId === "free" ? (
+              <Link
+                href="/pricing?source=hit-analyzer"
+                style={crossLinkSecondaryStyle}
+                onClick={() =>
+                  trackHitAnalyzerEvent("hit_analyzer_subscription_cta_clicked", {
+                    source_component: "post_report_cta",
+                    plan_id: "creator_monthly",
+                    user_tier: "free",
+                    result_state: "success"
+                  })
+                }
+              >
+                Upgrade to Creator
+              </Link>
+            ) : null}
+          </div>
+          <p style={crossLinkHintStyle}>
+            Mastering opens the upload workspace; you&apos;ll need to upload the track again. Creator includes 5 analyses per
+            month, advanced Song Architect output, adaptive exports, and 24-bit WAV downloads.
+          </p>
+        </section>
+      ) : null}
 
       {showEmailVerifyModal ? (
         <div style={verifyEmailModalOverlayStyle}>

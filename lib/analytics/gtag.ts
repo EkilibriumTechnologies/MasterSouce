@@ -77,13 +77,17 @@ export function getGaClientId(): Promise<string | null> {
  * GA4 ecommerce `begin_checkout`. Never throws and never blocks checkout.
  * Catalog prices are for funnel items only — purchase value always comes from Stripe.
  */
-export function trackGa4BeginCheckout(catalogId: Ga4EcommerceCatalogId): void {
+export function trackGa4BeginCheckout(
+  catalogId: Ga4EcommerceCatalogId,
+  params: { sourceFlow?: string } = {}
+): void {
   try {
     if (typeof window === "undefined" || !getBrowserMeasurementId()) return;
     const item = getGa4EcommerceCatalogItem(catalogId);
     window.gtag?.("event", "begin_checkout", {
       currency: item.currency,
       value: item.price,
+      ...(params.sourceFlow ? { source_flow: params.sourceFlow } : {}),
       items: [
         {
           item_id: item.itemId,

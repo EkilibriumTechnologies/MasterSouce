@@ -31,6 +31,7 @@
     "test:song-architect-generation-match": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/song-architect-generation-match-test.mjs",
     "test:song-architect-generation-match-product": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/song-architect-generation-match-product-test.mjs",
     "test:mastering-funnel": "node scripts/mastering-funnel-invariants.mjs",
+    "test:hit-analyzer-funnel": "node scripts/hit-analyzer-funnel-invariants.mjs",
     "test:ga4-ecommerce": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/ga4-ecommerce-invariants.mjs",
     "test:upload-form-refactor": "node scripts/upload-form-refactor-invariants.mjs",
     "test:ar-ai": "node scripts/ar-ai-invariants.mjs",

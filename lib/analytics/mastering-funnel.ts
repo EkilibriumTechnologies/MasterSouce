@@ -44,6 +44,17 @@ function resolvePagePath(): string | undefined {
   return `${window.location.pathname}${window.location.search || ""}`;
 }
 
+function resolveSourceFlow(): string {
+  if (typeof window === "undefined") return MASTERING_SOURCE_FLOW;
+  try {
+    return new URLSearchParams(window.location.search).get("source") === "hit-analyzer"
+      ? "hit_analyzer"
+      : MASTERING_SOURCE_FLOW;
+  } catch {
+    return MASTERING_SOURCE_FLOW;
+  }
+}
+
 /** Safe email for funnel logs — trim + lowercase, omitted when invalid. */
 export function normalizeEmailForFunnelLog(email: string | null | undefined): string | undefined {
   if (!email) return undefined;
@@ -68,7 +79,7 @@ export function masteringFunnelBillingSnapshot(input: {
 function toTrackParams(params: MasteringFunnelMetadata): AbEventParams {
   return {
     source_component: params.source_component ?? "mastering_funnel",
-    source_flow: params.source_flow ?? MASTERING_SOURCE_FLOW,
+    source_flow: params.source_flow ?? resolveSourceFlow(),
     page_path: params.page_path ?? resolvePagePath(),
     plan_id: params.plan_id,
     format: params.export_format,

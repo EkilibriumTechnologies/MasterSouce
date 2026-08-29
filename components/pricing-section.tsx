@@ -241,8 +241,15 @@ export function PricingSection() {
 
   const modalOpen = modalMode !== null;
   const adaptiveIntent = searchParams?.get("intent") === "adaptive";
+  const hitAnalyzerSource = searchParams?.get("source") === "hit-analyzer";
+  const attributedSourceFlow = hitAnalyzerSource ? "hit_analyzer" : undefined;
   const returnTo = searchParams?.get("returnTo")?.trim() ?? "";
-  const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
+  const safeReturnTo =
+    returnTo.startsWith("/") && !returnTo.startsWith("//")
+      ? returnTo
+      : hitAnalyzerSource
+        ? "/?source=hit-analyzer"
+        : "/";
 
   useEffect(() => {
     if (!promoActive || promoViewTrackedRef.current) return;
@@ -361,7 +368,7 @@ export function PricingSection() {
         kind: nextSelection.kind,
         planId: nextSelection.kind === "subscription" ? nextSelection.planId : "credit_pack"
       });
-      if (catalogId) trackGa4BeginCheckout(catalogId);
+      if (catalogId) trackGa4BeginCheckout(catalogId, { sourceFlow: attributedSourceFlow });
     } catch {
       /* begin_checkout must never block Stripe Checkout */
     }
@@ -394,6 +401,7 @@ export function PricingSection() {
     }
     trackMasteringFunnelEvent("mastering_checkout_started", {
       source_component: "pricing_section",
+      source_flow: attributedSourceFlow,
       plan_id: nextSelection.kind === "subscription" ? nextSelection.planId : "credit_pack"
     });
     const response = await fetch("/api/billing/checkout", {
