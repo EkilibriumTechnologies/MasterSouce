@@ -1,5 +1,11 @@
 /* Homepage hero — viewports ≤639px only. Inline hero styles stay default from 640px (tablet+). */
 
+.home-main > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 @media (max-width: 639px) {
   .home-hero {
     display: flex;

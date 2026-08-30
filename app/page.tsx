@@ -73,7 +73,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           "@graph": getHomePageJsonLdGraph()
         }}
       />
-      <main style={mainStyle}>
+      <main className="home-main" style={mainStyle}>
       <nav aria-label="Primary" style={topNavStyle}>
         <div style={topNavBrandWrap}>
           <span style={topNavBrandMark}>♫</span>
@@ -400,12 +400,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 }
 
 const mainStyle: React.CSSProperties = {
+  width: "100%",
   maxWidth: "1080px",
   margin: "0 auto",
   /* top, right, bottom, left — respect iOS safe areas so the column stays visually centered */
   padding: "18px max(20px, env(safe-area-inset-right, 0px)) 78px max(20px, env(safe-area-inset-left, 0px))",
   display: "grid",
-  gap: "34px"
+  gap: "34px",
+  boxSizing: "border-box",
+  minWidth: 0
 };
 
 const topNavStyle: React.CSSProperties = {
@@ -728,7 +731,7 @@ const stepTextStyle: React.CSSProperties = {
 };
 const dualCardSectionStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
   gap: "14px"
 };
 const infoCardStyle: React.CSSProperties = {
@@ -788,6 +791,7 @@ const footerTaglineStyle: React.CSSProperties = { margin: 0, color: "#8794bc", f
 const footerLinksStyle: React.CSSProperties = {
   display: "flex",
   gap: "18px",
+  flexWrap: "wrap",
   color: "#929dc4",
   fontSize: "0.9rem"
 };

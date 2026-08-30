@@ -1084,6 +1084,10 @@ const ctaHintStyle: React.CSSProperties = {
 
 const comparisonStyle: React.CSSProperties = {
   marginTop: "18px",
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
   border: "1px solid rgba(109, 124, 194, 0.38)",
   borderRadius: "16px",
   padding: "16px",
@@ -1106,7 +1110,12 @@ const comparisonIntroStyle: React.CSSProperties = {
 
 const comparisonScrollerStyle: React.CSSProperties = {
   marginTop: "14px",
-  overflowX: "auto"
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch"
 };
 
 const comparisonTableStyle: React.CSSProperties = {
