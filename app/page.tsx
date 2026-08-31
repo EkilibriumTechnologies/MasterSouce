@@ -401,7 +401,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
 const mainStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: "1080px",
+  /* Preserve the original 1080px content width with 20px padding on each side. */
+  maxWidth: "1120px",
   margin: "0 auto",
   /* top, right, bottom, left — respect iOS safe areas so the column stays visually centered */
   padding: "18px max(20px, env(safe-area-inset-right, 0px)) 78px max(20px, env(safe-area-inset-left, 0px))",
