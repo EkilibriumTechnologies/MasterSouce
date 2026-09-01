@@ -39,6 +39,7 @@
     "test:hit-analyzer-lifetime": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/hit-analyzer-lifetime-quota-test.mjs",
     "test:hit-analyzer-monthly": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/hit-analyzer-monthly-quota-test.mjs",
     "test:seo-metadata": "node scripts/seo-metadata-invariants.mjs && node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/apex-www-redirect-test.mjs",
+    "test:homepage-overflow": "node scripts/homepage-overflow-regression.mjs",
     "test:mastering-journey": "node --experimental-strip-types scripts/mastering-journey-integration-test.mjs",
     "test:master-readiness": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/master-readiness-test.mjs",
     "test:mastering-decision-report": "node --experimental-transform-types --import ./scripts/lib/register-ts-alias.mjs scripts/mastering-decision-report-test.mjs",

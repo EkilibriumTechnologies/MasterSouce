@@ -830,7 +830,8 @@ const sectionStyle: React.CSSProperties = {
   border: "1px solid rgba(142, 155, 209, 0.2)",
   borderRadius: "24px",
   boxShadow: "0 18px 40px rgba(2, 4, 12, 0.45)",
-  padding: "32px 24px"
+  padding: "32px 24px",
+  minWidth: 0
 };
 
 const eyebrowStyle: React.CSSProperties = {

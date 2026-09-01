@@ -787,6 +787,7 @@ const footerNameStyle: React.CSSProperties = { margin: 0, color: "#ebefff", font
 const footerTaglineStyle: React.CSSProperties = { margin: 0, color: "#8794bc", fontSize: "0.8rem" };
 const footerLinksStyle: React.CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   gap: "18px",
   color: "#929dc4",
   fontSize: "0.9rem"
