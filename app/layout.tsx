@@ -4,6 +4,7 @@ import Script from "next/script";
 import { ReactNode, Suspense } from "react";
 
 import { GaAppRouterPageViews } from "@/components/analytics/ga-app-router-page-views";
+import { GoogleAdsGtagConfig } from "@/components/analytics/google-ads-gtag-config";
 import { FathersDayPromoRoot } from "@/components/promo/fathers-day-promo-root";
 import { SOCIAL_PREVIEW_ALT, SOCIAL_PREVIEW_SIZE } from "@/lib/og/social-preview";
 import { absoluteUrl, getSiteUrlString, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
@@ -97,6 +98,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {gaMeasurementId ? (
           <>
             <GoogleAnalytics gaId={gaMeasurementId} />
+            <GoogleAdsGtagConfig />
             <Suspense fallback={null}>
               <GaAppRouterPageViews />
             </Suspense>

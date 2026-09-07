@@ -10,6 +10,12 @@ import {
  */
 export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() ?? "";
 
+/**
+ * Google Ads conversion/tag ID. Public site config — reuse the existing gtag.js loader;
+ * do not load a second googletagmanager.com/gtag/js script for this ID.
+ */
+export const GOOGLE_ADS_TAG_ID = "AW-18436535367";
+
 function getBrowserMeasurementId(): string {
   return GA_MEASUREMENT_ID || (process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "").trim();
 }

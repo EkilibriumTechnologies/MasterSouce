@@ -183,6 +183,24 @@ function runSourceInvariants() {
   assertIncludes(envExample, "GA4_MEASUREMENT_API_SECRET", ".env.example documents Measurement Protocol secret");
   assertIncludes(envExample, "Railway", ".env.example documents Railway as runtime config");
 
+  const layout = read("app/layout.tsx");
+  const adsConfig = read("components/analytics/google-ads-gtag-config.tsx");
+  const gtagHelper = read("lib/analytics/gtag.ts");
+  assertIncludes(layout, 'from "@next/third-parties/google"', "root layout loads gtag via next/third-parties");
+  assertIncludes(layout, "<GoogleAnalytics gaId={gaMeasurementId} />", "single GoogleAnalytics loader in root layout");
+  assertIncludes(layout, "<GoogleAdsGtagConfig />", "root layout registers Google Ads on existing gtag");
+  assert.equal(
+    (layout.match(/googletagmanager\.com\/gtag\/js/g) ?? []).length,
+    0,
+    "root layout must not load gtag.js itself"
+  );
+  assertIncludes(gtagHelper, 'GOOGLE_ADS_TAG_ID = "AW-18436535367"', "Google Ads tag ID is shared public config");
+  assertIncludes(adsConfig, "gtag('config','${GOOGLE_ADS_TAG_ID}')", "Ads component emits gtag config for AW id");
+  assertExcludes(adsConfig, "googletagmanager.com/gtag/js", "Ads component must not load a second gtag.js");
+  const adsInline = adsConfig.match(/__html:\s*`([^`]*)`/)?.[1] ?? "";
+  assert.ok(adsInline.includes("gtag('config','${GOOGLE_ADS_TAG_ID}')"), "Ads inline script configs the AW id");
+  assert.ok(!adsInline.includes("gtag('js'"), "Ads inline script must not re-initialize gtag");
+
   const plans = read("lib/subscriptions/plans.ts");
   assertIncludes(plans, "monthlyPriceUsd: 9", "creator catalog price source");
   assertIncludes(plans, "monthlyPriceUsd: 24", "pro catalog price source");
