@@ -3,12 +3,18 @@ import { MASTERSOUCE_BILLING_EMAIL_HEADER } from "@/lib/billing/client-key";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { getClientIp, hashIdentifier, logAbuseGuard, maskEmail, shouldChallengeSuspiciousRequest } from "@/lib/security/abuse-guard";
 import { validateEmailAddress } from "@/lib/security/validate-email-address";
+import { readVerifiedEmailState } from "@/lib/security/verified-email-state";
+import {
+  ADMIN_ENTITLEMENT_OVERRIDE_EMAIL
+} from "@/lib/subscriptions/admin-entitlement-override";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { resolveSongArchitectUsageForEmail, type SongArchitectUsageSnapshot } from "@/lib/song-architect/entitlements";
 
 export type SongArchitectAccessContext =
   | {
       ok: true;
       normalizedEmail: string;
+      identityTrusted: boolean;
       usage: SongArchitectUsageSnapshot;
     }
   | {
@@ -23,17 +29,28 @@ type ResolveSongArchitectVerifiedContextInput = {
   billingEmailHint?: string;
 };
 
-function resolvePersistedBillingEmailContext(request: NextRequest, billingEmailHint?: string): string {
+function resolvePersistedBillingEmailContext(
+  request: NextRequest,
+  billingEmailHint?: string
+): { rawEmail: string; identityTrusted: boolean } {
+  if (isMasterAdminBypassGranted(request)) {
+    return { rawEmail: ADMIN_ENTITLEMENT_OVERRIDE_EMAIL, identityTrusted: true };
+  }
+  const verified = readVerifiedEmailState(request)?.normalizedEmail?.trim() ?? "";
+  if (verified) {
+    return { rawEmail: verified, identityTrusted: true };
+  }
   const fromHeader = request.headers.get(MASTERSOUCE_BILLING_EMAIL_HEADER)?.trim() ?? "";
   const fromQuery = request.nextUrl.searchParams.get("email")?.trim() ?? "";
   const fromHint = billingEmailHint?.trim() ?? "";
-  return fromHeader || fromQuery || fromHint;
+  return { rawEmail: fromHeader || fromQuery || fromHint, identityTrusted: false };
 }
 
 export async function resolveSongArchitectVerifiedContext(
   input: ResolveSongArchitectVerifiedContextInput
 ): Promise<SongArchitectAccessContext> {
-  const persistedEmailRaw = resolvePersistedBillingEmailContext(input.request, input.billingEmailHint);
+  const emailContext = resolvePersistedBillingEmailContext(input.request, input.billingEmailHint);
+  const persistedEmailRaw = emailContext.rawEmail;
   if (!persistedEmailRaw) {
     console.info("[song-architect] verification_required", {
       sessionId: input.sessionId,
@@ -93,6 +110,13 @@ export async function resolveSongArchitectVerifiedContext(
     };
   }
 
-  const usage = await resolveSongArchitectUsageForEmail(normalizedEmail);
-  return { ok: true, normalizedEmail, usage };
+  const usage = await resolveSongArchitectUsageForEmail(normalizedEmail, {
+    billingLookupAllowed: emailContext.identityTrusted
+  });
+  return {
+    ok: true,
+    normalizedEmail,
+    identityTrusted: emailContext.identityTrusted,
+    usage
+  };
 }
