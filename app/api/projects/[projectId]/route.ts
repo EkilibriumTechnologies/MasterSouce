@@ -70,17 +70,24 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_journey_stage" }, { status: 400 });
   }
 
-  const project = await updateProjectForUser({
-    userId: account.user.id,
-    projectId: params.projectId,
-    title: parsed.data.title,
-    status: parsed.data.status,
-    currentStage: parsed.data.currentStage,
-    selectedGenerationId: parsed.data.selectedGenerationId
-  });
-  if (!project) {
-    return NextResponse.json({ error: "project_not_found" }, { status: 404 });
-  }
+  try {
+    const project = await updateProjectForUser({
+      userId: account.user.id,
+      projectId: params.projectId,
+      title: parsed.data.title,
+      status: parsed.data.status,
+      currentStage: parsed.data.currentStage,
+      selectedGenerationId: parsed.data.selectedGenerationId
+    });
+    if (!project) {
+      return NextResponse.json({ error: "project_not_found" }, { status: 404 });
+    }
 
-  return NextResponse.json({ project });
+    return NextResponse.json({ project });
+  } catch (error) {
+    if (error instanceof Error && error.message === "generation_not_found") {
+      return NextResponse.json({ error: "generation_not_found" }, { status: 404 });
+    }
+    throw error;
+  }
 }
