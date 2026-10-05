@@ -1849,6 +1849,32 @@ export function UploadForm() {
         Drop a WAV or MP3, set genre and loudness, then tap analyze. You will get a quick read of the file, a recommended
         master you can A/B for free, and optional adaptive customization if you want to steer the tone further.
       </p>
+      {projectId ? (
+        <p
+          style={{
+            margin: "0 0 18px",
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(52,211,153,.22)",
+            background: "rgba(52,211,153,.06)",
+            color: projectSaveStatus === "error" ? "#fca5a5" : "rgba(255,255,255,.62)",
+            fontSize: "0.82rem",
+            lineHeight: 1.5
+          }}
+        >
+          This mastering session is attached to your Song Project.{" "}
+          {projectSaveStatus === "saving"
+            ? "Saving… "
+            : projectSaveStatus === "saved"
+              ? "Latest milestone saved. "
+              : projectSaveStatus === "error"
+                ? "Project autosave needs a retry. "
+                : ""}
+          <a href={`/projects/${projectId}`} style={{ color: "#6ee7b7", textDecoration: "underline" }}>
+            View Song Project
+          </a>
+        </p>
+      ) : null}
       <form onSubmit={handleSubmit} style={formStyle}>
         <div style={uploadZoneStyle}>
           <div style={uploadIconStyle}>⤴</div>
