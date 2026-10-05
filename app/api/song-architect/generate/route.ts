@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
-import { hasTrustedEmailAccess } from "@/lib/security/verified-email-state";
 import { logSongArchitectFunnelEvent } from "@/lib/song-architect/analytics";
 import { resolveCandidateStrategy } from "@/lib/song-architect/candidate-strategy";
 import { recordSongArchitectGenerationEvent } from "@/lib/song-architect/entitlements";
@@ -638,8 +637,8 @@ export async function POST(request: NextRequest) {
       return res;
     }
     const trustedAccess = access;
-    if (!hasTrustedEmailAccess(request, trustedAccess.normalizedEmail)) {
-      logAbuseGuard("unverified_song_architect_output_blocked", {
+    if (!trustedAccess.identityTrusted && trustedAccess.usage.planId !== "free") {
+      logAbuseGuard("untrusted_paid_song_architect_identity_blocked", {
         endpoint: "/api/song-architect/generate",
         ipHash: hashIdentifier(clientIp),
         emailHash: hashIdentifier(trustedAccess.normalizedEmail)
@@ -647,8 +646,8 @@ export async function POST(request: NextRequest) {
       const res = NextResponse.json(
         {
           ok: false,
-          code: "email_verification_required",
-          message: "Please confirm email access before generating Song Architect output."
+          code: "billing_identity_verification_required",
+          message: "Confirm billing identity before using paid Song Architect entitlement."
         },
         { status: 403 }
       );
