@@ -37,6 +37,11 @@ function run() {
   const billingSync = read("app/api/billing/sync/route.ts");
   assertIncludes(
     billingSync,
+    "result.checkoutVerified && result.normalizedSessionEmail",
+    "trusted billing identity requires Stripe-confirmed Checkout completion"
+  );
+  assertIncludes(
+    billingSync,
     'attachTrustedEmailAccessState(res, result.normalizedSessionEmail, "stripe_checkout")',
     "Stripe checkout reconciliation may mint trusted billing identity"
   );
@@ -45,6 +50,25 @@ function run() {
     emailOnlyBranch,
     "attachTrustedEmailAccessState",
     "typed billing-sync email cannot mint trusted identity"
+  );
+
+  const checkoutRoute = read("app/api/billing/checkout/route.ts");
+  assertIncludes(
+    checkoutRoute,
+    "success_url: appendStripeCheckoutSessionPlaceholder(successUrl)",
+    "subscriptions and credit packs both return a Stripe session proof"
+  );
+
+  const uploadForm = read("components/upload-form.tsx");
+  assertIncludes(
+    uploadForm,
+    "if (!checkoutSuccess) return;",
+    "every successful Checkout return enters billing sync"
+  );
+  assertIncludes(
+    uploadForm,
+    'fetch("/api/billing/sync"',
+    "Checkout return exchanges Stripe session proof for trusted billing identity"
   );
 
   const songAccess = read("lib/song-architect/access.ts");
