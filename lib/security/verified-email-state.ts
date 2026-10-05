@@ -105,3 +105,13 @@ export function attachTrustedEmailAccessState(
 ): void {
   attachVerifiedEmailState(response, normalizedEmail, proof);
 }
+
+export function clearTrustedEmailAccessState(response: NextResponse): void {
+  response.cookies.set(VERIFIED_EMAIL_COOKIE, "", {
+    path: "/",
+    maxAge: 0,
+    sameSite: "lax",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production"
+  });
+}
