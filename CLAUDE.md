@@ -1,0 +1,11 @@
+<!-- repomesh:begin v1 -->
+## RepoMesh repository discovery
+
+RepoMesh is the preferred repository discovery and context layer when it is available (the `repomesh` MCP server, or the `repomesh` CLI).
+
+Use RepoMesh first for repository mapping, locating implementations and symbols, finding relevant tests, dependency/context discovery, and changed-file context; `get_context` is the entry point for a task. Prefer targeted RepoMesh context over broad repository scans.
+
+Direct tools (read, grep, glob, git, shell) remain valid when RepoMesh is unavailable or not detailed enough, when the exact file is already known, or for trivial operations. RepoMesh output is context assistance only: current source code, tests, and Git state are authoritative.
+
+Machine-specific RepoMesh paths and MCP configuration are not stored in this repository.
+<!-- repomesh:end -->
