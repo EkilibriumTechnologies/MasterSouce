@@ -43,7 +43,7 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(userEmailRaw);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: true },
+        billingContext: { normalizedEmail: normalized, billingLookupAllowed: true, adminOverrideAllowed: true },
         normalizedEmail: normalized,
         emailSource: "user",
         adminOverrideAllowed: true,
@@ -56,6 +56,7 @@ export function resolveEntitlementBillingContext(
     return {
       billingContext: {
         normalizedEmail: ADMIN_ENTITLEMENT_OVERRIDE_EMAIL,
+        billingLookupAllowed: true,
         adminOverrideAllowed: true
       },
       normalizedEmail: ADMIN_ENTITLEMENT_OVERRIDE_EMAIL,
@@ -70,7 +71,7 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(verified.normalizedEmail);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: true },
+        billingContext: { normalizedEmail: normalized, billingLookupAllowed: true, adminOverrideAllowed: true },
         normalizedEmail: normalized,
         emailSource: "verified_cookie",
         adminOverrideAllowed: true,
@@ -84,7 +85,7 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(headerRaw);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: false },
+        billingContext: { normalizedEmail: normalized, billingLookupAllowed: false, adminOverrideAllowed: false },
         normalizedEmail: normalized,
         emailSource: "billing_header",
         adminOverrideAllowed: false,
@@ -98,7 +99,7 @@ export function resolveEntitlementBillingContext(
     const normalized = normalizeBillingEmail(hintRaw);
     if (normalized) {
       return {
-        billingContext: { normalizedEmail: normalized, adminOverrideAllowed: false },
+        billingContext: { normalizedEmail: normalized, billingLookupAllowed: false, adminOverrideAllowed: false },
         normalizedEmail: normalized,
         emailSource: "billing_header",
         adminOverrideAllowed: false,
