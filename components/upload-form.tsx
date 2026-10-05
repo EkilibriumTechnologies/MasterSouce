@@ -28,6 +28,12 @@ import {
 } from "@/lib/billing/client-key";
 import { clearPendingAdaptiveExport, loadPendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
+import {
+  readProjectIdFromLocation,
+  saveProjectArtifactRequest,
+  type ProjectArtifactSaveRequest,
+  type ProjectSaveStatus
+} from "@/lib/projects/client";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
@@ -1033,11 +1039,57 @@ export function UploadForm() {
   const [wavExportDownloading, setWavExportDownloading] = useState(false);
   const [mp3ExportDownloading, setMp3ExportDownloading] = useState(false);
   const [finalMasterExportInlineError, setFinalMasterExportInlineError] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState("");
+  const [projectSaveStatus, setProjectSaveStatus] = useState<ProjectSaveStatus>("idle");
+  const [projectJourneyComplete, setProjectJourneyComplete] = useState(false);
+  const failedProjectSaveRef = useRef<ProjectArtifactSaveRequest | null>(null);
   const latestAnalysisRequestIdRef = useRef(0);
 
   useEffect(() => {
     setMastersourceWorkflowBusy(loading || adaptiveProcessing || wavExportDownloading || mp3ExportDownloading);
   }, [loading, adaptiveProcessing, wavExportDownloading, mp3ExportDownloading]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setProjectId(readProjectIdFromLocation(window.location.search));
+  }, []);
+
+  /**
+   * Best-effort Song Project autosave. Never throws: the master/download the user already has
+   * is never blocked or undone by a Project write; failures surface as a retryable status.
+   */
+  async function persistProjectArtifact(request: ProjectArtifactSaveRequest): Promise<void> {
+    if (!projectId) return;
+    setProjectSaveStatus("saving");
+    const saved = await saveProjectArtifactRequest(projectId, request);
+    if (!saved.ok) {
+      failedProjectSaveRef.current = request;
+      console.error("[mastering] project_save_failed", {
+        projectId,
+        kind: request.kind,
+        status: saved.status,
+        error: saved.error
+      });
+      setProjectSaveStatus("error");
+      return;
+    }
+    failedProjectSaveRef.current = null;
+    setProjectSaveStatus("saved");
+    if (saved.project?.currentStage === "complete") setProjectJourneyComplete(true);
+  }
+
+  async function saveProjectArtifact(
+    kind: "master_readiness" | "master_settings" | "export",
+    artifactPayload: Record<string, unknown>,
+    advanceTo?: "master" | "export" | "complete"
+  ): Promise<void> {
+    await persistProjectArtifact({ kind, payload: artifactPayload, advanceTo });
+  }
+
+  function retryFailedProjectSave(): void {
+    const failed = failedProjectSaveRef.current;
+    if (failed) void persistProjectArtifact(failed);
+  }
 
   useEffect(() => {
     if (!showAdaptivePlaceholder) return;
@@ -1416,6 +1468,20 @@ export function UploadForm() {
         file_id: masterPayload.download.fileId,
         plan_id: masterPayload.quota?.planId
       });
+      void saveProjectArtifact(
+        "master_settings",
+        {
+          mode: "standard",
+          jobId: masterPayload.jobId,
+          fileId: masterPayload.download.fileId,
+          genre,
+          loudnessMode: loudness,
+          masterCharacter,
+          quota: masterPayload.quota ?? null,
+          analysis: masterPayload.analysis
+        },
+        "export"
+      );
       return masterPayload;
     } catch (err) {
       const isLocalhost =
@@ -1592,6 +1658,22 @@ export function UploadForm() {
         file_id: adaptive.download.fileId,
         plan_id: mergedResult.quota?.planId
       });
+      void saveProjectArtifact(
+        "master_settings",
+        {
+          mode: "adaptive",
+          jobId: adaptive.jobId,
+          fileId: adaptive.download.fileId,
+          genre,
+          loudnessMode: loudness,
+          masterCharacter,
+          adaptiveIntent,
+          referenceArtist,
+          quota: mergedResult.quota ?? null,
+          analysis: mergedResult.analysis
+        },
+        "export"
+      );
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Unexpected adaptive error.";
       setError(raw);
@@ -1675,6 +1757,18 @@ export function UploadForm() {
       setMasterReadiness(parsed.masterReadiness ?? null);
       setMasterReadinessAcknowledged(false);
       setSourceUploadRef(parsed.source ?? null);
+      void saveProjectArtifact(
+        "master_readiness",
+        {
+          sourceFile: file
+            ? { name: file.name, size: file.size, type: file.type || null }
+            : null,
+          analysis: parsed.analysis,
+          masterReadiness: parsed.masterReadiness ?? null,
+          suggestedMasteringPreset: parsed.suggestedMasteringPreset ?? null
+        },
+        "master"
+      );
       setSuggestedMasteringPreset(parsed.suggestedMasteringPreset ?? null);
       if (parsed.suggestedMasteringPreset?.key) {
         setGenre(parsed.suggestedMasteringPreset.key);
@@ -1776,6 +1870,52 @@ export function UploadForm() {
         Drop a WAV or MP3, set genre and loudness, then tap analyze. You will get a quick read of the file, a recommended
         master you can A/B for free, and optional adaptive customization if you want to steer the tone further.
       </p>
+      {projectId ? (
+        <p
+          style={{
+            margin: "0 0 18px",
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(52,211,153,.22)",
+            background: "rgba(52,211,153,.06)",
+            color: projectSaveStatus === "error" ? "#fca5a5" : "rgba(255,255,255,.62)",
+            fontSize: "0.82rem",
+            lineHeight: 1.5
+          }}
+        >
+          {projectJourneyComplete
+            ? "Final master exported — this Song Project is complete. "
+            : "This mastering session is attached to your Song Project. "}
+          {projectSaveStatus === "saving"
+            ? "Saving… "
+            : projectSaveStatus === "saved" && !projectJourneyComplete
+              ? "Latest milestone saved. "
+              : projectSaveStatus === "error"
+                ? "Your files are safe, but the Project update didn't save. "
+                : ""}
+          {projectSaveStatus === "error" ? (
+            <button
+              type="button"
+              onClick={retryFailedProjectSave}
+              style={{
+                marginRight: 8,
+                padding: 0,
+                border: 0,
+                background: "transparent",
+                color: "#6ee7b7",
+                font: "inherit",
+                textDecoration: "underline",
+                cursor: "pointer"
+              }}
+            >
+              Retry save
+            </button>
+          ) : null}
+          <a href={`/projects/${projectId}`} style={{ color: "#6ee7b7", textDecoration: "underline" }}>
+            {projectJourneyComplete ? "Back to your Song Project" : "View Song Project"}
+          </a>
+        </p>
+      ) : null}
       <form onSubmit={handleSubmit} style={formStyle}>
         <div style={uploadZoneStyle}>
           <div style={uploadIconStyle}>⤴</div>
@@ -2123,6 +2263,16 @@ export function UploadForm() {
                                 page_path: window.location.pathname
                               });
                               setMp3ExportDownloading(false);
+                              void saveProjectArtifact(
+                                "export",
+                                {
+                                  format: "mp3",
+                                  jobId: result.jobId,
+                                  fileId: result.download.fileId,
+                                  masteringMode: adaptiveModeActive ? "adaptive" : "standard"
+                                },
+                                "complete"
+                              );
                             })
                             .catch(() => {
                               setMp3ExportDownloading(false);
@@ -2216,6 +2366,16 @@ export function UploadForm() {
                                 setResult((prev) => applyWavQuotaConsumed(prev));
                                 setWavExportDownloading(false);
                                 setFinalMasterExportInlineError(null);
+                                void saveProjectArtifact(
+                                  "export",
+                                  {
+                                    format: "wav",
+                                    jobId: result.jobId,
+                                    fileId: result.download.fileId,
+                                    masteringMode: adaptiveModeActive ? "adaptive" : "standard"
+                                  },
+                                  "complete"
+                                );
                               })
                               .catch((e) => {
                                 setWavExportDownloading(false);
@@ -2296,6 +2456,34 @@ export function UploadForm() {
                     {finalMasterExportInlineError && !wavExportDownloading && !mp3ExportDownloading ? (
                       <p role="alert" style={finalMasterExportInlineErrorStyle}>
                         {finalMasterExportInlineError}
+                      </p>
+                    ) : null}
+                    {projectId && (projectJourneyComplete || projectSaveStatus === "error") ? (
+                      <p role="status" style={finalMasterExportHelperStyle}>
+                        {projectJourneyComplete
+                          ? "Song Project complete. "
+                          : "Your master is safe — the Song Project update didn't save. "}
+                        {projectSaveStatus === "error" ? (
+                          <button
+                            type="button"
+                            onClick={retryFailedProjectSave}
+                            style={{
+                              marginRight: 8,
+                              padding: 0,
+                              border: 0,
+                              background: "transparent",
+                              color: "#6ee7b7",
+                              font: "inherit",
+                              textDecoration: "underline",
+                              cursor: "pointer"
+                            }}
+                          >
+                            Retry save
+                          </button>
+                        ) : null}
+                        <a href={`/projects/${projectId}`} style={{ color: "#6ee7b7", textDecoration: "underline" }}>
+                          Back to your Song Project
+                        </a>
                       </p>
                     ) : null}
                   </div>
