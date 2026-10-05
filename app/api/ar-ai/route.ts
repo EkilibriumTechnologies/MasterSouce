@@ -8,7 +8,6 @@ import { AR_AI_DEFAULT_GENRE } from "@/lib/ar-ai/types";
 import { analyzeTrack } from "@/lib/audio/analyze-track";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { createJobId } from "@/lib/jobs/job-id";
-import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
 import { cleanupExpiredTempFiles, saveTempFile } from "@/lib/storage/temp-files";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
@@ -282,7 +281,6 @@ export async function POST(request: NextRequest) {
             },
             { status: 403 }
           );
-          attachTrustedEmailAccessState(res, access.normalizedEmail);
           attachSessionCookieIfNeeded(res, sessionPrep);
           return res;
         }
@@ -316,7 +314,6 @@ export async function POST(request: NextRequest) {
 
     const res = NextResponse.json(report, { status: 200 });
     if (access.normalizedEmail) {
-      attachTrustedEmailAccessState(res, access.normalizedEmail);
     }
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
