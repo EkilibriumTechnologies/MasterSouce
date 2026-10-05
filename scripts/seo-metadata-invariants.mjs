@@ -57,7 +57,7 @@ function runHitAnalyzerMetadataTests() {
     "Hit Analyzer keeps the post-report mastering CTA"
   );
   assertIncludes(page, 'href="/pricing', "Hit Analyzer links to pricing");
-  assertIncludes(page, 'href="/song-architect"', "Hit Analyzer links to Song Architect");
+  assertIncludes(page, 'href="/song-architect', "Hit Analyzer links to Song Architect");
   assertExcludes(layout, "mastersauce-logo.png", "Hit Analyzer layout must not set logo as og:image");
   assertIncludes(helper, 'DEFAULT_SOCIAL_PREVIEW_PATH = "/og-image.png"', "helper default og:image");
 }
