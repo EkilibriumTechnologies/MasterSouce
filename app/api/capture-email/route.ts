@@ -251,8 +251,8 @@ export async function POST(request: NextRequest) {
       jobId: parsed.data.jobId,
       fileId: parsed.data.fileId,
       normalizedEmail: email,
-            billingLookupAllowed: emailIdentityTrusted
-          });
+      identityTrusted: emailIdentityTrusted
+    });
 
     if (!isSupabaseConfigured()) {
       const config = getSupabaseAdminConfig();
