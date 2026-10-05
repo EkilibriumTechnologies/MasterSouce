@@ -192,6 +192,18 @@ ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_artifacts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_generations ENABLE ROW LEVEL SECURITY;
 
+-- These tables are intentionally server-only in this milestone. Supabase is moving
+-- new public-schema tables to explicit Data API grants, so grant only service_role.
+REVOKE ALL ON TABLE public.users FROM anon, authenticated;
+REVOKE ALL ON TABLE public.projects FROM anon, authenticated;
+REVOKE ALL ON TABLE public.project_artifacts FROM anon, authenticated;
+REVOKE ALL ON TABLE public.project_generations FROM anon, authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.users TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.projects TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.project_artifacts TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.project_generations TO service_role;
+
 COMMENT ON TABLE public.users IS
   'Stable MasterSauce account identity. auth_user_id is linked only after verified Supabase Auth.';
 COMMENT ON TABLE public.projects IS
