@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { normalizeBillingEmail } from "@/lib/billing/email";
 import { reconcileFromCheckoutSession } from "@/lib/billing/reconcile-from-checkout-session";
+import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
 
 const BodySchema = z.object({
   checkoutSessionId: z.string().min(10).optional(),
@@ -27,11 +28,15 @@ export async function POST(request: NextRequest) {
           sessionId: parsed.data.checkoutSessionId
         });
       }
-      return NextResponse.json({
+      const res = NextResponse.json({
         ok: true,
         email: result.emailRaw,
         normalizedEmail: result.normalizedSessionEmail
       });
+      if (result.reconciledSubscription && result.normalizedSessionEmail) {
+        attachTrustedEmailAccessState(res, result.normalizedSessionEmail, "stripe_checkout");
+      }
+      return res;
     }
 
     if (parsed.data.email) {
