@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
-import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
 import { resolveSongArchitectVerifiedContext } from "@/lib/song-architect/access";
 
 export async function GET(request: NextRequest) {
@@ -65,7 +64,6 @@ export async function GET(request: NextRequest) {
       ok: true,
       usage: access.usage
     });
-    attachTrustedEmailAccessState(res, access.normalizedEmail);
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   } catch (error) {
