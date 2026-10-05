@@ -22,6 +22,11 @@ import type {
   SongDNA
 } from "@/lib/song-architect/types";
 import { GenerationMatchPanel } from "@/components/song-architect/generation-match-panel";
+import {
+  readProjectIdFromLocation,
+  saveProjectArtifactRequest,
+  type ProjectSaveStatus
+} from "@/lib/projects/client";
 import { MyReferencesPanel } from "@/components/song-architect/my-references-panel";
 import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
 import {
@@ -565,11 +570,73 @@ export default function SongArchitectPage() {
   const [appliedReferenceNonce, setAppliedReferenceNonce] = useState(0);
   const [referencesRefreshKey, setReferencesRefreshKey] = useState(0);
   const [billingEmail, setBillingEmail] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [projectSaveStatus, setProjectSaveStatus] = useState<ProjectSaveStatus>("idle");
 
   const selectedPreset = useMemo(
     () => SONG_ARCHITECT_PRESETS.find((preset) => preset.id === form.preset) ?? null,
     [form.preset]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setProjectId(readProjectIdFromLocation(window.location.search));
+  }, []);
+
+  async function saveProjectArtifact(
+    kind: "idea" | "song_dna" | "lyrics" | "suno_prompt",
+    artifactPayload: Record<string, unknown>,
+    advanceTo?: "song_dna" | "lyrics" | "suno_prompt" | "generation"
+  ): Promise<void> {
+    if (!projectId) return;
+    const saved = await saveProjectArtifactRequest(projectId, {
+      kind,
+      payload: artifactPayload,
+      advanceTo
+    });
+    if (!saved.ok) {
+      throw new Error(`Unable to save ${kind} to Song Project (${saved.error}).`);
+    }
+  }
+
+  async function persistSongArchitectProject(
+    input: SongArchitectInput,
+    generated: SongArchitectClientPayload
+  ): Promise<void> {
+    if (!projectId) return;
+    setProjectSaveStatus("saving");
+    try {
+      await saveProjectArtifact("idea", { input }, "song_dna");
+      if (generated.basic.songDNA) {
+        await saveProjectArtifact("song_dna", { songDNA: generated.basic.songDNA }, "lyrics");
+      }
+      await saveProjectArtifact(
+        "lyrics",
+        {
+          lyrics: generated.basic.lyrics,
+          generationOptimizedLyrics: generated.basic.generationOptimizedLyrics
+        },
+        "suno_prompt"
+      );
+      await saveProjectArtifact(
+        "suno_prompt",
+        {
+          stylePrompt: generated.basic.stylePrompt,
+          sunoBlueprint: generated.basic.sunoBlueprint ?? null,
+          selection: generated.basic.selection ?? null,
+          meta: generated.basic.meta
+        },
+        "generation"
+      );
+      setProjectSaveStatus("saved");
+    } catch (saveError) {
+      console.error("[song-architect] project_autosave_failed", {
+        projectId,
+        message: saveError instanceof Error ? saveError.message : String(saveError)
+      });
+      setProjectSaveStatus("error");
+    }
+  }
 
   function applyPreset(presetId: string) {
     const preset = SONG_ARCHITECT_PRESETS.find((item) => item.id === presetId);
@@ -650,6 +717,7 @@ export default function SongArchitectPage() {
 
       setResult(data.data);
       setUsage(data.usage);
+      await persistSongArchitectProject(payload, data.data);
       if (data.data.premiumLocked) {
         trackSongArchitectFunnelEvent("free_tool_success", { plan_id: "free" });
       } else if (data.data.premium) {
@@ -1256,6 +1324,7 @@ export default function SongArchitectPage() {
                   stylePrompt={result.basic.stylePrompt}
                   sunoBlueprint={result.basic.sunoBlueprint}
                   getBillingEmail={getStoredBillingEmail}
+                  projectId={projectId || undefined}
                   onEmailVerificationRequired={() => {
                     openEmailAccess();
                   }}
@@ -1268,13 +1337,36 @@ export default function SongArchitectPage() {
       <section style={bottomCtaWrapStyle} aria-label="Next steps after Song Architect">
         <p style={bottomCtaTextStyle}>Already generated? Check the match, then finish the track.</p>
         <div style={bottomCtaRowStyle}>
-          <Link href="/#master" style={bottomCtaPrimaryStyle}>
-            Master this song
-          </Link>
-          <Link href="/ar-ai" style={bottomCtaSecondaryStyle}>
-            Analyze release readiness
-          </Link>
+          {projectId ? (
+            <Link href={`/projects/${projectId}`} style={bottomCtaPrimaryStyle}>
+              Back to Song Project
+            </Link>
+          ) : (
+            <Link href="/#master" style={bottomCtaPrimaryStyle}>
+              Master this song
+            </Link>
+          )}
+          {projectId ? (
+            <Link href={`/ar-ai?projectId=${projectId}`} style={bottomCtaSecondaryStyle}>
+              Analyze release readiness
+            </Link>
+          ) : (
+            <Link href="/ar-ai" style={bottomCtaSecondaryStyle}>
+              Analyze release readiness
+            </Link>
+          )}
         </div>
+        {projectId ? (
+          <p style={{ margin: "10px 0 0", fontSize: 12, color: projectSaveStatus === "error" ? "#fca5a5" : "rgba(255,255,255,.45)" }}>
+            {projectSaveStatus === "saving"
+              ? "Saving this Song Architect work to your project…"
+              : projectSaveStatus === "saved"
+                ? "Saved to your Song Project."
+                : projectSaveStatus === "error"
+                  ? "Song generated, but Project autosave needs a retry."
+                  : "This Song Architect session is attached to your Song Project."}
+          </p>
+        ) : null}
         <p style={bottomCtaHintStyle}>
           Generating in Suno, Udio, or another music generator? Come back to Generation Match first, then see the{" "}
           <Link href="/suno-mastering" style={introLinkStyle}>
