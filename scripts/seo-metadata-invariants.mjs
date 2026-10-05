@@ -50,9 +50,14 @@ function runHitAnalyzerMetadataTests() {
   assertIncludes(layout, "getProductWebAppJsonLd", "Hit Analyzer emits product web-app schema");
   assert.equal((page.match(/<h1\b/g) ?? []).length, 1, "Hit Analyzer must have exactly one H1");
   assertIncludes(page, "AI Song Analyzer — MasterSauce Hit Analyzer", "Hit Analyzer H1 matches primary intent");
-  assertIncludes(page, 'href="/#master"', "Hit Analyzer links to mastering workspace");
-  assertIncludes(page, 'href="/pricing"', "Hit Analyzer links to pricing");
-  assertIncludes(page, 'href="/song-architect"', "Hit Analyzer links to Song Architect");
+  assertIncludes(page, "#master", "Hit Analyzer links to mastering workspace");
+  assertIncludes(
+    page,
+    "hit_analyzer_master_cta_clicked",
+    "Hit Analyzer keeps the post-report mastering CTA"
+  );
+  assertIncludes(page, 'href="/pricing', "Hit Analyzer links to pricing");
+  assertIncludes(page, 'href="/song-architect', "Hit Analyzer links to Song Architect");
   assertExcludes(layout, "mastersauce-logo.png", "Hit Analyzer layout must not set logo as og:image");
   assertIncludes(helper, 'DEFAULT_SOCIAL_PREVIEW_PATH = "/og-image.png"', "helper default og:image");
 }

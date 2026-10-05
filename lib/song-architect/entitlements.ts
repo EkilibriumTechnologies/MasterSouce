@@ -44,8 +44,11 @@ function incrementLocalUsage(monthKey: string, normalizedEmail: string): void {
   localUsageByMonthEmail.set(key, getLocalUsage(monthKey, normalizedEmail) + 1);
 }
 
-async function resolvePlanIdForEmail(normalizedEmail: string): Promise<PlanId> {
-  if (!isSupabaseConfigured()) return "free";
+async function resolvePlanIdForEmail(
+  normalizedEmail: string,
+  billingLookupAllowed: boolean
+): Promise<PlanId> {
+  if (!billingLookupAllowed || !isSupabaseConfigured()) return "free";
   const sub = await getBillingSubscriptionByEmail(normalizedEmail);
   return sub?.planId ?? "free";
 }
@@ -96,9 +99,15 @@ async function countSupabaseUsageThisMonth(normalizedEmail: string): Promise<num
   return count ?? 0;
 }
 
-export async function resolveSongArchitectUsageForEmail(normalizedEmail: string): Promise<SongArchitectUsageSnapshot> {
+export async function resolveSongArchitectUsageForEmail(
+  normalizedEmail: string,
+  options?: { billingLookupAllowed?: boolean }
+): Promise<SongArchitectUsageSnapshot> {
   const monthKey = getCurrentMonthKeyUtc();
-  const planId = await resolvePlanIdForEmail(normalizedEmail);
+  const planId = await resolvePlanIdForEmail(
+    normalizedEmail,
+    options?.billingLookupAllowed === true
+  );
   const limit = PLAN_DEFINITIONS[planId].songArchitectGenerationsPerMonth;
   const used = isSupabaseConfigured()
     ? await countSupabaseUsageThisMonth(normalizedEmail)

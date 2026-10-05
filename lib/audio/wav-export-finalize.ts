@@ -84,13 +84,18 @@ export async function finalizeMasteredWavDelivery(params: {
   endpoint: "/api/master" | "/api/master-ai" | "/api/capture-email";
   user: UserProfile;
   emailSource?: EntitlementEmailSource;
+  billingLookupAllowed?: boolean;
 }): Promise<FinalizeMasteredWavResult> {
+  const billingLookupAllowed = params.billingLookupAllowed !== false;
   const entitlements = await getEntitlementsForUser(params.user, {
-    normalizedEmail: params.normalizedEmail
+    normalizedEmail: params.normalizedEmail,
+    billingLookupAllowed,
+    adminOverrideAllowed: billingLookupAllowed
   });
   const deliveryQuality = resolveDeliveryOutputQuality(entitlements.quality, params.normalizedEmail, {
     planIdBeforeOverride: entitlements.planId,
-    emailSource: params.emailSource
+    emailSource: params.emailSource,
+    adminOverrideAllowed: billingLookupAllowed
   });
   const targetCodec = resolveCodecForQuality(deliveryQuality);
   const probe = await probeAudioStream(params.sourcePath);
@@ -102,6 +107,7 @@ export async function finalizeMasteredWavDelivery(params: {
   }
 
   const adminForceFloatDelivery =
+    billingLookupAllowed &&
     isAdminEntitlementOverrideEmail(params.normalizedEmail) &&
     deliveryQuality === ADMIN_QUALITY_OVERRIDE_QUALITY;
   const mayTranscodeToTarget =

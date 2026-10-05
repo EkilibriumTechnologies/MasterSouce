@@ -1087,7 +1087,7 @@ export function UploadForm() {
     const checkoutSuccess = params.get("checkout") === "success";
     const adaptiveReturn =
       checkoutSuccess && (params.get("intent") === "adaptive" || params.get("upgraded") === "1");
-    if (!adaptiveReturn) return;
+    if (!checkoutSuccess) return;
 
     let disposed = false;
     void (async () => {
@@ -1113,6 +1113,7 @@ export function UploadForm() {
         }
       }
       if (disposed) return;
+      if (!adaptiveReturn) return;
 
       const pending = loadPendingAdaptiveExport();
       if (!pending) {

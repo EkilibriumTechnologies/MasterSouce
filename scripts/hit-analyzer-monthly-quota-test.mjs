@@ -125,18 +125,22 @@ async function runLocalMonthlySlotTests() {
     resetHitAnalyzerLocalUsageForTests();
     const email = "monthly-quota@example.com";
     const limit = HIT_ANALYZER_TIER_LIMITS.creator_monthly.limit;
-    const currentPeriodStart = new Date("2026-08-01T00:00:00.000Z");
-    const currentPeriodEnd = new Date("2026-09-01T00:00:00.000Z");
-    const previousPeriodStart = new Date("2026-07-01T00:00:00.000Z");
-    const previousPeriodEnd = new Date("2026-08-01T00:00:00.000Z");
+    const now = new Date();
+    const currentPeriodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const currentPeriodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const previousPeriodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const previousPeriodEnd = currentPeriodStart;
+    const previousMidpoint = new Date(
+      previousPeriodStart.getTime() +
+        Math.floor((previousPeriodEnd.getTime() - previousPeriodStart.getTime()) / 2)
+    );
 
-    seedHitAnalyzerLocalUsageForTests(email, [
-      { createdAt: new Date("2026-07-15T00:00:00.000Z") },
-      { createdAt: new Date("2026-07-20T00:00:00.000Z") },
-      { createdAt: new Date("2026-07-25T00:00:00.000Z") },
-      { createdAt: new Date("2026-07-28T00:00:00.000Z") },
-      { createdAt: new Date("2026-07-29T00:00:00.000Z") }
-    ]);
+    seedHitAnalyzerLocalUsageForTests(
+      email,
+      Array.from({ length: 5 }, (_, index) => ({
+        createdAt: new Date(previousMidpoint.getTime() + index * 1000)
+      }))
+    );
     const previousPeriodUsed = await countHitAnalyzerUsageInPeriod(
       email,
       previousPeriodStart,

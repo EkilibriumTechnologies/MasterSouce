@@ -620,6 +620,9 @@ export default function ArAiPage() {
                 Upgrade to Creator
               </Link>
             ) : null}
+            <Link href="/song-architect" style={crossLinkSecondaryStyle}>
+              Improve song structure with Song Architect
+            </Link>
           </div>
           <p style={crossLinkHintStyle}>
             Mastering opens the upload workspace; you&apos;ll need to upload the track again. Creator includes 5 analyses per

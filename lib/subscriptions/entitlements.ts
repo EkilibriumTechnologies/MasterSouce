@@ -26,6 +26,8 @@ export const FREE_MASTERS_PER_MONTH = FREE_WAV_DOWNLOADS_PER_MONTH;
 export type EntitlementBillingContext = {
   /** Lowercased email for Supabase download events; omit when unknown. */
   normalizedEmail?: string | null;
+  /** Paid subscription / credit-pack lookup is only allowed for trusted server-side identity. */
+  billingLookupAllowed?: boolean;
   /** Admin override is only allowed for authenticated/trusted server-side identity. */
   adminOverrideAllowed?: boolean;
 };
@@ -35,7 +37,8 @@ export async function getEntitlementsForUser(
   billing?: EntitlementBillingContext
 ): Promise<EntitlementSnapshot> {
   const emailForBilling = billing?.normalizedEmail ?? user.email?.trim().toLowerCase() ?? null;
-  const adminOverrideAllowed = billing?.adminOverrideAllowed !== false;
+  const billingLookupAllowed = billing?.billingLookupAllowed !== false;
+  const adminOverrideAllowed = billing?.adminOverrideAllowed !== false && billingLookupAllowed;
   let activePlanId: PlanId = "free";
   let stripeCustomerId: string | null = null;
   let stripeSubscriptionId: string | null = null;
@@ -45,7 +48,7 @@ export async function getEntitlementsForUser(
   let billingPeriodEndIso: string | null = null;
 
   let billingSubscriptionHit = false;
-  if (isSupabaseConfigured() && emailForBilling) {
+  if (isSupabaseConfigured() && emailForBilling && billingLookupAllowed) {
     const subscription = await getBillingSubscriptionByEmail(emailForBilling);
     if (subscription) {
       billingSubscriptionHit = true;
@@ -60,7 +63,7 @@ export async function getEntitlementsForUser(
   }
 
   const masterWavExportPlanOverride =
-    emailForBilling != null ? resolveMasterWavExportPlanOverride(emailForBilling) : null;
+    billingLookupAllowed && emailForBilling != null ? resolveMasterWavExportPlanOverride(emailForBilling) : null;
   if (masterWavExportPlanOverride) {
     activePlanId = masterWavExportPlanOverride;
   }
@@ -86,7 +89,7 @@ export async function getEntitlementsForUser(
             );
       usedThisMonth = used;
       remainingMonthly = monthlyCap === null ? null : Math.max(monthlyCap - used, 0);
-      creditPackBalance = await getCreditPackBalance(emailForBilling);
+      creditPackBalance = billingLookupAllowed ? await getCreditPackBalance(emailForBilling) : 0;
     } else {
       usedThisMonth = null;
       remainingMonthly = null;
@@ -107,6 +110,8 @@ export async function getEntitlementsForUser(
     entitlementReason = "supabase_not_configured_local_usage";
   } else if (!emailForBilling) {
     entitlementReason = "no_billing_email_context";
+  } else if (!billingLookupAllowed && emailForBilling) {
+    entitlementReason = "untrusted_email_free_entitlement_only";
   } else if (adminOverrideAllowed && isAdminEntitlementOverrideEmail(emailForBilling)) {
     entitlementReason = "admin_entitlement_override";
   } else if (masterWavExportPlanOverride) {
@@ -141,7 +146,10 @@ export async function getEntitlementsForUser(
     customerPortalEligible: plan.canUseCustomerPortal && Boolean(stripeCustomerId)
   };
 
-  const resolved = adminOverrideAllowed ? applyAdminEntitlementOverride(snapshot, emailForBilling) : snapshot;
+  const resolved =
+    adminOverrideAllowed && billingLookupAllowed
+      ? applyAdminEntitlementOverride(snapshot, emailForBilling)
+      : snapshot;
 
   const logEntitlements =
     process.env.BILLING_DIAGNOSTIC_LOGS === "1" ||

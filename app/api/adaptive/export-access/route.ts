@@ -33,6 +33,12 @@ import {
   tooManyAttemptsResponse
 } from "@/lib/security/abuse-guard";
 import { validateEmailAddress } from "@/lib/security/validate-email-address";
+import {
+  attachTrustedEmailAccessState,
+  isVerifiedEmailForRequest
+} from "@/lib/security/verified-email-state";
+import { isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { resolveTempRecord } from "@/lib/storage/temp-files";
 import {
   getSupabaseAdminConfig,
@@ -185,9 +191,14 @@ export async function POST(request: NextRequest) {
     return res;
   }
   const emailNorm = emailValidation.normalizedEmail;
+  let billingIdentityTrusted =
+    isVerifiedEmailForRequest(request, emailNorm) ||
+    (isMasterAdminBypassGranted(request) && isAdminEntitlementOverrideEmail(emailNorm));
+  let checkoutIdentityVerified = false;
   const rateLimitExempt =
-    isAdaptiveBillingAllowlisted(emailNorm) ||
-    (billingEmailRateLimitHint ? isAdaptiveBillingAllowlisted(billingEmailRateLimitHint) : false);
+    billingIdentityTrusted &&
+    (isAdaptiveBillingAllowlisted(emailNorm) ||
+      (billingEmailRateLimitHint ? isAdaptiveBillingAllowlisted(billingEmailRateLimitHint) : false));
 
   if (!rateLimitExempt) {
     const emailSubmitRate = consumeRateLimit({
@@ -247,6 +258,10 @@ export async function POST(request: NextRequest) {
       checkoutSessionSyncAttempted = true;
       try {
         const syncResult = await reconcileCheckoutSessionForAdaptiveRecheck(sessionId, submittedBillingKey);
+        if (syncResult.reconciled) {
+          billingIdentityTrusted = true;
+          checkoutIdentityVerified = true;
+        }
         console.log(
           JSON.stringify({
             scope: "adaptive_export",
@@ -277,7 +292,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const resolved = await resolveAdaptiveEntitlementForEmail(emailNorm, { stripeEmailFallback: true });
+  const resolved = await resolveAdaptiveEntitlementForEmail(emailNorm, {
+    stripeEmailFallback: billingIdentityTrusted,
+    billingIdentityTrusted
+  });
   const entitled = isDevBypass || resolved.entitled;
 
   const syncAttempted = checkoutSessionSyncAttempted || resolved.stripeEmailSyncAttempted;
@@ -383,7 +401,7 @@ export async function POST(request: NextRequest) {
       fileId: masteredFileId,
       normalizedEmail: emailNorm,
       originalEmail: originalEmailTrimmed || emailNorm,
-      emailVerifiedAt: new Date().toISOString()
+      emailVerifiedAt: billingIdentityTrusted ? new Date().toISOString() : null
     });
   } catch (error) {
     logApiError("adaptive-export", API_ERROR_CODES.adaptiveExportUnlockFailed, error, {
@@ -454,6 +472,9 @@ export async function POST(request: NextRequest) {
     status: "unlocked",
     reason: isDevBypass ? "dev_bypass" : "adaptive_entitlement_active"
   });
+  if (checkoutIdentityVerified) {
+    attachTrustedEmailAccessState(res, emailNorm, "stripe_checkout");
+  }
   attachSessionCookieIfNeeded(res, sessionPrep);
   return res;
 }

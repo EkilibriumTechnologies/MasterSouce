@@ -5,7 +5,9 @@ import { finalizeMasteredWavDelivery } from "@/lib/audio/wav-export-finalize";
 import { buildMp3MasterDownloadUrl } from "@/lib/audio/mp3-master-export";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { markJobDownloadUnlocked } from "@/lib/email/capture-email";
-import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
+import { isVerifiedEmailForRequest } from "@/lib/security/verified-email-state";
+import { isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import { upsertMasterJobUnlock } from "@/lib/downloads/master-job-unlocks";
 import { upsertLeadInSupabase } from "@/lib/leads/supabase-leads";
 import {
@@ -53,6 +55,7 @@ async function finalizeUnlockWavOrThrow(params: {
   jobId: string;
   sourcePath: string;
   normalizedEmail: string;
+  billingLookupAllowed: boolean;
 }): Promise<void> {
   const finalizeUser = buildApiUser(params.request, params.sessionId);
   const finalizeResult = await finalizeMasteredWavDelivery({
@@ -61,7 +64,8 @@ async function finalizeUnlockWavOrThrow(params: {
     normalizedEmail: params.normalizedEmail,
     endpoint: "/api/capture-email",
     user: finalizeUser,
-    emailSource: "verified_cookie"
+    emailSource: params.billingLookupAllowed ? "verified_cookie" : "billing_header",
+    billingLookupAllowed: params.billingLookupAllowed
   });
   console.log("[capture-email] wav:finalized", {
     requestId: params.requestId,
@@ -221,6 +225,9 @@ export async function POST(request: NextRequest) {
       return res;
     }
     const email = emailValidation.normalizedEmail;
+    const emailIdentityTrusted =
+      isVerifiedEmailForRequest(request, email) ||
+      (isMasterAdminBypassGranted(request) && isAdminEntitlementOverrideEmail(email));
     const emailScopedRate = consumeRateLimit({
       bucket: "capture_email_submit_pair",
       key: `${clientIp}:${email}`,
@@ -243,7 +250,8 @@ export async function POST(request: NextRequest) {
       requestId,
       jobId: parsed.data.jobId,
       fileId: parsed.data.fileId,
-      normalizedEmail: email
+      normalizedEmail: email,
+      identityTrusted: emailIdentityTrusted
     });
 
     if (!isSupabaseConfigured()) {
@@ -318,7 +326,7 @@ export async function POST(request: NextRequest) {
         fileId: masteredFileId,
         normalizedEmail: email,
         originalEmail: originalEmailTrimmed || email,
-        emailVerifiedAt: new Date().toISOString()
+        emailVerifiedAt: emailIdentityTrusted ? new Date().toISOString() : null
       });
       unlockPersisted = true;
       console.log("[capture-email] unlock:persisted", {
@@ -345,7 +353,8 @@ export async function POST(request: NextRequest) {
             requestId,
             jobId: parsed.data.jobId,
             sourcePath: hintedRecord.filePath,
-            normalizedEmail: email
+            normalizedEmail: email,
+            billingLookupAllowed: emailIdentityTrusted
           });
         } catch (finalizeErr) {
           return wavFinalizeFailedResponse(sessionPrep, requestId, parsed.data.jobId, finalizeErr);
@@ -356,7 +365,6 @@ export async function POST(request: NextRequest) {
           warning: "Local dev fallback: unlock persisted in-memory because Supabase unlock upsert failed.",
           ...buildDownloadUrls(masteredFileId, parsed.data.jobId)
         });
-        attachTrustedEmailAccessState(res, email);
         attachSessionCookieIfNeeded(res, sessionPrep);
         return res;
       }
@@ -408,8 +416,9 @@ export async function POST(request: NextRequest) {
           requestId,
           jobId: parsed.data.jobId,
           sourcePath: hintedRecord.filePath,
-          normalizedEmail: email
-        });
+          normalizedEmail: email,
+            billingLookupAllowed: emailIdentityTrusted
+          });
       } catch (finalizeErr) {
         return wavFinalizeFailedResponse(sessionPrep, requestId, parsed.data.jobId, finalizeErr);
       }
@@ -419,7 +428,6 @@ export async function POST(request: NextRequest) {
         warning: "Unlock succeeded in local dev, but email persistence failed.",
         ...buildDownloadUrls(masteredFileId, parsed.data.jobId)
       });
-      attachTrustedEmailAccessState(res, email);
       attachSessionCookieIfNeeded(res, sessionPrep);
       return res;
     }
@@ -433,8 +441,9 @@ export async function POST(request: NextRequest) {
         requestId,
         jobId: parsed.data.jobId,
         sourcePath: hintedRecord.filePath,
-        normalizedEmail: email
-      });
+        normalizedEmail: email,
+            billingLookupAllowed: emailIdentityTrusted
+          });
     } catch (finalizeErr) {
       return wavFinalizeFailedResponse(sessionPrep, requestId, parsed.data.jobId, finalizeErr);
     }
@@ -444,7 +453,6 @@ export async function POST(request: NextRequest) {
       code: "OK",
       ...buildDownloadUrls(masteredFileId, parsed.data.jobId)
     });
-    attachTrustedEmailAccessState(res, email);
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   } catch (error) {

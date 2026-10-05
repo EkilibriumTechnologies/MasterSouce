@@ -140,8 +140,7 @@ export async function POST(request: NextRequest) {
           quantity: 1
         }
       ],
-      success_url:
-        parsed.data.kind === "subscription" ? appendStripeCheckoutSessionPlaceholder(successUrl) : successUrl.toString(),
+      success_url: appendStripeCheckoutSessionPlaceholder(successUrl),
       cancel_url: `${baseUrl}/pricing?checkout=cancel`,
       metadata: sessionMetadata,
       subscription_data:

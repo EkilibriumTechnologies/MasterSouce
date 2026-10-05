@@ -3,6 +3,9 @@ import { resolveAdaptiveEntitlementForEmail } from "@/lib/billing/adaptive-resol
 import { isAdaptiveDevBypassEnabled } from "@/lib/billing/adaptive-dev-bypass";
 import { buildApiUser } from "@/lib/identity/api-user";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
+import { readVerifiedEmailState } from "@/lib/security/verified-email-state";
+import { ADMIN_ENTITLEMENT_OVERRIDE_EMAIL } from "@/lib/subscriptions/admin-entitlement-override";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,11 +14,15 @@ export async function GET(request: NextRequest) {
 
     const headerRaw = request.headers.get("x-mastersouce-billing-email")?.trim() ?? "";
     const queryRaw = request.nextUrl.searchParams.get("email")?.trim() ?? "";
-    const sessionEmail = user.email?.trim().toLowerCase() ?? "";
-    const rawBillingEmail = headerRaw || queryRaw || sessionEmail;
+    const ownerBypass = isMasterAdminBypassGranted(request);
+    const verifiedEmail = readVerifiedEmailState(request)?.normalizedEmail?.trim() ?? "";
+    const trustedBillingEmail = ownerBypass ? ADMIN_ENTITLEMENT_OVERRIDE_EMAIL : verifiedEmail;
+    const rawBillingEmail = trustedBillingEmail || headerRaw || queryRaw;
+    const billingIdentityTrusted = Boolean(trustedBillingEmail);
 
     const resolved = await resolveAdaptiveEntitlementForEmail(rawBillingEmail || undefined, {
-      stripeEmailFallback: true
+      stripeEmailFallback: billingIdentityTrusted,
+      billingIdentityTrusted
     });
 
     const isDevBypass = process.env.NODE_ENV !== "production" && isAdaptiveDevBypassEnabled();
@@ -26,7 +33,8 @@ export async function GET(request: NextRequest) {
         scope: "adaptive_access",
         event: "entitlement_check",
         isDevBypass,
-        hasBillingEmailHint: Boolean(rawBillingEmail),
+        hasBillingEmailHint: Boolean(headerRaw || queryRaw),
+        billingIdentityTrusted,
         resolvedReason: resolved.reason,
         entitled,
         stripeEmailSyncAttempted: resolved.stripeEmailSyncAttempted,

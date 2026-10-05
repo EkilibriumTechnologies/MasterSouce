@@ -103,6 +103,7 @@ function runRouteInvariantTests() {
   const resolver = read("lib/subscriptions/resolve-entitlement-billing-context.ts");
   assertIncludes(resolver, "readVerifiedEmailState", "resolver uses verified email cookie");
   assertIncludes(resolver, "MASTERSOUCE_BILLING_EMAIL_HEADER", "resolver reads billing email header");
+  assertIncludes(resolver, "billingLookupAllowed: false", "billing header/hint cannot activate paid billing lookup");
   assertIncludes(resolver, "adminOverrideAllowed: false", "billing header/hint cannot activate admin quality");
   assertIncludes(resolver, "isMasterAdminBypassGranted", "resolver supports server-verified owner bypass");
   assertExcludes(resolver, "PLAN_DEFINITIONS", "resolver must not map client plan directly");
@@ -117,7 +118,12 @@ function runClientHintTests() {
   assertIncludes(uploadForm, "MASTERSOUCE_BILLING_EMAIL_HEADER", "upload form imports billing header key");
 
   const captureEmail = read("app/api/capture-email/route.ts");
-  assertIncludes(captureEmail, "attachTrustedEmailAccessState", "capture-email sets trusted email cookie");
+  assertExcludes(captureEmail, "attachTrustedEmailAccessState", "capture-email cannot mint trusted billing identity");
+  assertIncludes(
+    captureEmail,
+    "emailVerifiedAt: emailIdentityTrusted ? new Date().toISOString() : null",
+    "capture-email persists trusted state only when already proven"
+  );
 }
 
 function run() {

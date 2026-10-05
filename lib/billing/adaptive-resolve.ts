@@ -18,6 +18,8 @@ export type AdaptiveEntitlementApiResult = {
 };
 
 export type ResolveAdaptiveEntitlementOptions = {
+  /** Billing/owner entitlement checks require identity proven server-side. */
+  billingIdentityTrusted?: boolean;
   /**
    * When the DB has no active `adaptive_access` row, query Stripe by email and run the same
    * reconcile path as webhooks (billing_customers, billing_subscriptions, billing_entitlements).
@@ -57,6 +59,7 @@ export async function resolveAdaptiveEntitlementForEmail(
   options?: ResolveAdaptiveEntitlementOptions
 ): Promise<AdaptiveEntitlementApiResult> {
   const stripeEmailFallback = options?.stripeEmailFallback === true;
+  const billingIdentityTrusted = options?.billingIdentityTrusted === true;
   let stripeEmailSyncAttempted = false;
   let stripeEmailSyncRecovered = false;
 
@@ -66,6 +69,22 @@ export async function resolveAdaptiveEntitlementForEmail(
     return {
       entitled: false,
       reason: "missing_or_invalid_billing_email",
+      planId: "free",
+      subscriptionStatus: null,
+      entitlementActive: null,
+      stripeEmailSyncAttempted,
+      stripeEmailSyncRecovered
+    };
+  }
+
+  if (!billingIdentityTrusted) {
+    logAdaptiveEntitlement("resolve_skip", {
+      reason: "billing_identity_verification_required",
+      normalizedEmail: normalized
+    });
+    return {
+      entitled: false,
+      reason: "billing_identity_verification_required",
       planId: "free",
       subscriptionStatus: null,
       entitlementActive: null,
