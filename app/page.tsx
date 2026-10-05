@@ -89,6 +89,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <Link href="/ar-ai" style={topNavLinkStyle}>
             Hit Analyzer
           </Link>
+          <Link href="/projects" style={topNavLinkStyle}>
+            My Songs
+          </Link>
           <a href="#pricing" style={topNavLinkStyle}>
             Pricing
           </a>
