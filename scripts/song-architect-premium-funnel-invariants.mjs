@@ -33,7 +33,16 @@ function runEntitlementSourceTests() {
 
   const access = read("lib/song-architect/access.ts");
   assertIncludes(access, "normalizeBillingEmail", "access normalizes billing email");
-  assertIncludes(access, "resolveSongArchitectUsageForEmail(normalizedEmail)", "usage keyed on normalized email");
+  assertIncludes(
+    access,
+    "resolveSongArchitectUsageForEmail(normalizedEmail, {",
+    "usage keyed on normalized email"
+  );
+  assertIncludes(
+    access,
+    "billingLookupAllowed: emailContext.identityTrusted",
+    "paid Song Architect usage lookup requires trusted billing identity"
+  );
 
   const email = read("lib/billing/email.ts");
   assertIncludes(email, "email.trim().toLowerCase()", "billing email trim+lower normalization");
