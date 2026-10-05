@@ -70,6 +70,16 @@ export default function SongProjectPage() {
     return payload.project;
   }
 
+  async function lockGenerationAndMaster(generationId: string): Promise<void> {
+    const updated = await patchProject({
+      selectedGenerationId: generationId,
+      currentStage: "selected_generation"
+    });
+    if (updated) {
+      router.push(`/?projectId=${data?.project.id ?? projectId}#master`);
+    }
+  }
+
   if (error) {
     return (
       <main style={{ minHeight: "100vh", background: "#050505", color: "#fff" }}>
@@ -163,25 +173,23 @@ export default function SongProjectPage() {
                 >
                   Analyze release readiness
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void patchProject({ currentStage: "selected_generation" }).then((updated) => {
-                      if (updated) router.push(`/?projectId=${data.project.id}#master`);
-                    });
-                  }}
-                  style={{
-                    border: 0,
-                    borderRadius: 999,
-                    padding: "12px 18px",
-                    background: "#34d399",
-                    color: "#04120d",
-                    fontWeight: 900,
-                    cursor: "pointer"
-                  }}
-                >
-                  Lock this version → Master
-                </button>
+                {data.generations.length === 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => void lockGenerationAndMaster(data.generations[0].id)}
+                    style={{
+                      border: 0,
+                      borderRadius: 999,
+                      padding: "12px 18px",
+                      background: "#34d399",
+                      color: "#04120d",
+                      fontWeight: 900,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Lock this version → Master
+                  </button>
+                ) : null}
               </>
             ) : null}
             {masteringStage ? (
@@ -233,8 +241,56 @@ export default function SongProjectPage() {
             <h2 style={{ margin: 0, fontSize: 20 }}>Generations</h2>
             <div style={{ marginTop: 12, fontSize: 42, fontWeight: 900 }}>{data.generations.length}</div>
             <div style={{ color: "rgba(255,255,255,.48)", fontSize: 13 }}>Suno candidates attached to this song</div>
+
+            {data.generations.length > 0 ? (
+              <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
+                {data.generations.map((generation, index) => {
+                  const selected = data.project.selectedGenerationId === generation.id;
+                  return (
+                    <div
+                      key={generation.id}
+                      style={{
+                        border: selected
+                          ? "1px solid rgba(52,211,153,.48)"
+                          : "1px solid rgba(255,255,255,.08)",
+                        borderRadius: 14,
+                        padding: 12,
+                        background: selected ? "rgba(52,211,153,.08)" : "rgba(255,255,255,.02)"
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 800 }}>
+                        {generation.label || `Generation ${index + 1}`}
+                      </div>
+                      <div style={{ marginTop: 4, color: "rgba(255,255,255,.38)", fontSize: 11 }}>
+                        {selected ? "Locked for mastering" : "Analyzed candidate"}
+                      </div>
+                      {!selected && data.project.currentStage === "analyze_refine" ? (
+                        <button
+                          type="button"
+                          onClick={() => void lockGenerationAndMaster(generation.id)}
+                          style={{
+                            marginTop: 10,
+                            border: 0,
+                            borderRadius: 999,
+                            padding: "8px 11px",
+                            background: "#34d399",
+                            color: "#04120d",
+                            fontSize: 12,
+                            fontWeight: 900,
+                            cursor: "pointer"
+                          }}
+                        >
+                          Lock this version → Master
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
             <div style={{ marginTop: 22, color: "rgba(255,255,255,.40)", fontSize: 12, lineHeight: 1.6 }}>
-              Audio file durability comes in the next storage milestone. This project already persists candidate IDs/links and analysis history.
+              Audio file durability comes in the next storage milestone. This project already persists candidate metadata and analysis history.
             </div>
           </aside>
         </div>
