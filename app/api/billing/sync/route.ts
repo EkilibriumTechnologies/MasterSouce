@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         email: result.emailRaw,
         normalizedEmail: result.normalizedSessionEmail
       });
-      if (result.reconciledSubscription && result.normalizedSessionEmail) {
+      if (result.checkoutVerified && result.normalizedSessionEmail) {
         attachTrustedEmailAccessState(res, result.normalizedSessionEmail, "stripe_checkout");
       }
       return res;
