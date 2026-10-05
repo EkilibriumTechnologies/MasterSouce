@@ -10,6 +10,7 @@ type GenerationMatchPanelProps = {
   stylePrompt: string;
   sunoBlueprint?: string;
   getBillingEmail: () => string;
+  projectId?: string;
   onEmailVerificationRequired?: () => void;
 };
 
@@ -54,6 +55,7 @@ export function GenerationMatchPanel({
   stylePrompt,
   sunoBlueprint,
   getBillingEmail,
+  projectId,
   onEmailVerificationRequired
 }: GenerationMatchPanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -129,6 +131,39 @@ export function GenerationMatchPanel({
       setMatch(data.match);
       setImprovedPrompt(data.improvedGenerationPrompt);
       setShowImprovedPrompt(false);
+
+      if (projectId) {
+        try {
+          const saveResponse = await fetch(`/api/projects/${projectId}/artifacts`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              kind: "generation_match",
+              payload: {
+                sourceFile: {
+                  name: file.name,
+                  size: file.size,
+                  type: file.type || null
+                },
+                match: data.match,
+                improvedGenerationPrompt: data.improvedGenerationPrompt
+              },
+              advanceTo: "analyze_refine"
+            })
+          });
+          if (!saveResponse.ok) {
+            console.error("[generation-match] project_save_failed", {
+              projectId,
+              status: saveResponse.status
+            });
+          }
+        } catch (saveError) {
+          console.error("[generation-match] project_save_failed", {
+            projectId,
+            message: saveError instanceof Error ? saveError.message : String(saveError)
+          });
+        }
+      }
     } catch {
       setMatch(null);
       setImprovedPrompt(null);
