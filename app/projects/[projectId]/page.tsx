@@ -147,6 +147,42 @@ export default function SongProjectPage() {
                 Continue in Song Architect →
               </Link>
             ) : null}
+            {data.project.currentStage === "analyze_refine" ? (
+              <>
+                <Link
+                  href={`/ar-ai?projectId=${data.project.id}`}
+                  style={{
+                    borderRadius: 999,
+                    padding: "12px 18px",
+                    border: "1px solid rgba(255,255,255,.16)",
+                    color: "#fff",
+                    fontWeight: 800,
+                    textDecoration: "none"
+                  }}
+                >
+                  Analyze release readiness
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void patchProject({ currentStage: "selected_generation" }).then(() => {
+                      router.push(`/?projectId=${data.project.id}#master`);
+                    });
+                  }}
+                  style={{
+                    border: 0,
+                    borderRadius: 999,
+                    padding: "12px 18px",
+                    background: "#34d399",
+                    color: "#04120d",
+                    fontWeight: 900,
+                    cursor: "pointer"
+                  }}
+                >
+                  Lock this version → Master
+                </button>
+              </>
+            ) : null}
             {masteringStage ? (
               <Link
                 href={`/?projectId=${data.project.id}#master`}
