@@ -1033,11 +1033,42 @@ export function UploadForm() {
   const [wavExportDownloading, setWavExportDownloading] = useState(false);
   const [mp3ExportDownloading, setMp3ExportDownloading] = useState(false);
   const [finalMasterExportInlineError, setFinalMasterExportInlineError] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState("");
+  const [projectSaveStatus, setProjectSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const latestAnalysisRequestIdRef = useRef(0);
 
   useEffect(() => {
     setMastersourceWorkflowBusy(loading || adaptiveProcessing || wavExportDownloading || mp3ExportDownloading);
   }, [loading, adaptiveProcessing, wavExportDownloading, mp3ExportDownloading]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setProjectId(new URLSearchParams(window.location.search).get("projectId")?.trim() ?? "");
+  }, []);
+
+  async function saveProjectArtifact(
+    kind: "master_readiness" | "master_settings" | "export",
+    artifactPayload: Record<string, unknown>,
+    advanceTo?: "master" | "export" | "complete"
+  ): Promise<void> {
+    if (!projectId) return;
+    setProjectSaveStatus("saving");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/artifacts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind,
+          payload: artifactPayload,
+          ...(advanceTo ? { advanceTo } : {})
+        })
+      });
+      if (!response.ok) throw new Error("project_save_failed");
+      setProjectSaveStatus("saved");
+    } catch {
+      setProjectSaveStatus("error");
+    }
+  }
 
   useEffect(() => {
     if (!showAdaptivePlaceholder) return;
