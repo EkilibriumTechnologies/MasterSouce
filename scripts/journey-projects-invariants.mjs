@@ -43,6 +43,17 @@ function run() {
   const detail = read("app/api/projects/[projectId]/route.ts");
   includes(detail, "getProjectForUser(account.user.id, params.projectId)", "project reads are owner-scoped");
   includes(detail, "userId: account.user.id", "project updates are owner-scoped");
+  const projectStore = read("lib/projects/store.ts");
+  includes(
+    projectStore,
+    '.eq("project_id", input.projectId)',
+    "selected generation must belong to the same Project"
+  );
+  includes(
+    projectStore,
+    '.eq("user_id", input.userId)',
+    "selected generation must belong to the same user"
+  );
 
   const artifacts = read("app/api/projects/[projectId]/artifacts/route.ts");
   includes(artifacts, "userId: account.user.id", "artifact writes are owner-scoped");
@@ -56,6 +67,11 @@ function run() {
   includes(songArchitect, '"generation"', "Song Architect advances to generation stage");
 
   const generationMatch = read("components/song-architect/generation-match-panel.tsx");
+  includes(
+    generationMatch,
+    `fetch(\`/api/projects/\${projectId}/generations\``,
+    "Generation Match creates a Project generation candidate"
+  );
   includes(generationMatch, 'kind: "generation_match"', "Generation Match is persisted");
   includes(generationMatch, 'advanceTo: "analyze_refine"', "Generation Match advances Journey");
 
@@ -72,6 +88,11 @@ function run() {
   const projectPage = read("app/projects/[projectId]/page.tsx");
   includes(projectPage, "JourneyProgress", "Song Project shows Journey progress");
   includes(projectPage, "Lock this version → Master", "selection is explicit before mastering");
+  includes(
+    projectPage,
+    "selectedGenerationId: generationId",
+    "locked mastering version persists the selected generation"
+  );
   includes(projectPage, "/song-architect?projectId=", "Project resumes Song Architect");
   includes(projectPage, "/?projectId=", "Project resumes mastering");
 
