@@ -134,6 +134,25 @@ export function GenerationMatchPanel({
 
       if (projectId) {
         try {
+          const generationResponse = await fetch(`/api/projects/${projectId}/generations`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              label: file.name,
+              metadata: {
+                sourceFile: {
+                  name: file.name,
+                  size: file.size,
+                  type: file.type || null
+                },
+                generationMatchOverall: data.match.overall
+              }
+            })
+          });
+          if (!generationResponse.ok) {
+            throw new Error(`generation_save_failed_${generationResponse.status}`);
+          }
+
           const saveResponse = await fetch(`/api/projects/${projectId}/artifacts`, {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -152,10 +171,7 @@ export function GenerationMatchPanel({
             })
           });
           if (!saveResponse.ok) {
-            console.error("[generation-match] project_save_failed", {
-              projectId,
-              status: saveResponse.status
-            });
+            throw new Error(`artifact_save_failed_${saveResponse.status}`);
           }
         } catch (saveError) {
           console.error("[generation-match] project_save_failed", {
