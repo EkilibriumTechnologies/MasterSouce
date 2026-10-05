@@ -161,11 +161,16 @@ export function resolveEncodeOutputQuality(
 export function resolveDeliveryOutputQuality(
   entitlementQuality: PlanQuality,
   normalizedEmail: string,
-  audit?: { planIdBeforeOverride?: string; emailSource?: EntitlementEmailSource }
+  audit?: {
+    planIdBeforeOverride?: string;
+    emailSource?: EntitlementEmailSource;
+    adminOverrideAllowed?: boolean;
+  }
 ): PlanQuality {
   return applyAdminQualityOverride(normalizedEmail, entitlementQuality, {
     emailSource: audit?.emailSource ?? "verified_cookie",
-    planIdBeforeOverride: audit?.planIdBeforeOverride
+    planIdBeforeOverride: audit?.planIdBeforeOverride,
+    adminOverrideAllowed: audit?.adminOverrideAllowed
   });
 }
 
