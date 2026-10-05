@@ -50,6 +50,10 @@ function decodePayload(raw: string): VerifiedEmailCookiePayload | null {
   try {
     const parsed = JSON.parse(Buffer.from(payloadBase64, "base64url").toString("utf8")) as VerifiedEmailCookiePayload;
     if (!parsed.normalizedEmail || !parsed.verifiedAt) return null;
+    const verifiedAtMs = Date.parse(parsed.verifiedAt);
+    if (!Number.isFinite(verifiedAtMs)) return null;
+    const ageMs = Date.now() - verifiedAtMs;
+    if (ageMs < -5 * 60 * 1000 || ageMs > VERIFIED_EMAIL_MAX_AGE_SEC * 1000) return null;
     return parsed;
   } catch {
     return null;
