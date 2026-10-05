@@ -5,7 +5,11 @@ import { getBillingSubscriptionByEmail } from "@/lib/billing/store";
 import { getClientIp, hashIdentifier, logAbuseGuard, maskEmail, shouldChallengeSuspiciousRequest } from "@/lib/security/abuse-guard";
 import { readVerifiedEmailState } from "@/lib/security/verified-email-state";
 import { validateEmailAddress } from "@/lib/security/validate-email-address";
-import { isAdminEntitlementOverrideEmail } from "@/lib/subscriptions/admin-entitlement-override";
+import {
+  ADMIN_ENTITLEMENT_OVERRIDE_EMAIL,
+  isAdminEntitlementOverrideEmail
+} from "@/lib/subscriptions/admin-entitlement-override";
+import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import {
@@ -43,6 +47,7 @@ export type HitAnalyzerAccessContext =
       launchActive: boolean;
       launch: HitAnalyzerLaunchMetadata;
       normalizedEmail: string | null;
+      identityTrusted: boolean;
       planId: PlanId;
       unlimited: boolean;
       usage: HitAnalyzerUsageSnapshot | null;
@@ -150,12 +155,21 @@ async function resolveBillingContextForEmail(normalizedEmail: string): Promise<H
   };
 }
 
-function resolveBillingEmailHint(request: NextRequest, billingEmailHint?: string): string {
+function resolveBillingEmailContext(
+  request: NextRequest,
+  billingEmailHint?: string
+): { rawEmail: string; identityTrusted: boolean } {
+  if (isMasterAdminBypassGranted(request)) {
+    return { rawEmail: ADMIN_ENTITLEMENT_OVERRIDE_EMAIL, identityTrusted: true };
+  }
+  const fromCookie = readVerifiedEmailState(request)?.normalizedEmail?.trim() ?? "";
+  if (fromCookie) {
+    return { rawEmail: fromCookie, identityTrusted: true };
+  }
   const fromHeader = request.headers.get(MASTERSOUCE_BILLING_EMAIL_HEADER)?.trim() ?? "";
   const fromQuery = request.nextUrl.searchParams.get("email")?.trim() ?? "";
   const fromHint = billingEmailHint?.trim() ?? "";
-  const fromCookie = readVerifiedEmailState(request)?.normalizedEmail?.trim() ?? "";
-  return fromHeader || fromQuery || fromHint || fromCookie;
+  return { rawEmail: fromHeader || fromQuery || fromHint, identityTrusted: false };
 }
 
 function buildQuotaExhaustedMessage(planId: PlanId, quotaPeriod: HitAnalyzerQuotaPeriod): string {
@@ -168,11 +182,17 @@ function buildQuotaExhaustedMessage(planId: PlanId, quotaPeriod: HitAnalyzerQuot
   return "You reached your Hit Analyzer limit. Upgrade your plan to continue.";
 }
 
-export async function resolveHitAnalyzerUsageForEmail(normalizedEmail: string): Promise<HitAnalyzerUsageSnapshot> {
-  const billing = await resolveBillingContextForEmail(normalizedEmail);
+export async function resolveHitAnalyzerUsageForEmail(
+  normalizedEmail: string,
+  options?: { billingLookupAllowed?: boolean }
+): Promise<HitAnalyzerUsageSnapshot> {
+  const billingLookupAllowed = options?.billingLookupAllowed === true;
+  const billing = billingLookupAllowed
+    ? await resolveBillingContextForEmail(normalizedEmail)
+    : { planId: "free" as PlanId, billingPeriodStartIso: null, billingPeriodEndIso: null };
   const planId = billing.planId;
-  const adminUnlimited = isAdminEntitlementOverrideEmail(normalizedEmail);
-  const tierLimit = resolveHitAnalyzerTierLimit(planId, normalizedEmail);
+  const adminUnlimited = billingLookupAllowed && isAdminEntitlementOverrideEmail(normalizedEmail);
+  const tierLimit = adminUnlimited ? null : HIT_ANALYZER_TIER_LIMITS[planId];
 
   if (adminUnlimited || tierLimit == null) {
     return {
@@ -221,7 +241,8 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
   const now = input.now ?? new Date();
   const launch = buildHitAnalyzerLaunchCountdown(now);
   const launchActive = launch.launchActive;
-  const rawEmail = resolveBillingEmailHint(input.request, input.billingEmailHint);
+  const emailContext = resolveBillingEmailContext(input.request, input.billingEmailHint);
+  const rawEmail = emailContext.rawEmail;
 
   if (!rawEmail) {
     if (launchActive) {
@@ -230,6 +251,7 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
         launchActive,
         launch,
         normalizedEmail: null,
+        identityTrusted: false,
         planId: "free",
         unlimited: false,
         usage: null
@@ -276,6 +298,7 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
         launchActive,
         launch,
         normalizedEmail: null,
+        identityTrusted: false,
         planId: "free",
         unlimited: false,
         usage: null
@@ -288,7 +311,9 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
     };
   }
 
-  const usage = await resolveHitAnalyzerUsageForEmail(normalizedEmail);
+  const usage = await resolveHitAnalyzerUsageForEmail(normalizedEmail, {
+    billingLookupAllowed: emailContext.identityTrusted
+  });
 
   if (launchActive || usage.unlimited) {
     return {
@@ -296,6 +321,7 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
       launchActive,
       launch,
       normalizedEmail,
+      identityTrusted: emailContext.identityTrusted,
       planId: usage.planId,
       unlimited: usage.unlimited,
       usage
@@ -319,6 +345,7 @@ export async function resolveHitAnalyzerAccess(input: ResolveHitAnalyzerAccessIn
     launchActive,
     launch,
     normalizedEmail,
+    identityTrusted: emailContext.identityTrusted,
     planId: usage.planId,
     unlimited: false,
     usage
