@@ -2196,6 +2196,16 @@ export function UploadForm() {
                                 page_path: window.location.pathname
                               });
                               setMp3ExportDownloading(false);
+                              void saveProjectArtifact(
+                                "export",
+                                {
+                                  format: "mp3",
+                                  jobId: result.jobId,
+                                  fileId: result.download.fileId,
+                                  masteringMode: adaptiveModeActive ? "adaptive" : "standard"
+                                },
+                                "complete"
+                              );
                             })
                             .catch(() => {
                               setMp3ExportDownloading(false);
@@ -2289,6 +2299,16 @@ export function UploadForm() {
                                 setResult((prev) => applyWavQuotaConsumed(prev));
                                 setWavExportDownloading(false);
                                 setFinalMasterExportInlineError(null);
+                                void saveProjectArtifact(
+                                  "export",
+                                  {
+                                    format: "wav",
+                                    jobId: result.jobId,
+                                    fileId: result.download.fileId,
+                                    masteringMode: adaptiveModeActive ? "adaptive" : "standard"
+                                  },
+                                  "complete"
+                                );
                               })
                               .catch((e) => {
                                 setWavExportDownloading(false);
