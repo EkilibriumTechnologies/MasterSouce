@@ -152,13 +152,32 @@ function run() {
   );
   assertIncludes(
     download,
-    "Boolean(masteredUnlock?.emailVerifiedAt)",
-    "owner download bypass requires trusted unlock identity"
+    "isUnlockBillingIdentityTrusted(request, masteredUnlock)",
+    "download billing trust requires both stored proof and current signed identity"
+  );
+  assertIncludes(
+    download,
+    "isVerifiedEmailForRequest(request, unlock.normalizedEmail)",
+    "legacy unlock timestamps cannot authorize paid lookup without a current signed identity"
   );
   assertIncludes(
     download,
     "billingLookupAllowed: billingIdentityTrusted",
     "download paid lookup follows trusted unlock identity"
+  );
+
+  const legacyUnlockTrustReset = read(
+    "supabase/migrations/20261005210000_reset_legacy_master_job_unlock_trust.sql"
+  );
+  assertIncludes(
+    legacyUnlockTrustReset,
+    "SET email_verified_at = NULL",
+    "legacy unlock timestamps are cleared before the new trust model is enabled"
+  );
+  assertIncludes(
+    legacyUnlockTrustReset,
+    "ALTER COLUMN email_verified_at DROP DEFAULT",
+    "new unlock rows cannot become trusted from a database default"
   );
 
   const adaptiveResolver = read("lib/billing/adaptive-resolve.ts");
