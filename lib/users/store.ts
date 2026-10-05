@@ -42,19 +42,34 @@ export async function upsertVerifiedMasterSauceUser(input: {
   if (!normalizedEmail) throw new Error("Verified auth user is missing a valid email.");
 
   const supabase = getSupabaseAdmin();
-  const { data: existing, error: existingError } = await supabase
-    .from("users")
-    .select("id, auth_user_id, normalized_email, email, stripe_customer_id, created_at, updated_at")
-    .eq("normalized_email", normalizedEmail)
-    .maybeSingle();
-  if (existingError) throw new Error(`users lookup failed: ${existingError.message}`);
+  const userSelect =
+    "id, auth_user_id, normalized_email, email, stripe_customer_id, created_at, updated_at";
+
+  const [{ data: existingByAuth, error: authLookupError }, { data: existingByEmail, error: emailLookupError }] =
+    await Promise.all([
+      supabase.from("users").select(userSelect).eq("auth_user_id", input.authUserId).maybeSingle(),
+      supabase.from("users").select(userSelect).eq("normalized_email", normalizedEmail).maybeSingle()
+    ]);
+
+  if (authLookupError) throw new Error(`users auth lookup failed: ${authLookupError.message}`);
+  if (emailLookupError) throw new Error(`users email lookup failed: ${emailLookupError.message}`);
 
   if (
-    existing?.auth_user_id &&
-    existing.auth_user_id !== input.authUserId
+    existingByEmail?.auth_user_id &&
+    existingByEmail.auth_user_id !== input.authUserId
   ) {
     throw new Error("Verified email is already linked to another auth identity.");
   }
+
+  if (
+    existingByAuth &&
+    existingByEmail &&
+    existingByAuth.id !== existingByEmail.id
+  ) {
+    throw new Error("Verified email is already linked to another MasterSauce account.");
+  }
+
+  const existing = existingByAuth ?? existingByEmail;
 
   const { data: billingCustomer, error: billingError } = await supabase
     .from("billing_customers")
@@ -75,14 +90,33 @@ export async function upsertVerifiedMasterSauceUser(input: {
     updated_at: now
   };
 
-  const { data, error } = await supabase
-    .from("users")
-    .upsert(payload, { onConflict: "normalized_email" })
-    .select("id, auth_user_id, normalized_email, email, stripe_customer_id, created_at, updated_at")
-    .single();
-  if (error) throw new Error(`users upsert failed: ${error.message}`);
+  let data: Record<string, unknown> | null = null;
+  let writeError: { message: string } | null = null;
 
-  const user = mapUser(data as Record<string, unknown>);
+  if (existingByAuth) {
+    const result = await supabase
+      .from("users")
+      .update(payload)
+      .eq("id", existingByAuth.id)
+      .select(userSelect)
+      .single();
+    data = (result.data as Record<string, unknown> | null) ?? null;
+    writeError = result.error;
+  } else {
+    const result = await supabase
+      .from("users")
+      .upsert(payload, { onConflict: "normalized_email" })
+      .select(userSelect)
+      .single();
+    data = (result.data as Record<string, unknown> | null) ?? null;
+    writeError = result.error;
+  }
+
+  if (writeError || !data) {
+    throw new Error(`users upsert failed: ${writeError?.message ?? "no user row returned"}`);
+  }
+
+  const user = mapUser(data);
 
   await Promise.all([
     supabase.from("billing_customers").update({ user_id: user.id }).eq("normalized_email", normalizedEmail),
