@@ -28,6 +28,12 @@ import {
 } from "@/lib/billing/client-key";
 import { clearPendingAdaptiveExport, loadPendingAdaptiveExport } from "@/lib/billing/pending-adaptive-export";
 import { readResponsePayload } from "@/lib/http/read-response-payload";
+import {
+  readProjectIdFromLocation,
+  saveProjectArtifactRequest,
+  type ProjectArtifactSaveRequest,
+  type ProjectSaveStatus
+} from "@/lib/projects/client";
 import { PLAN_DEFINITIONS } from "@/lib/subscriptions/plans";
 import type { PlanId } from "@/lib/subscriptions/types";
 import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_UPLOAD_FILE_SIZE_LABEL } from "@/lib/upload/limits";
@@ -1034,7 +1040,9 @@ export function UploadForm() {
   const [mp3ExportDownloading, setMp3ExportDownloading] = useState(false);
   const [finalMasterExportInlineError, setFinalMasterExportInlineError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
-  const [projectSaveStatus, setProjectSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [projectSaveStatus, setProjectSaveStatus] = useState<ProjectSaveStatus>("idle");
+  const [projectJourneyComplete, setProjectJourneyComplete] = useState(false);
+  const failedProjectSaveRef = useRef<ProjectArtifactSaveRequest | null>(null);
   const latestAnalysisRequestIdRef = useRef(0);
 
   useEffect(() => {
@@ -1043,31 +1051,44 @@ export function UploadForm() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setProjectId(new URLSearchParams(window.location.search).get("projectId")?.trim() ?? "");
+    setProjectId(readProjectIdFromLocation(window.location.search));
   }, []);
+
+  /**
+   * Best-effort Song Project autosave. Never throws: the master/download the user already has
+   * is never blocked or undone by a Project write; failures surface as a retryable status.
+   */
+  async function persistProjectArtifact(request: ProjectArtifactSaveRequest): Promise<void> {
+    if (!projectId) return;
+    setProjectSaveStatus("saving");
+    const saved = await saveProjectArtifactRequest(projectId, request);
+    if (!saved.ok) {
+      failedProjectSaveRef.current = request;
+      console.error("[mastering] project_save_failed", {
+        projectId,
+        kind: request.kind,
+        status: saved.status,
+        error: saved.error
+      });
+      setProjectSaveStatus("error");
+      return;
+    }
+    failedProjectSaveRef.current = null;
+    setProjectSaveStatus("saved");
+    if (saved.project?.currentStage === "complete") setProjectJourneyComplete(true);
+  }
 
   async function saveProjectArtifact(
     kind: "master_readiness" | "master_settings" | "export",
     artifactPayload: Record<string, unknown>,
     advanceTo?: "master" | "export" | "complete"
   ): Promise<void> {
-    if (!projectId) return;
-    setProjectSaveStatus("saving");
-    try {
-      const response = await fetch(`/api/projects/${projectId}/artifacts`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          kind,
-          payload: artifactPayload,
-          ...(advanceTo ? { advanceTo } : {})
-        })
-      });
-      if (!response.ok) throw new Error("project_save_failed");
-      setProjectSaveStatus("saved");
-    } catch {
-      setProjectSaveStatus("error");
-    }
+    await persistProjectArtifact({ kind, payload: artifactPayload, advanceTo });
+  }
+
+  function retryFailedProjectSave(): void {
+    const failed = failedProjectSaveRef.current;
+    if (failed) void persistProjectArtifact(failed);
   }
 
   useEffect(() => {
@@ -1447,7 +1468,7 @@ export function UploadForm() {
         file_id: masterPayload.download.fileId,
         plan_id: masterPayload.quota?.planId
       });
-      await saveProjectArtifact(
+      void saveProjectArtifact(
         "master_settings",
         {
           mode: "standard",
@@ -1637,7 +1658,7 @@ export function UploadForm() {
         file_id: adaptive.download.fileId,
         plan_id: mergedResult.quota?.planId
       });
-      await saveProjectArtifact(
+      void saveProjectArtifact(
         "master_settings",
         {
           mode: "adaptive",
@@ -1736,7 +1757,7 @@ export function UploadForm() {
       setMasterReadiness(parsed.masterReadiness ?? null);
       setMasterReadinessAcknowledged(false);
       setSourceUploadRef(parsed.source ?? null);
-      await saveProjectArtifact(
+      void saveProjectArtifact(
         "master_readiness",
         {
           sourceFile: file
@@ -1862,16 +1883,36 @@ export function UploadForm() {
             lineHeight: 1.5
           }}
         >
-          This mastering session is attached to your Song Project.{" "}
+          {projectJourneyComplete
+            ? "Final master exported — this Song Project is complete. "
+            : "This mastering session is attached to your Song Project. "}
           {projectSaveStatus === "saving"
             ? "Saving… "
-            : projectSaveStatus === "saved"
+            : projectSaveStatus === "saved" && !projectJourneyComplete
               ? "Latest milestone saved. "
               : projectSaveStatus === "error"
-                ? "Project autosave needs a retry. "
+                ? "Your files are safe, but the Project update didn't save. "
                 : ""}
+          {projectSaveStatus === "error" ? (
+            <button
+              type="button"
+              onClick={retryFailedProjectSave}
+              style={{
+                marginRight: 8,
+                padding: 0,
+                border: 0,
+                background: "transparent",
+                color: "#6ee7b7",
+                font: "inherit",
+                textDecoration: "underline",
+                cursor: "pointer"
+              }}
+            >
+              Retry save
+            </button>
+          ) : null}
           <a href={`/projects/${projectId}`} style={{ color: "#6ee7b7", textDecoration: "underline" }}>
-            View Song Project
+            {projectJourneyComplete ? "Back to your Song Project" : "View Song Project"}
           </a>
         </p>
       ) : null}
@@ -2415,6 +2456,34 @@ export function UploadForm() {
                     {finalMasterExportInlineError && !wavExportDownloading && !mp3ExportDownloading ? (
                       <p role="alert" style={finalMasterExportInlineErrorStyle}>
                         {finalMasterExportInlineError}
+                      </p>
+                    ) : null}
+                    {projectId && (projectJourneyComplete || projectSaveStatus === "error") ? (
+                      <p role="status" style={finalMasterExportHelperStyle}>
+                        {projectJourneyComplete
+                          ? "Song Project complete. "
+                          : "Your master is safe — the Song Project update didn't save. "}
+                        {projectSaveStatus === "error" ? (
+                          <button
+                            type="button"
+                            onClick={retryFailedProjectSave}
+                            style={{
+                              marginRight: 8,
+                              padding: 0,
+                              border: 0,
+                              background: "transparent",
+                              color: "#6ee7b7",
+                              font: "inherit",
+                              textDecoration: "underline",
+                              cursor: "pointer"
+                            }}
+                          >
+                            Retry save
+                          </button>
+                        ) : null}
+                        <a href={`/projects/${projectId}`} style={{ color: "#6ee7b7", textDecoration: "underline" }}>
+                          Back to your Song Project
+                        </a>
                       </p>
                     ) : null}
                   </div>

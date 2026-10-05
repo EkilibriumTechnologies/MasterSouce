@@ -2,6 +2,11 @@
 
 import { useRef, useState } from "react";
 import { MASTERSOUCE_BILLING_EMAIL_HEADER } from "@/lib/billing/client-key";
+import {
+  createProjectGenerationRequest,
+  saveProjectArtifactRequest,
+  type ProjectSaveStatus
+} from "@/lib/projects/client";
 import type { PublicGenerationMatchResult } from "@/lib/song-architect/generation-match-public";
 import type { SongDNA } from "@/lib/song-architect/types";
 
@@ -11,6 +16,8 @@ type GenerationMatchPanelProps = {
   sunoBlueprint?: string;
   getBillingEmail: () => string;
   projectId?: string;
+  /** Called after a candidate + its match history are attached to the Song Project. */
+  onProjectSaved?: () => void;
   onEmailVerificationRequired?: () => void;
 };
 
@@ -56,6 +63,7 @@ export function GenerationMatchPanel({
   sunoBlueprint,
   getBillingEmail,
   projectId,
+  onProjectSaved,
   onEmailVerificationRequired
 }: GenerationMatchPanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -66,11 +74,72 @@ export function GenerationMatchPanel({
   const [improvedPrompt, setImprovedPrompt] = useState<string | null>(null);
   const [showImprovedPrompt, setShowImprovedPrompt] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [projectSaveStatus, setProjectSaveStatus] = useState<ProjectSaveStatus>("idle");
+  const [candidateUrl, setCandidateUrl] = useState("");
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0] ?? null;
     setFile(next);
     setError("");
+  }
+
+  /**
+   * Persists the analyzed upload as a Project generation candidate (metadata only; audio bytes
+   * are never stored in Postgres) and links the Generation Match history to that candidate,
+   * so "Lock this version" can select a real generation record later.
+   */
+  async function attachMatchToProject(
+    targetProjectId: string,
+    sourceFile: File,
+    matchResult: PublicGenerationMatchResult,
+    improvedGenerationPrompt: string | null
+  ): Promise<void> {
+    setProjectSaveStatus("saving");
+    const sourceFileMeta = {
+      name: sourceFile.name,
+      size: sourceFile.size,
+      type: sourceFile.type || null
+    };
+    const trimmedUrl = candidateUrl.trim();
+    const generation = await createProjectGenerationRequest(targetProjectId, {
+      label: sourceFile.name,
+      externalUrl: /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : null,
+      metadata: {
+        sourceFile: sourceFileMeta,
+        generationMatchOverall: matchResult.overall
+      }
+    });
+    if (!generation.ok) {
+      console.error("[generation-match] project_generation_save_failed", {
+        projectId: targetProjectId,
+        status: generation.status,
+        error: generation.error
+      });
+      setProjectSaveStatus("error");
+      return;
+    }
+
+    const saved = await saveProjectArtifactRequest(targetProjectId, {
+      kind: "generation_match",
+      generationId: generation.generation.id,
+      payload: {
+        sourceFile: sourceFileMeta,
+        match: matchResult,
+        improvedGenerationPrompt
+      },
+      advanceTo: "analyze_refine"
+    });
+    if (!saved.ok) {
+      console.error("[generation-match] project_save_failed", {
+        projectId: targetProjectId,
+        status: saved.status,
+        error: saved.error
+      });
+      setProjectSaveStatus("error");
+      return;
+    }
+    setProjectSaveStatus("saved");
+    onProjectSaved?.();
   }
 
   async function handleSubmit() {
@@ -133,52 +202,7 @@ export function GenerationMatchPanel({
       setShowImprovedPrompt(false);
 
       if (projectId) {
-        try {
-          const generationResponse = await fetch(`/api/projects/${projectId}/generations`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              label: file.name,
-              metadata: {
-                sourceFile: {
-                  name: file.name,
-                  size: file.size,
-                  type: file.type || null
-                },
-                generationMatchOverall: data.match.overall
-              }
-            })
-          });
-          if (!generationResponse.ok) {
-            throw new Error(`generation_save_failed_${generationResponse.status}`);
-          }
-
-          const saveResponse = await fetch(`/api/projects/${projectId}/artifacts`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              kind: "generation_match",
-              payload: {
-                sourceFile: {
-                  name: file.name,
-                  size: file.size,
-                  type: file.type || null
-                },
-                match: data.match,
-                improvedGenerationPrompt: data.improvedGenerationPrompt
-              },
-              advanceTo: "analyze_refine"
-            })
-          });
-          if (!saveResponse.ok) {
-            throw new Error(`artifact_save_failed_${saveResponse.status}`);
-          }
-        } catch (saveError) {
-          console.error("[generation-match] project_save_failed", {
-            projectId,
-            message: saveError instanceof Error ? saveError.message : String(saveError)
-          });
-        }
+        await attachMatchToProject(projectId, file, data.match, data.improvedGenerationPrompt);
       }
     } catch {
       setMatch(null);
@@ -229,12 +253,36 @@ export function GenerationMatchPanel({
         />
       </label>
       {file ? <p style={fileNameStyle}>{file.name}</p> : null}
+      {projectId ? (
+        <label style={fileLabelStyle}>
+          Suno / Udio link for this version (optional)
+          <input
+            type="url"
+            inputMode="url"
+            placeholder="https://suno.com/song/…"
+            value={candidateUrl}
+            onChange={(event) => setCandidateUrl(event.target.value)}
+            disabled={isSubmitting}
+            maxLength={2000}
+            style={urlInputStyle}
+          />
+        </label>
+      ) : null}
 
       <button type="button" style={primaryButtonStyle} onClick={() => void handleSubmit()} disabled={isSubmitting}>
         {isSubmitting ? "Checking match..." : "Check Generation Match"}
       </button>
 
       {error ? <p style={errorStyle}>{error}</p> : null}
+      {projectId && projectSaveStatus !== "idle" ? (
+        <p style={projectSaveStatus === "error" ? errorStyle : fileNameStyle} role="status">
+          {projectSaveStatus === "saving"
+            ? "Saving this version to your Song Project…"
+            : projectSaveStatus === "saved"
+              ? "Version and match history saved to your Song Project."
+              : "Match complete, but saving it to your Song Project failed. Run the match again to retry."}
+        </p>
+      ) : null}
 
       {match ? (
         <div style={resultStackStyle}>
@@ -394,6 +442,16 @@ const fileLabelStyle: React.CSSProperties = {
 const fileInputStyle: React.CSSProperties = {
   color: "#c9d7ff",
   fontSize: "0.78rem",
+  maxWidth: "100%"
+};
+
+const urlInputStyle: React.CSSProperties = {
+  border: "1px solid rgba(201,215,255,.18)",
+  borderRadius: "8px",
+  background: "rgba(255,255,255,.04)",
+  color: "#e8eeff",
+  fontSize: "0.8rem",
+  padding: "8px 10px",
   maxWidth: "100%"
 };
 

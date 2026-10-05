@@ -22,6 +22,11 @@ import type {
   SongDNA
 } from "@/lib/song-architect/types";
 import { GenerationMatchPanel } from "@/components/song-architect/generation-match-panel";
+import {
+  readProjectIdFromLocation,
+  saveProjectArtifactRequest,
+  type ProjectSaveStatus
+} from "@/lib/projects/client";
 import { MyReferencesPanel } from "@/components/song-architect/my-references-panel";
 import { PostSuccessUpgradeCta, PremiumLockedPanel } from "@/components/song-architect/upgrade-moment";
 import {
@@ -566,7 +571,7 @@ export default function SongArchitectPage() {
   const [referencesRefreshKey, setReferencesRefreshKey] = useState(0);
   const [billingEmail, setBillingEmail] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [projectSaveStatus, setProjectSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [projectSaveStatus, setProjectSaveStatus] = useState<ProjectSaveStatus>("idle");
 
   const selectedPreset = useMemo(
     () => SONG_ARCHITECT_PRESETS.find((preset) => preset.id === form.preset) ?? null,
@@ -575,8 +580,7 @@ export default function SongArchitectPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const id = new URLSearchParams(window.location.search).get("projectId")?.trim() ?? "";
-    setProjectId(id);
+    setProjectId(readProjectIdFromLocation(window.location.search));
   }, []);
 
   async function saveProjectArtifact(
@@ -585,17 +589,13 @@ export default function SongArchitectPage() {
     advanceTo?: "song_dna" | "lyrics" | "suno_prompt" | "generation"
   ): Promise<void> {
     if (!projectId) return;
-    const response = await fetch(`/api/projects/${projectId}/artifacts`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        kind,
-        payload: artifactPayload,
-        ...(advanceTo ? { advanceTo } : {})
-      })
+    const saved = await saveProjectArtifactRequest(projectId, {
+      kind,
+      payload: artifactPayload,
+      advanceTo
     });
-    if (!response.ok) {
-      throw new Error(`Unable to save ${kind} to Song Project.`);
+    if (!saved.ok) {
+      throw new Error(`Unable to save ${kind} to Song Project (${saved.error}).`);
     }
   }
 
@@ -1346,9 +1346,15 @@ export default function SongArchitectPage() {
               Master this song
             </Link>
           )}
-          <Link href={projectId ? `/ar-ai?projectId=${projectId}` : "/ar-ai"} style={bottomCtaSecondaryStyle}>
-            Analyze release readiness
-          </Link>
+          {projectId ? (
+            <Link href={`/ar-ai?projectId=${projectId}`} style={bottomCtaSecondaryStyle}>
+              Analyze release readiness
+            </Link>
+          ) : (
+            <Link href="/ar-ai" style={bottomCtaSecondaryStyle}>
+              Analyze release readiness
+            </Link>
+          )}
         </div>
         {projectId ? (
           <p style={{ margin: "10px 0 0", fontSize: 12, color: projectSaveStatus === "error" ? "#fca5a5" : "rgba(255,255,255,.45)" }}>

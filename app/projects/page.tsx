@@ -4,9 +4,15 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
 import { getJourneyStage } from "@/lib/journeys/stages";
-import type { SongProject } from "@/lib/projects/store";
+import type { SongProject } from "@/lib/projects/types";
 
 type AccountUser = { id: string; email: string };
+
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  invalid_link: "That sign-in link is invalid or expired. Request a new one below.",
+  rate_limited: "Too many sign-in attempts. Please wait a bit and try again.",
+  account_unavailable: "We verified your email but couldn't open your account. Please try again shortly."
+};
 type ViewState = "loading" | "anonymous" | "authenticated" | "error";
 
 export default function ProjectsPage() {
@@ -47,6 +53,13 @@ export default function ProjectsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    // /auth/confirm redirects here with ?auth_error=… when a sign-in link can't be verified.
+    const code = new URLSearchParams(window.location.search).get("auth_error");
+    if (code) setAuthMessage(AUTH_ERROR_MESSAGES[code] ?? AUTH_ERROR_MESSAGES.invalid_link);
+    if (code || window.location.hash) window.history.replaceState({}, "", "/projects");
+  }, []);
 
   async function requestMagicLink(event: FormEvent) {
     event.preventDefault();

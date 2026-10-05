@@ -2,6 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import {
+  readProjectIdFromLocation,
+  saveProjectArtifactRequest,
+  type ProjectSaveStatus
+} from "@/lib/projects/client";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import "@/components/brand/mastersauce-brand-header.css";
 import { trackHitAnalyzerEvent, type HitAnalyzerFunnelEvent } from "@/lib/ar-ai/analytics";
@@ -145,7 +150,7 @@ export default function ArAiPage() {
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [pendingRetryAfterVerify, setPendingRetryAfterVerify] = useState(false);
   const [projectId, setProjectId] = useState("");
-  const [projectSaveStatus, setProjectSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [projectSaveStatus, setProjectSaveStatus] = useState<ProjectSaveStatus>("idle");
   const postReportCtaViewedRef = useRef(false);
 
   const canSubmit = useMemo(() => Boolean(audioFile) && !isSubmitting, [audioFile, isSubmitting]);
@@ -184,31 +189,38 @@ export default function ArAiPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setProjectId(new URLSearchParams(window.location.search).get("projectId")?.trim() ?? "");
+    setProjectId(readProjectIdFromLocation(window.location.search));
   }, []);
+
+  function trackMasterCtaClick(): void {
+    trackHitAnalyzerEvent("hit_analyzer_master_cta_clicked", {
+      source_component: "post_report_cta",
+      plan_id: currentPlanId ?? undefined,
+      user_tier: currentPlanId ?? undefined,
+      result_state: "success"
+    });
+  }
 
   async function saveHitAnalysisToProject(nextReport: ArAiReport): Promise<void> {
     if (!projectId) return;
     setProjectSaveStatus("saving");
-    try {
-      const response = await fetch(`/api/projects/${projectId}/artifacts`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          kind: "hit_analysis",
-          payload: {
-            report: nextReport,
-            sourceFile: audioFile
-              ? { name: audioFile.name, size: audioFile.size, type: audioFile.type || null }
-              : null
-          }
-        })
+    const saved = await saveProjectArtifactRequest(projectId, {
+      kind: "hit_analysis",
+      payload: {
+        report: nextReport,
+        sourceFile: audioFile
+          ? { name: audioFile.name, size: audioFile.size, type: audioFile.type || null }
+          : null
+      }
+    });
+    if (!saved.ok) {
+      console.error("[hit-analyzer] project_save_failed", {
+        projectId,
+        status: saved.status,
+        error: saved.error
       });
-      if (!response.ok) throw new Error("project_save_failed");
-      setProjectSaveStatus("saved");
-    } catch {
-      setProjectSaveStatus("error");
     }
+    setProjectSaveStatus(saved.ok ? "saved" : "error");
   }
 
   useEffect(() => {
@@ -335,7 +347,7 @@ export default function ArAiPage() {
 
       if ("overallRating" in data && data.overallRating) {
         setReport(data);
-        await saveHitAnalysisToProject(data);
+        void saveHitAnalysisToProject(data);
         trackTerminal("hit_analyzer_succeeded", "success");
         void refreshAccess(storedBillingEmail);
       } else {
@@ -622,20 +634,19 @@ export default function ArAiPage() {
         <section style={crossLinkSectionStyle} aria-label="Next steps after your report">
           <p style={crossLinkHeadingStyle}>Next steps after your report</p>
           <div style={crossLinkRowStyle}>
-            <Link
-              href={projectId ? `/?source=hit-analyzer&projectId=${projectId}#master` : "/?source=hit-analyzer#master"}
-              style={crossLinkPrimaryStyle}
-              onClick={() =>
-                trackHitAnalyzerEvent("hit_analyzer_master_cta_clicked", {
-                  source_component: "post_report_cta",
-                  plan_id: currentPlanId ?? undefined,
-                  user_tier: currentPlanId ?? undefined,
-                  result_state: "success"
-                })
-              }
-            >
-              Master this track
-            </Link>
+            {projectId ? (
+              <Link
+                href={`/?source=hit-analyzer&projectId=${projectId}#master`}
+                style={crossLinkPrimaryStyle}
+                onClick={trackMasterCtaClick}
+              >
+                Master this track
+              </Link>
+            ) : (
+              <Link href="/?source=hit-analyzer#master" style={crossLinkPrimaryStyle} onClick={trackMasterCtaClick}>
+                Master this track
+              </Link>
+            )}
             {currentPlanId === "free" ? (
               <Link
                 href="/pricing?source=hit-analyzer"
@@ -652,6 +663,15 @@ export default function ArAiPage() {
                 Upgrade to Creator
               </Link>
             ) : null}
+            {projectId ? (
+              <Link href={`/song-architect?projectId=${projectId}`} style={crossLinkSecondaryStyle}>
+                Refine in Song Architect
+              </Link>
+            ) : (
+              <Link href="/song-architect" style={crossLinkSecondaryStyle}>
+                Improve song structure with Song Architect
+              </Link>
+            )}
           </div>
           <p style={crossLinkHintStyle}>
             Mastering opens the upload workspace; you&apos;ll need to upload the track again. Creator includes 5 analyses per
