@@ -56,6 +56,10 @@ function decode(raw: string): AppSession | null {
     ) {
       return null;
     }
+    const issuedAtMs = Date.parse(parsed.issuedAt);
+    if (!Number.isFinite(issuedAtMs)) return null;
+    const ageMs = Date.now() - issuedAtMs;
+    if (ageMs < -5 * 60 * 1000 || ageMs > ACCOUNT_SESSION_MAX_AGE_SEC * 1000) return null;
     return parsed;
   } catch {
     return null;
