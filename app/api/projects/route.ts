@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedAccount } from "@/lib/auth/require-user";
+import { authenticationRequiredResponse } from "@/lib/projects/route-errors";
 import { createProjectForUser, listProjectsForUser } from "@/lib/projects/store";
 
 const CreateProjectSchema = z.object({
@@ -11,9 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const account = await requireAuthenticatedAccount(request);
-  if (!account) {
-    return NextResponse.json({ error: "authentication_required" }, { status: 401 });
-  }
+  if (!account) return authenticationRequiredResponse();
 
   const projects = await listProjectsForUser(account.user.id);
   return NextResponse.json({ projects }, {
@@ -23,9 +22,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const account = await requireAuthenticatedAccount(request);
-  if (!account) {
-    return NextResponse.json({ error: "authentication_required" }, { status: 401 });
-  }
+  if (!account) return authenticationRequiredResponse();
 
   let body: unknown = {};
   try {

@@ -1,31 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedAccount } from "@/lib/auth/require-user";
-import { isJourneyStageId } from "@/lib/journeys/stages";
+import { JOURNEY_STAGE_IDS } from "@/lib/journeys/stages";
+import {
+  authenticationRequiredResponse,
+  projectNotFoundResponse,
+  projectStoreErrorResponse
+} from "@/lib/projects/route-errors";
 import {
   appendProjectArtifact,
-  listProjectArtifacts,
-  updateProjectForUser
+  getProjectForUser,
+  listProjectArtifacts
 } from "@/lib/projects/store";
+import { PROJECT_ARTIFACT_KINDS } from "@/lib/projects/types";
 
-const ARTIFACT_KINDS = [
-  "idea",
-  "song_dna",
-  "lyrics",
-  "arrangement",
-  "suno_prompt",
-  "generation_match",
-  "hit_analysis",
-  "master_readiness",
-  "master_settings",
-  "export"
-] as const;
-
-const ArtifactSchema = z.object({
-  kind: z.enum(ARTIFACT_KINDS),
-  payload: z.record(z.unknown()),
-  advanceTo: z.string().optional()
-});
+const ArtifactSchema = z
+  .object({
+    kind: z.enum(PROJECT_ARTIFACT_KINDS),
+    payload: z.record(z.unknown()),
+    // Optional link to a generation candidate; ownership is verified server-side.
+    generationId: z.string().uuid().optional(),
+    // Tool autosaves only ever move the Journey forward (see advanceProjectStageForUser).
+    advanceTo: z.enum(JOURNEY_STAGE_IDS).optional()
+  })
+  .strict();
 
 export const dynamic = "force-dynamic";
 
@@ -34,10 +32,12 @@ export async function GET(
   { params }: { params: { projectId: string } }
 ) {
   const account = await requireAuthenticatedAccount(request);
-  if (!account) {
-    return NextResponse.json({ error: "authentication_required" }, { status: 401 });
-  }
-  const artifacts = await listProjectArtifacts(account.user.id, params.projectId);
+  if (!account) return authenticationRequiredResponse();
+
+  const project = await getProjectForUser(account.user.id, params.projectId);
+  if (!project) return projectNotFoundResponse();
+
+  const artifacts = await listProjectArtifacts(account.user.id, project.id);
   return NextResponse.json({ artifacts }, {
     headers: { "Cache-Control": "no-store" }
   });
@@ -48,9 +48,7 @@ export async function POST(
   { params }: { params: { projectId: string } }
 ) {
   const account = await requireAuthenticatedAccount(request);
-  if (!account) {
-    return NextResponse.json({ error: "authentication_required" }, { status: 401 });
-  }
+  if (!account) return authenticationRequiredResponse();
 
   let body: unknown;
   try {
@@ -63,31 +61,21 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_project_artifact" }, { status: 400 });
   }
-  if (parsed.data.advanceTo !== undefined && !isJourneyStageId(parsed.data.advanceTo)) {
-    return NextResponse.json({ error: "invalid_journey_stage" }, { status: 400 });
-  }
 
   try {
-    const artifact = await appendProjectArtifact({
+    const { artifact, project } = await appendProjectArtifact({
       userId: account.user.id,
       projectId: params.projectId,
       kind: parsed.data.kind,
-      payload: parsed.data.payload
+      payload: parsed.data.payload,
+      generationId: parsed.data.generationId,
+      advanceTo: parsed.data.advanceTo
     });
 
-    if (parsed.data.advanceTo) {
-      await updateProjectForUser({
-        userId: account.user.id,
-        projectId: params.projectId,
-        currentStage: parsed.data.advanceTo
-      });
-    }
-
-    return NextResponse.json({ artifact }, { status: 201 });
+    return NextResponse.json({ artifact, project }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "project_not_found") {
-      return NextResponse.json({ error: "project_not_found" }, { status: 404 });
-    }
+    const handled = projectStoreErrorResponse(error);
+    if (handled) return handled;
     throw error;
   }
 }

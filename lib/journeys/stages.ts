@@ -53,6 +53,11 @@ export const JOURNEY_STAGES = [
 
 export type JourneyStageId = (typeof JOURNEY_STAGES)[number]["id"];
 
+export const JOURNEY_STAGE_IDS = JOURNEY_STAGES.map((stage) => stage.id) as [
+  JourneyStageId,
+  ...JourneyStageId[]
+];
+
 export function isJourneyStageId(value: unknown): value is JourneyStageId {
   return typeof value === "string" && JOURNEY_STAGES.some((stage) => stage.id === value);
 }
@@ -64,3 +69,4 @@ export function getJourneyStageIndex(stage: JourneyStageId): number {
 export function getJourneyStage(stage: JourneyStageId) {
   return JOURNEY_STAGES.find((item) => item.id === stage) ?? JOURNEY_STAGES[0];
 }
+

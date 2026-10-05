@@ -1,20 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedAccount } from "@/lib/auth/require-user";
-import { isJourneyStageId } from "@/lib/journeys/stages";
+import { JOURNEY_STAGE_IDS } from "@/lib/journeys/stages";
+import {
+  authenticationRequiredResponse,
+  projectNotFoundResponse,
+  projectStoreErrorResponse
+} from "@/lib/projects/route-errors";
 import {
   getProjectForUser,
   listProjectArtifacts,
   listProjectGenerations,
   updateProjectForUser
 } from "@/lib/projects/store";
+import { PROJECT_STATUSES } from "@/lib/projects/types";
 
-const PatchSchema = z.object({
-  title: z.string().max(140).optional(),
-  status: z.enum(["active", "archived", "complete"]).optional(),
-  currentStage: z.string().optional(),
-  selectedGenerationId: z.string().uuid().nullable().optional()
-});
+const PatchSchema = z
+  .object({
+    title: z.string().max(140).optional(),
+    status: z.enum(PROJECT_STATUSES).optional(),
+    currentStage: z.enum(JOURNEY_STAGE_IDS).optional(),
+    selectedGenerationId: z.string().uuid().nullable().optional()
+  })
+  .strict();
 
 export const dynamic = "force-dynamic";
 
@@ -23,14 +31,10 @@ export async function GET(
   { params }: { params: { projectId: string } }
 ) {
   const account = await requireAuthenticatedAccount(request);
-  if (!account) {
-    return NextResponse.json({ error: "authentication_required" }, { status: 401 });
-  }
+  if (!account) return authenticationRequiredResponse();
 
   const project = await getProjectForUser(account.user.id, params.projectId);
-  if (!project) {
-    return NextResponse.json({ error: "project_not_found" }, { status: 404 });
-  }
+  if (!project) return projectNotFoundResponse();
 
   const [artifacts, generations] = await Promise.all([
     listProjectArtifacts(account.user.id, project.id),
@@ -48,9 +52,7 @@ export async function PATCH(
   { params }: { params: { projectId: string } }
 ) {
   const account = await requireAuthenticatedAccount(request);
-  if (!account) {
-    return NextResponse.json({ error: "authentication_required" }, { status: 401 });
-  }
+  if (!account) return authenticationRequiredResponse();
 
   let body: unknown;
   try {
@@ -63,12 +65,6 @@ export async function PATCH(
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_project_patch" }, { status: 400 });
   }
-  if (
-    parsed.data.currentStage !== undefined &&
-    !isJourneyStageId(parsed.data.currentStage)
-  ) {
-    return NextResponse.json({ error: "invalid_journey_stage" }, { status: 400 });
-  }
 
   try {
     const project = await updateProjectForUser({
@@ -79,15 +75,12 @@ export async function PATCH(
       currentStage: parsed.data.currentStage,
       selectedGenerationId: parsed.data.selectedGenerationId
     });
-    if (!project) {
-      return NextResponse.json({ error: "project_not_found" }, { status: 404 });
-    }
+    if (!project) return projectNotFoundResponse();
 
     return NextResponse.json({ project });
   } catch (error) {
-    if (error instanceof Error && error.message === "generation_not_found") {
-      return NextResponse.json({ error: "generation_not_found" }, { status: 404 });
-    }
+    const handled = projectStoreErrorResponse(error);
+    if (handled) return handled;
     throw error;
   }
 }
