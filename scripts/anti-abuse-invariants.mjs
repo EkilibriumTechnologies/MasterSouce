@@ -20,13 +20,13 @@ function run() {
   const songGenerate = read("app/api/song-architect/generate/route.ts");
   assertBefore(
     songGenerate,
-    "if (!hasTrustedEmailAccess(request, trustedAccess.normalizedEmail))",
+    'if (!trustedAccess.identityTrusted && trustedAccess.usage.planId !== "free")',
     "openAiResult = await requestSongArchitectFromOpenAI(inputPayload);",
     "song-architect generate: trusted email access gate before model usage"
   );
   assertBefore(
     songGenerate,
-    "if (!hasTrustedEmailAccess(request, trustedAccess.normalizedEmail))",
+    'if (!trustedAccess.identityTrusted && trustedAccess.usage.planId !== "free")',
     "await recordSongArchitectGenerationEvent({",
     "song-architect generate: trusted email access gate before usage credit insert"
   );
@@ -50,15 +50,15 @@ function run() {
   const downloadRoute = read("app/api/download/route.ts");
   assertBefore(
     downloadRoute,
-    "if (isSupabaseConfigured() && masteredUnlock && !masteredUnlock.emailVerifiedAt)",
-    "const recorded = await recordMasteredDownloadAttempt({",
-    "download: unconfirmed email access gate before download event accounting"
+    "const billingIdentityTrusted = Boolean(masteredUnlock.emailVerifiedAt);",
+    "const entitlements = await getEntitlementsForUser(user, {",
+    "download: trust classification happens before paid entitlement lookup"
   );
   assertBefore(
     downloadRoute,
-    "if (isSupabaseConfigured() && masteredUnlock && !masteredUnlock.emailVerifiedAt)",
-    "const entitlements = await getEntitlementsForUser(user, {",
-    "download: unconfirmed email access gate before entitlement consumption checks"
+    "billingLookupAllowed: billingIdentityTrusted",
+    "await consumeCreditPackMaster(masteredUnlock.normalizedEmail, {",
+    "download: trusted billing state gates credit-pack consumption"
   );
 
   const masteringPipeline = read("lib/audio/mastering-pipeline.ts");
