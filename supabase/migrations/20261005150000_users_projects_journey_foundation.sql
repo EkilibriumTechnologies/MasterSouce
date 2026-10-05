@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS public.users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  auth_user_id uuid UNIQUE,
+  auth_user_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
   normalized_email text NOT NULL UNIQUE,
   email text NOT NULL,
   stripe_customer_id text UNIQUE,
@@ -16,16 +16,19 @@ CREATE INDEX IF NOT EXISTS idx_users_auth_user_id
   ON public.users (auth_user_id)
   WHERE auth_user_id IS NOT NULL;
 
--- Paid customers are the safest historical identity anchor. Free users are created
--- only after a verified Supabase Auth magic-link login.
+-- Paid customers are the safest historical identity anchor (Stripe customer per email).
+-- Free users and unverified lead/event emails never create users here: they are created
+-- only after a verified Supabase Auth magic-link login. auth_user_id stays NULL until then.
+-- DISTINCT ON guards ON CONFLICT against two legacy rows that normalize to the same email.
 INSERT INTO public.users (normalized_email, email, stripe_customer_id)
-SELECT
+SELECT DISTINCT ON (lower(trim(normalized_email)))
   lower(trim(normalized_email)),
-  lower(trim(normalized_email)),
+  COALESCE(NULLIF(trim(email), ''), lower(trim(normalized_email))),
   stripe_customer_id
 FROM public.billing_customers
 WHERE normalized_email IS NOT NULL
   AND trim(normalized_email) <> ''
+ORDER BY lower(trim(normalized_email)), updated_at DESC
 ON CONFLICT (normalized_email) DO UPDATE
 SET stripe_customer_id = COALESCE(public.users.stripe_customer_id, EXCLUDED.stripe_customer_id),
     updated_at = now();
@@ -47,6 +50,9 @@ ALTER TABLE public.master_job_unlocks
 ALTER TABLE public.mastered_download_events
   ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES public.users(id) ON DELETE SET NULL;
 
+-- Historical attribution: link rows for bootstrapped (Stripe-anchored) users only.
+-- Event-table user_id is attribution, never an authorization input. Free-user history is
+-- linked at first verified login (lib/users/store.ts), and only for still-unclaimed rows.
 UPDATE public.billing_customers bc
 SET user_id = u.id
 FROM public.users u
@@ -126,7 +132,9 @@ CREATE TABLE IF NOT EXISTS public.projects (
     )),
   selected_generation_id uuid,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  -- Target for child (project_id, user_id) FKs: children can never disagree with the owner.
+  CONSTRAINT projects_id_user_id_key UNIQUE (id, user_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_user_updated
@@ -134,7 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_projects_user_updated
 
 CREATE TABLE IF NOT EXISTS public.project_artifacts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  project_id uuid NOT NULL,
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   kind text NOT NULL
     CHECK (kind IN (
@@ -153,17 +161,23 @@ CREATE TABLE IF NOT EXISTS public.project_artifacts (
   payload jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT project_artifacts_project_kind_version_key
-    UNIQUE (project_id, kind, version)
+    UNIQUE (project_id, kind, version),
+  CONSTRAINT project_artifacts_project_owner_fk
+    FOREIGN KEY (project_id, user_id)
+    REFERENCES public.projects (id, user_id)
+    ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_project_artifacts_project_kind_created
   ON public.project_artifacts (project_id, kind, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_project_artifacts_project_user
+  ON public.project_artifacts (project_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_project_artifacts_user_created
   ON public.project_artifacts (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS public.project_generations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  project_id uuid NOT NULL,
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   source text NOT NULL DEFAULT 'suno',
   external_id text,
@@ -172,20 +186,69 @@ CREATE TABLE IF NOT EXISTS public.project_generations (
   selected boolean NOT NULL DEFAULT false,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_generations_external_url_http
+    CHECK (external_url IS NULL OR external_url ~* '^https?://'),
+  CONSTRAINT project_generations_project_owner_fk
+    FOREIGN KEY (project_id, user_id)
+    REFERENCES public.projects (id, user_id)
+    ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_project_generations_user_id
+  ON public.project_generations (user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_selected_generation_id
+  ON public.projects (selected_generation_id)
+  WHERE selected_generation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_project_generations_project_created
   ON public.project_generations (project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_project_generations_selected
   ON public.project_generations (project_id, selected)
   WHERE selected = true;
 
-ALTER TABLE public.projects
-  ADD CONSTRAINT projects_selected_generation_fk
-  FOREIGN KEY (selected_generation_id)
-  REFERENCES public.project_generations(id)
-  ON DELETE SET NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'projects_selected_generation_fk'
+  ) THEN
+    ALTER TABLE public.projects
+      ADD CONSTRAINT projects_selected_generation_fk
+      FOREIGN KEY (selected_generation_id)
+      REFERENCES public.project_generations(id)
+      ON DELETE SET NULL;
+  END IF;
+END
+$$;
+
+-- Defense in depth for the API ownership check: a Project may only lock a generation that
+-- belongs to the same Project and the same user (blocks cross-project/cross-user selection).
+CREATE OR REPLACE FUNCTION public.enforce_project_selected_generation_owner()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.selected_generation_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1
+    FROM public.project_generations g
+    WHERE g.id = NEW.selected_generation_id
+      AND g.project_id = NEW.id
+      AND g.user_id = NEW.user_id
+  ) THEN
+    RAISE EXCEPTION 'selected_generation_id must reference a generation of the same project and user'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.enforce_project_selected_generation_owner() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS projects_selected_generation_owner ON public.projects;
+CREATE TRIGGER projects_selected_generation_owner
+  BEFORE INSERT OR UPDATE OF selected_generation_id, user_id ON public.projects
+  FOR EACH ROW
+  EXECUTE FUNCTION public.enforce_project_selected_generation_owner();
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
