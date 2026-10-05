@@ -144,6 +144,8 @@ export default function ArAiPage() {
   const [verifyError, setVerifyError] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [pendingRetryAfterVerify, setPendingRetryAfterVerify] = useState(false);
+  const [projectId, setProjectId] = useState("");
+  const [projectSaveStatus, setProjectSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const postReportCtaViewedRef = useRef(false);
 
   const canSubmit = useMemo(() => Boolean(audioFile) && !isSubmitting, [audioFile, isSubmitting]);
@@ -179,6 +181,35 @@ export default function ArAiPage() {
   useEffect(() => {
     void refreshAccess();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setProjectId(new URLSearchParams(window.location.search).get("projectId")?.trim() ?? "");
+  }, []);
+
+  async function saveHitAnalysisToProject(nextReport: ArAiReport): Promise<void> {
+    if (!projectId) return;
+    setProjectSaveStatus("saving");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/artifacts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind: "hit_analysis",
+          payload: {
+            report: nextReport,
+            sourceFile: audioFile
+              ? { name: audioFile.name, size: audioFile.size, type: audioFile.type || null }
+              : null
+          }
+        })
+      });
+      if (!response.ok) throw new Error("project_save_failed");
+      setProjectSaveStatus("saved");
+    } catch {
+      setProjectSaveStatus("error");
+    }
+  }
 
   useEffect(() => {
     if (!howItWorksOpen) return;
@@ -304,6 +335,7 @@ export default function ArAiPage() {
 
       if ("overallRating" in data && data.overallRating) {
         setReport(data);
+        await saveHitAnalysisToProject(data);
         trackTerminal("hit_analyzer_succeeded", "success");
         void refreshAccess(storedBillingEmail);
       } else {
@@ -591,7 +623,7 @@ export default function ArAiPage() {
           <p style={crossLinkHeadingStyle}>Next steps after your report</p>
           <div style={crossLinkRowStyle}>
             <Link
-              href="/?source=hit-analyzer#master"
+              href={projectId ? `/?source=hit-analyzer&projectId=${projectId}#master` : "/?source=hit-analyzer#master"}
               style={crossLinkPrimaryStyle}
               onClick={() =>
                 trackHitAnalyzerEvent("hit_analyzer_master_cta_clicked", {
@@ -625,6 +657,21 @@ export default function ArAiPage() {
             Mastering opens the upload workspace; you&apos;ll need to upload the track again. Creator includes 5 analyses per
             month, advanced Song Architect output, adaptive exports, and 24-bit WAV downloads.
           </p>
+          {projectId ? (
+            <p style={{ ...crossLinkHintStyle, color: projectSaveStatus === "error" ? "#fca5a5" : "rgba(255,255,255,.52)" }}>
+              {projectSaveStatus === "saving"
+                ? "Saving this report to your Song Project…"
+                : projectSaveStatus === "saved"
+                  ? "Report saved to your Song Project."
+                  : projectSaveStatus === "error"
+                    ? "Report generated, but Project autosave needs a retry."
+                    : "This report is attached to your Song Project."}
+              {" "}
+              <Link href={`/projects/${projectId}`} style={inlineTextLinkStyle}>
+                Back to Song Project
+              </Link>
+            </p>
+          ) : null}
         </section>
       ) : null}
 
