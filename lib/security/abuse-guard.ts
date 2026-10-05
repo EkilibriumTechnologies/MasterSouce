@@ -27,7 +27,8 @@ type AbuseGuardEvent =
   | "suspicious_local_part"
   | "rate_limited"
   | "unverified_master_download_blocked"
-  | "unverified_song_architect_output_blocked";
+  | "unverified_song_architect_output_blocked"
+  | "untrusted_paid_song_architect_identity_blocked";
 
 const RATE_WINDOWS = new Map<string, RateWindow>();
 
