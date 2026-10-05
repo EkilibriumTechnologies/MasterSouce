@@ -12,7 +12,7 @@ export async function upsertMasterJobUnlock(row: {
   fileId: string;
   normalizedEmail: string;
   originalEmail: string;
-  emailVerifiedAt?: string;
+  emailVerifiedAt?: string | null;
 }): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("master_job_unlocks").upsert(
@@ -21,7 +21,7 @@ export async function upsertMasterJobUnlock(row: {
       file_id: row.fileId,
       normalized_email: row.normalizedEmail,
       original_email: row.originalEmail,
-      email_verified_at: row.emailVerifiedAt ?? new Date().toISOString()
+      email_verified_at: row.emailVerifiedAt ?? null
     },
     { onConflict: "job_id" }
   );
