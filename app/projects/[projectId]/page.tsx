@@ -54,7 +54,7 @@ export default function SongProjectPage() {
     return map;
   }, [data?.artifacts]);
 
-  async function patchProject(patch: Record<string, unknown>) {
+  async function patchProject(patch: Record<string, unknown>): Promise<SongProject | null> {
     const res = await fetch(`/api/projects/${projectId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -63,10 +63,11 @@ export default function SongProjectPage() {
     const payload = (await res.json()) as { project?: SongProject; error?: string };
     if (!res.ok || !payload.project) {
       setError(payload.error ?? "Unable to update project.");
-      return;
+      return null;
     }
     setData((current) => current ? { ...current, project: payload.project! } : current);
     setTitleDraft(payload.project.title);
+    return payload.project;
   }
 
   if (error) {
@@ -165,8 +166,8 @@ export default function SongProjectPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    void patchProject({ currentStage: "selected_generation" }).then(() => {
-                      router.push(`/?projectId=${data.project.id}#master`);
+                    void patchProject({ currentStage: "selected_generation" }).then((updated) => {
+                      if (updated) router.push(`/?projectId=${data.project.id}#master`);
                     });
                   }}
                   style={{
