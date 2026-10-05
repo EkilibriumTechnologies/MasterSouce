@@ -50,15 +50,6 @@ function logMasteringDownloadAllowed(details: Record<string, unknown>): void {
   });
 }
 
-function getAuthenticatedUserIdFromRequest(request: NextRequest): string | null {
-  const raw =
-    request.headers.get("x-authenticated-user-id") ??
-    request.headers.get("x-user-id") ??
-    request.headers.get("x-auth-user-id");
-  const normalized = raw?.trim();
-  return normalized ? normalized : null;
-}
-
 function resolveFinalDownloadRateIdentity(params: {
   authenticatedUserId: string | null;
   sessionId: string | null;
@@ -161,28 +152,6 @@ export async function GET(request: NextRequest) {
       const user = buildApiUser(request, sessionPrep.sessionId);
 
       if (forceDownload && isSupabaseConfigured() && masteredUnlock) {
-        if (!masteredUnlock.emailVerifiedAt) {
-          const clientIp = getClientIp(request);
-          logAbuseGuard("unverified_master_download_blocked", {
-            endpoint: "/api/download",
-            jobId: resolvedJobId,
-            fileId: wavRecord.id,
-            ipHash: hashIdentifier(clientIp)
-          });
-          const res = NextResponse.json(
-            { error: "Please confirm email access before downloading your master." },
-            { status: 403 }
-          );
-          attachSessionCookieIfNeeded(res, sessionPrep);
-          logMasteringDownloadBlocked({
-            job_id: resolvedJobId,
-            file_id: wavRecord.id,
-            export_format: "mp3",
-            gate_reason: "unverified_email"
-          });
-          return res;
-        }
-
         try {
           const probe = await probeAudioStream(wavRecord.filePath);
           if (probe.codec_name === "pcm_f32le") {
@@ -192,7 +161,8 @@ export async function GET(request: NextRequest) {
               normalizedEmail: masteredUnlock.normalizedEmail,
               endpoint: "/api/master",
               user,
-              emailSource: "verified_cookie"
+              emailSource: masteredUnlock.emailVerifiedAt ? "verified_cookie" : "billing_header",
+              billingLookupAllowed: Boolean(masteredUnlock.emailVerifiedAt)
             });
           }
         } catch (error) {
@@ -272,14 +242,16 @@ export async function GET(request: NextRequest) {
 
     const sessionPrep = prepareSessionForRequest(request);
     const clientIp = getClientIp(request);
-    const authenticatedUserId = getAuthenticatedUserIdFromRequest(request);
+    const authenticatedUserId: string | null = null;
     const rateIdentity = resolveFinalDownloadRateIdentity({
       authenticatedUserId,
       sessionId: sessionPrep.sessionId,
       clientIp
     });
     const user = buildApiUser(request, sessionPrep.sessionId);
-    const adminEntitlementBypass = isAdminEntitlementOverrideEmail(masteredUnlock?.normalizedEmail);
+    const adminEntitlementBypass =
+      Boolean(masteredUnlock?.emailVerifiedAt) &&
+      isAdminEntitlementOverrideEmail(masteredUnlock?.normalizedEmail);
     const adminBypass = isMasterAdminBypassGranted(request) || adminEntitlementBypass;
     const freePlanCap = resolveFreePlanWavCap(PLAN_DEFINITIONS.free.monthlyMastersLimit ?? 1);
     const quotaRecord = { kind: record.kind, mime: record.mime };
@@ -325,27 +297,6 @@ export async function GET(request: NextRequest) {
         return res;
       }
 
-      if (isSupabaseConfigured() && masteredUnlock && !masteredUnlock.emailVerifiedAt) {
-        logAbuseGuard("unverified_master_download_blocked", {
-          endpoint: "/api/download",
-          jobId: record.jobId,
-          fileId: record.id,
-          ipHash: hashIdentifier(clientIp)
-        });
-        const res = NextResponse.json(
-          { error: "Please confirm email access before downloading your master." },
-          { status: 403 }
-        );
-        attachSessionCookieIfNeeded(res, sessionPrep);
-        logMasteringDownloadBlocked({
-          job_id: record.jobId,
-          file_id: record.id,
-          export_format: "wav",
-          gate_reason: "unverified_email"
-        });
-        return res;
-      }
-
       if (isSupabaseConfigured() && masteredUnlock) {
         try {
           const hasRecent = await hasRecentBillableDownloadForJobFile(
@@ -360,8 +311,11 @@ export async function GET(request: NextRequest) {
                 jobId: record.jobId
               });
             } else {
+              const billingIdentityTrusted = Boolean(masteredUnlock.emailVerifiedAt);
               const entitlements = await getEntitlementsForUser(user, {
-                normalizedEmail: masteredUnlock.normalizedEmail
+                normalizedEmail: masteredUnlock.normalizedEmail,
+                billingLookupAllowed: billingIdentityTrusted,
+                adminOverrideAllowed: billingIdentityTrusted
               });
               const compareUnlockToStripeCustomer =
                 !entitlements.canDownload || process.env.BILLING_DIAGNOSTIC_LOGS === "1";
@@ -458,7 +412,8 @@ export async function GET(request: NextRequest) {
             normalizedEmail: masteredUnlock.normalizedEmail,
             endpoint: "/api/master",
             user,
-            emailSource: "verified_cookie"
+            emailSource: masteredUnlock.emailVerifiedAt ? "verified_cookie" : "billing_header",
+            billingLookupAllowed: Boolean(masteredUnlock.emailVerifiedAt)
           });
         }
       } catch (error) {
@@ -497,10 +452,14 @@ export async function GET(request: NextRequest) {
           }
         });
         if (!adminBypass && recorded.countedUnique && enforceWavQuota) {
+          const billingIdentityTrusted = Boolean(masteredUnlock.emailVerifiedAt);
           const currentEntitlements = await getEntitlementsForUser(user, {
-            normalizedEmail: masteredUnlock.normalizedEmail
+            normalizedEmail: masteredUnlock.normalizedEmail,
+            billingLookupAllowed: billingIdentityTrusted,
+            adminOverrideAllowed: billingIdentityTrusted
           });
           if (
+            billingIdentityTrusted &&
             currentEntitlements.remainingMonthlyMasters !== null &&
             currentEntitlements.remainingMonthlyMasters <= 0
           ) {
