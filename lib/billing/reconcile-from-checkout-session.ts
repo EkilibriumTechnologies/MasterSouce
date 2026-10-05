@@ -3,6 +3,8 @@ import { normalizeBillingEmail } from "./email";
 import { reconcileStripeSubscription } from "./stripe-reconcile";
 
 export type ReconcileFromCheckoutSessionResult = {
+  /** True when Stripe confirms Checkout completed for this session. */
+  checkoutVerified: boolean;
   /** True when a subscription checkout was found and reconciled into billing tables. */
   reconciledSubscription: boolean;
   normalizedSessionEmail: string | null;
@@ -29,22 +31,27 @@ function sessionEmailsFromStripeSession(session: {
  */
 export async function reconcileFromCheckoutSession(checkoutSessionId: string): Promise<ReconcileFromCheckoutSessionResult> {
   if (!checkoutSessionId.startsWith("cs_")) {
-    return { reconciledSubscription: false, normalizedSessionEmail: null, emailRaw: null };
+    return { checkoutVerified: false, reconciledSubscription: false, normalizedSessionEmail: null, emailRaw: null };
   }
 
   const stripe = getStripeClient();
   const session = await stripe.checkout.sessions.retrieve(checkoutSessionId, { expand: ["subscription"] });
   const { emailRaw, normalizedSessionEmail } = sessionEmailsFromStripeSession(session);
+  const checkoutVerified =
+    session.status === "complete" &&
+    (session.mode === "subscription" ||
+      session.payment_status === "paid" ||
+      session.payment_status === "no_payment_required");
 
   if (session.mode !== "subscription" || !session.subscription) {
-    return { reconciledSubscription: false, normalizedSessionEmail, emailRaw };
+    return { checkoutVerified, reconciledSubscription: false, normalizedSessionEmail, emailRaw };
   }
 
   const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
   const sub = await stripe.subscriptions.retrieve(subId, { expand: ["items.data.price"] });
   await reconcileStripeSubscription(stripe, sub);
 
-  return { reconciledSubscription: true, normalizedSessionEmail, emailRaw };
+  return { checkoutVerified, reconciledSubscription: true, normalizedSessionEmail, emailRaw };
 }
 
 export type AdaptiveRecheckSyncResult = {
