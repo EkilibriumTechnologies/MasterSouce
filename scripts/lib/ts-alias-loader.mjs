@@ -23,5 +23,9 @@ export async function resolve(specifier, context, nextResolve) {
       }
     }
   }
+  // next@14 ships CJS entry points without an exports map; ESM needs the explicit file.
+  if (specifier === "next/server") {
+    return nextResolve("next/server.js", context);
+  }
   return nextResolve(specifier, context);
 }
