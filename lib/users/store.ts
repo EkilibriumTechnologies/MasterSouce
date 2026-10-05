@@ -1,5 +1,5 @@
 import { normalizeBillingEmail } from "@/lib/billing/email";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getJourneyDb } from "@/lib/journeys/db";
 
 export type MasterSauceUser = {
   id: string;
@@ -23,8 +23,69 @@ function mapUser(row: Record<string, unknown>): MasterSauceUser {
   };
 }
 
+/**
+ * Historical rows that may be attributed to a verified account. Billing tables are Stripe-anchored;
+ * event tables are attribution only and never used for authorization or Project ownership.
+ */
+const HISTORY_LINK_TARGETS = [
+  { table: "billing_customers", emailColumn: "normalized_email" },
+  { table: "billing_subscriptions", emailColumn: "normalized_email" },
+  { table: "credit_pack_ledger", emailColumn: "normalized_email" },
+  { table: "master_job_unlocks", emailColumn: "normalized_email" },
+  { table: "mastered_download_events", emailColumn: "normalized_email" },
+  { table: "song_architect_generation_events", emailColumn: "email" },
+  { table: "hit_analyzer_report_events", emailColumn: "email" },
+  { table: "song_architect_reference_tracks", emailColumn: "owner_email" }
+] as const;
+
+export type HistoryLinkResult = {
+  ok: boolean;
+  failedTables: string[];
+};
+
+export type VerifiedUserUpsertResult = {
+  user: MasterSauceUser;
+  historyLink: HistoryLinkResult;
+};
+
+/**
+ * Links unclaimed historical rows for a verified mailbox to the stable user id.
+ * Rows already linked to a user are never reassigned, so a later owner of a recycled
+ * email address cannot take over another account's history.
+ */
+export async function linkVerifiedUserHistory(
+  userId: string,
+  normalizedEmail: string
+): Promise<HistoryLinkResult> {
+  const supabase = getJourneyDb();
+  const results = await Promise.allSettled(
+    HISTORY_LINK_TARGETS.map(async ({ table, emailColumn }) => {
+      const { error } = await supabase
+        .from(table)
+        .update({ user_id: userId })
+        .eq(emailColumn, normalizedEmail)
+        .is("user_id", null);
+      if (error) throw new Error(error.message);
+    })
+  );
+
+  const failedTables: string[] = [];
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      const table = HISTORY_LINK_TARGETS[index].table;
+      failedTables.push(table);
+      console.error("[users] history_link_failed", {
+        table,
+        userId,
+        message: result.reason instanceof Error ? result.reason.message : String(result.reason)
+      });
+    }
+  });
+  return { ok: failedTables.length === 0, failedTables };
+}
+
 export async function getMasterSauceUserById(userId: string): Promise<MasterSauceUser | null> {
-  const supabase = getSupabaseAdmin();
+  const supabase = getJourneyDb();
   const { data, error } = await supabase
     .from("users")
     .select("id, auth_user_id, normalized_email, email, stripe_customer_id, created_at, updated_at")
@@ -37,11 +98,11 @@ export async function getMasterSauceUserById(userId: string): Promise<MasterSauc
 export async function upsertVerifiedMasterSauceUser(input: {
   authUserId: string;
   email: string;
-}): Promise<MasterSauceUser> {
+}): Promise<VerifiedUserUpsertResult> {
   const normalizedEmail = normalizeBillingEmail(input.email);
   if (!normalizedEmail) throw new Error("Verified auth user is missing a valid email.");
 
-  const supabase = getSupabaseAdmin();
+  const supabase = getJourneyDb();
   const userSelect =
     "id, auth_user_id, normalized_email, email, stripe_customer_id, created_at, updated_at";
 
@@ -102,10 +163,21 @@ export async function upsertVerifiedMasterSauceUser(input: {
       .single();
     data = (result.data as Record<string, unknown> | null) ?? null;
     writeError = result.error;
+  } else if (existingByEmail) {
+    // Claim a billing-bootstrapped row only while it is still unclaimed (race-safe).
+    const result = await supabase
+      .from("users")
+      .update(payload)
+      .eq("id", existingByEmail.id)
+      .is("auth_user_id", null)
+      .select(userSelect)
+      .maybeSingle();
+    data = (result.data as Record<string, unknown> | null) ?? null;
+    writeError = result.error ?? (data ? null : { message: "account was claimed concurrently" });
   } else {
     const result = await supabase
       .from("users")
-      .upsert(payload, { onConflict: "normalized_email" })
+      .insert(payload)
       .select(userSelect)
       .single();
     data = (result.data as Record<string, unknown> | null) ?? null;
@@ -117,17 +189,6 @@ export async function upsertVerifiedMasterSauceUser(input: {
   }
 
   const user = mapUser(data);
-
-  await Promise.all([
-    supabase.from("billing_customers").update({ user_id: user.id }).eq("normalized_email", normalizedEmail),
-    supabase.from("billing_subscriptions").update({ user_id: user.id }).eq("normalized_email", normalizedEmail),
-    supabase.from("credit_pack_ledger").update({ user_id: user.id }).eq("normalized_email", normalizedEmail),
-    supabase.from("song_architect_generation_events").update({ user_id: user.id }).eq("email", normalizedEmail),
-    supabase.from("hit_analyzer_report_events").update({ user_id: user.id }).eq("email", normalizedEmail),
-    supabase.from("song_architect_reference_tracks").update({ user_id: user.id }).eq("owner_email", normalizedEmail),
-    supabase.from("master_job_unlocks").update({ user_id: user.id }).eq("normalized_email", normalizedEmail),
-    supabase.from("mastered_download_events").update({ user_id: user.id }).eq("normalized_email", normalizedEmail)
-  ]);
-
-  return user;
+  const historyLink = await linkVerifiedUserHistory(user.id, normalizedEmail);
+  return { user, historyLink };
 }

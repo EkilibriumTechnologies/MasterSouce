@@ -8,15 +8,10 @@ import {
   tooManyAttemptsResponse
 } from "@/lib/security/abuse-guard";
 import { validateEmailAddress } from "@/lib/security/validate-email-address";
-import { getSupabasePublicClient } from "@/lib/supabase/public-server";
+import { resolveAuthRedirectBaseUrl } from "@/lib/auth/redirect";
+import { createSupabaseAuthServerClient } from "@/lib/supabase/public-server";
 
 const BodySchema = z.object({ email: z.string().min(3).max(320) });
-
-function resolveBaseUrl(request: NextRequest): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, "");
-  return request.nextUrl.origin.replace(/\/+$/, "");
-}
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -66,12 +61,14 @@ export async function POST(request: NextRequest) {
     return tooManyAttemptsResponse(emailRate.retryAfterSec);
   }
 
-  const supabase = getSupabasePublicClient();
+  const supabase = createSupabaseAuthServerClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: validation.normalizedEmail,
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: `${resolveBaseUrl(request)}/auth/callback`
+      // Must be on the Supabase Auth redirect allow list. The email template links to
+      // /auth/confirm?token_hash=...&type=email, which verifies the link server-side.
+      emailRedirectTo: `${resolveAuthRedirectBaseUrl(request)}/auth/confirm`
     }
   });
 
