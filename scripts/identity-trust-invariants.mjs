@@ -33,6 +33,11 @@ function run() {
     'proof: TrustedEmailProof',
     "trusted email minting requires an explicit proof source"
   );
+  assertIncludes(
+    verifiedState,
+    "ageMs > VERIFIED_EMAIL_MAX_AGE_SEC * 1000",
+    "trusted email replay is rejected after server-side expiry"
+  );
 
   const billingSync = read("app/api/billing/sync/route.ts");
   assertIncludes(
