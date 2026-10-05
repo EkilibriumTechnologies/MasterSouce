@@ -161,7 +161,24 @@ export async function updateProjectForUser(input: {
   if (input.status !== undefined) patch.status = input.status;
   if (input.currentStage !== undefined) patch.current_stage = input.currentStage;
   if (input.selectedGenerationId !== undefined) {
-    patch.selected_generation_id = input.selectedGenerationId;
+    if (input.selectedGenerationId === null) {
+      patch.selected_generation_id = null;
+    } else {
+      const { data: ownedGeneration, error: generationError } = await supabase
+        .from("project_generations")
+        .select("id")
+        .eq("id", input.selectedGenerationId)
+        .eq("project_id", input.projectId)
+        .eq("user_id", input.userId)
+        .maybeSingle();
+      if (generationError) {
+        throw new Error(`project generation ownership check failed: ${generationError.message}`);
+      }
+      if (!ownedGeneration?.id) {
+        throw new Error("generation_not_found");
+      }
+      patch.selected_generation_id = input.selectedGenerationId;
+    }
   }
 
   const { data, error } = await supabase
