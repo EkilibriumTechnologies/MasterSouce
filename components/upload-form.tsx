@@ -1447,6 +1447,20 @@ export function UploadForm() {
         file_id: masterPayload.download.fileId,
         plan_id: masterPayload.quota?.planId
       });
+      await saveProjectArtifact(
+        "master_settings",
+        {
+          mode: "standard",
+          jobId: masterPayload.jobId,
+          fileId: masterPayload.download.fileId,
+          genre,
+          loudnessMode: loudness,
+          masterCharacter,
+          quota: masterPayload.quota ?? null,
+          analysis: masterPayload.analysis
+        },
+        "export"
+      );
       return masterPayload;
     } catch (err) {
       const isLocalhost =
@@ -1623,6 +1637,22 @@ export function UploadForm() {
         file_id: adaptive.download.fileId,
         plan_id: mergedResult.quota?.planId
       });
+      await saveProjectArtifact(
+        "master_settings",
+        {
+          mode: "adaptive",
+          jobId: adaptive.jobId,
+          fileId: adaptive.download.fileId,
+          genre,
+          loudnessMode: loudness,
+          masterCharacter,
+          adaptiveIntent,
+          referenceArtist,
+          quota: mergedResult.quota ?? null,
+          analysis: mergedResult.analysis
+        },
+        "export"
+      );
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Unexpected adaptive error.";
       setError(raw);
@@ -1706,6 +1736,18 @@ export function UploadForm() {
       setMasterReadiness(parsed.masterReadiness ?? null);
       setMasterReadinessAcknowledged(false);
       setSourceUploadRef(parsed.source ?? null);
+      await saveProjectArtifact(
+        "master_readiness",
+        {
+          sourceFile: file
+            ? { name: file.name, size: file.size, type: file.type || null }
+            : null,
+          analysis: parsed.analysis,
+          masterReadiness: parsed.masterReadiness ?? null,
+          suggestedMasteringPreset: parsed.suggestedMasteringPreset ?? null
+        },
+        "master"
+      );
       setSuggestedMasteringPreset(parsed.suggestedMasteringPreset ?? null);
       if (parsed.suggestedMasteringPreset?.key) {
         setGenre(parsed.suggestedMasteringPreset.key);
