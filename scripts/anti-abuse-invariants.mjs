@@ -50,7 +50,7 @@ function run() {
   const downloadRoute = read("app/api/download/route.ts");
   assertBefore(
     downloadRoute,
-    "const billingIdentityTrusted = Boolean(masteredUnlock.emailVerifiedAt);",
+    "const billingIdentityTrusted = isUnlockBillingIdentityTrusted(request, masteredUnlock);",
     "const entitlements = await getEntitlementsForUser(user, {",
     "download: trust classification happens before paid entitlement lookup"
   );
