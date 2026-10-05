@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { attachSessionCookieIfNeeded, prepareSessionForRequest } from "@/lib/identity/session-cookie";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
-import { attachTrustedEmailAccessState } from "@/lib/security/verified-email-state";
 import { buildHitAnalyzerLaunchCountdown, resolveHitAnalyzerAccess } from "@/lib/ar-ai/access";
 
 export async function GET(request: NextRequest) {
@@ -73,9 +72,6 @@ export async function GET(request: NextRequest) {
       planId: access.planId,
       unlimited: access.unlimited
     });
-    if (access.normalizedEmail) {
-      attachTrustedEmailAccessState(res, access.normalizedEmail);
-    }
     attachSessionCookieIfNeeded(res, sessionPrep);
     return res;
   } catch (error) {
