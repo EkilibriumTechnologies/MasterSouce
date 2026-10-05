@@ -15,6 +15,7 @@ import { probeAudioStream } from "@/lib/audio/media-probe";
 import { incrementProductMetric } from "@/lib/product-metrics";
 import { warnIfUnlockEmailDiffersFromStripeCustomerEmail } from "@/lib/billing/unlock-vs-stripe-customer-email";
 import { consumeRateLimit, getClientIp, hashIdentifier, logAbuseGuard, tooManyAttemptsResponse } from "@/lib/security/abuse-guard";
+import { isVerifiedEmailForRequest } from "@/lib/security/verified-email-state";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { consumeCreditPackMaster, getEntitlementsForUser } from "@/lib/subscriptions/entitlements";
 import { isMasterAdminBypassGranted } from "@/lib/subscriptions/master-admin-bypass";
@@ -35,6 +36,14 @@ import {
 } from "@/lib/analytics/mastering-funnel-server";
 
 type DownloadRateKeyType = "user" | "session" | "ip" | "fallback";
+
+function isUnlockBillingIdentityTrusted(
+  request: NextRequest,
+  unlock: MasterJobUnlockRow | null
+): boolean {
+  if (!unlock?.emailVerifiedAt || !unlock.normalizedEmail) return false;
+  return isVerifiedEmailForRequest(request, unlock.normalizedEmail);
+}
 
 function logMasteringDownloadBlocked(details: Record<string, unknown>): void {
   logMasteringFunnelEvent("mastering_download_blocked", {
@@ -161,8 +170,8 @@ export async function GET(request: NextRequest) {
               normalizedEmail: masteredUnlock.normalizedEmail,
               endpoint: "/api/master",
               user,
-              emailSource: masteredUnlock.emailVerifiedAt ? "verified_cookie" : "billing_header",
-              billingLookupAllowed: Boolean(masteredUnlock.emailVerifiedAt)
+              emailSource: isUnlockBillingIdentityTrusted(request, masteredUnlock) ? "verified_cookie" : "billing_header",
+              billingLookupAllowed: isUnlockBillingIdentityTrusted(request, masteredUnlock)
             });
           }
         } catch (error) {
@@ -250,7 +259,7 @@ export async function GET(request: NextRequest) {
     });
     const user = buildApiUser(request, sessionPrep.sessionId);
     const adminEntitlementBypass =
-      Boolean(masteredUnlock?.emailVerifiedAt) &&
+      isUnlockBillingIdentityTrusted(request, masteredUnlock) &&
       isAdminEntitlementOverrideEmail(masteredUnlock?.normalizedEmail);
     const adminBypass = isMasterAdminBypassGranted(request) || adminEntitlementBypass;
     const freePlanCap = resolveFreePlanWavCap(PLAN_DEFINITIONS.free.monthlyMastersLimit ?? 1);
@@ -311,7 +320,7 @@ export async function GET(request: NextRequest) {
                 jobId: record.jobId
               });
             } else {
-              const billingIdentityTrusted = Boolean(masteredUnlock.emailVerifiedAt);
+              const billingIdentityTrusted = isUnlockBillingIdentityTrusted(request, masteredUnlock);
               const entitlements = await getEntitlementsForUser(user, {
                 normalizedEmail: masteredUnlock.normalizedEmail,
                 billingLookupAllowed: billingIdentityTrusted,
@@ -412,8 +421,8 @@ export async function GET(request: NextRequest) {
             normalizedEmail: masteredUnlock.normalizedEmail,
             endpoint: "/api/master",
             user,
-            emailSource: masteredUnlock.emailVerifiedAt ? "verified_cookie" : "billing_header",
-            billingLookupAllowed: Boolean(masteredUnlock.emailVerifiedAt)
+            emailSource: isUnlockBillingIdentityTrusted(request, masteredUnlock) ? "verified_cookie" : "billing_header",
+            billingLookupAllowed: isUnlockBillingIdentityTrusted(request, masteredUnlock)
           });
         }
       } catch (error) {
@@ -452,7 +461,7 @@ export async function GET(request: NextRequest) {
           }
         });
         if (!adminBypass && recorded.countedUnique && enforceWavQuota) {
-          const billingIdentityTrusted = Boolean(masteredUnlock.emailVerifiedAt);
+          const billingIdentityTrusted = isUnlockBillingIdentityTrusted(request, masteredUnlock);
           const currentEntitlements = await getEntitlementsForUser(user, {
             normalizedEmail: masteredUnlock.normalizedEmail,
             billingLookupAllowed: billingIdentityTrusted,
