@@ -28,6 +28,7 @@ function run() {
   includes(session, 'const ACCOUNT_SESSION_COOKIE = "ms_account";', "signed account session cookie");
   includes(session, "timingSafeEqual", "account session signature verified");
   includes(session, 'if (process.env.NODE_ENV === "production") return null;', "session signing fails closed in production");
+  includes(session, "ageMs > ACCOUNT_SESSION_MAX_AGE_SEC * 1000", "account session replay expires server-side");
 
   const complete = read("app/api/auth/complete/route.ts");
   includes(complete, "supabase.auth.getUser(parsed.data.accessToken)", "server verifies Supabase access token");
