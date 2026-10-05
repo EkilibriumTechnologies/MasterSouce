@@ -205,7 +205,7 @@ export default function SongProjectPage() {
           <JourneyProgress currentStage={data.project.currentStage as JourneyStageId} />
         </div>
 
-        <div style={{ marginTop: 28, display: "grid", gridTemplateColumns: "minmax(0, 1.5fr) minmax(260px, .7fr)", gap: 18 }}>
+        <div style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
           <section style={{ border: "1px solid rgba(255,255,255,.10)", borderRadius: 22, padding: 22, background: "rgba(255,255,255,.03)" }}>
             <h2 style={{ margin: 0, fontSize: 20 }}>Project memory</h2>
             <p style={{ color: "rgba(255,255,255,.52)", lineHeight: 1.6 }}>
