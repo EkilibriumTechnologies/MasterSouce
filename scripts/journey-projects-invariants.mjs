@@ -33,6 +33,13 @@ function run() {
   const complete = read("app/api/auth/complete/route.ts");
   includes(complete, "supabase.auth.getUser(parsed.data.accessToken)", "server verifies Supabase access token");
   includes(complete, "upsertVerifiedMasterSauceUser", "verified auth identity maps to stable user");
+  const userStore = read("lib/users/store.ts");
+  includes(userStore, '.eq("auth_user_id", input.authUserId)', "verified auth id is the stable account anchor");
+  includes(
+    userStore,
+    "existingByAuth.id !== existingByEmail.id",
+    "email collision cannot silently merge distinct accounts"
+  );
   includes(complete, 'attachTrustedEmailAccessState(res, user.normalizedEmail, "authenticated_user")', "verified account becomes trusted billing identity");
 
   const collection = read("app/api/projects/route.ts");
