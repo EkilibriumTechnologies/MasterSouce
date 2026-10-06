@@ -6,6 +6,10 @@ const projectDetail = readFileSync("app/projects/[projectId]/page.tsx", "utf8");
 const home = readFileSync("app/page.tsx", "utf8");
 
 assert.match(home, />\s*Journeys\s*<\/Link>/, "Home nav exposes Journeys");
+assert.match(home, /id="song-journeys"/, "Homepage visibly features Song Journeys");
+assert.match(home, /Start a Song Journey/, "Homepage offers a primary Journey CTA");
+assert.match(home, /One song\. One Journey\. Every MasterSauce tool connected\./, "Homepage explains the Journey product");
+assert.match(home, /JOURNEY_PREVIEW_STEPS/, "Homepage previews the Journey stages");
 assert.match(projectsPage, />\s*Song Journeys\s*</, "Projects landing is visibly branded Song Journeys");
 assert.match(projectsPage, /Start New Journey/, "Primary CTA starts a Journey");
 assert.match(projectsPage, /Step \$\{journeyStep\} of \$\{journeyStepCount\}/, "Journey cards expose step position");
