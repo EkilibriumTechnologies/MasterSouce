@@ -88,8 +88,26 @@ export function NativeSongGenerator({
     }
   }
 
-  const planId = access?.planId ?? "free";
-  const usage = access?.usage;
+  if (access === null) {
+    return (
+      <section
+        style={{
+          marginTop: 18,
+          border: "1px solid rgba(52,211,153,.16)",
+          borderRadius: 22,
+          padding: 22,
+          background: "rgba(255,255,255,.025)",
+          color: "rgba(255,255,255,.52)"
+        }}
+        aria-label="Generate inside MasterSauce"
+      >
+        Checking Pro Studio generation access…
+      </section>
+    );
+  }
+
+  const planId = access.planId ?? "free";
+  const usage = access.usage;
   const isPro = planId === "pro_studio_monthly";
   const configured = access?.configured === true;
 
