@@ -90,7 +90,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             Hit Analyzer
           </Link>
           <Link href="/projects" style={topNavLinkStyle}>
-            My Songs
+            Journeys
           </Link>
           <a href="#pricing" style={topNavLinkStyle}>
             Pricing
