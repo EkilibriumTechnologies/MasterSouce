@@ -8,6 +8,7 @@ const home = readFileSync("app/page.tsx", "utf8");
 assert.match(home, />\s*Journeys\s*<\/Link>/, "Home nav exposes Journeys");
 assert.match(home, /id="song-journeys"/, "Homepage visibly features Song Journeys");
 assert.match(home, /Start a Song Journey/, "Homepage offers a primary Journey CTA");
+assert.match(home, /I already have a song/, "Homepage preserves the direct mastering path");
 assert.match(home, /One song\. One Journey\. Every MasterSauce tool connected\./, "Homepage explains the Journey product");
 assert.match(home, /JOURNEY_PREVIEW_STEPS/, "Homepage previews the Journey stages");
 assert.match(projectsPage, />\s*Song Journeys\s*</, "Projects landing is visibly branded Song Journeys");
