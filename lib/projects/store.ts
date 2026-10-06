@@ -143,7 +143,7 @@ export async function getProjectForUser(
 }
 
 /** Generation lookup that only succeeds when the generation belongs to this user's Project. */
-async function getOwnedGeneration(
+export async function getProjectGenerationForUser(
   userId: string,
   projectId: string,
   generationId: string
@@ -181,7 +181,7 @@ export async function updateProjectForUser(input: {
   let nextSelectedGenerationId = existing.selectedGenerationId;
   if (input.selectedGenerationId !== undefined) {
     if (input.selectedGenerationId !== null) {
-      const owned = await getOwnedGeneration(input.userId, existing.id, input.selectedGenerationId);
+      const owned = await getProjectGenerationForUser(input.userId, existing.id, input.selectedGenerationId);
       if (!owned) throw new ProjectStoreError("generation_not_found");
     }
     nextSelectedGenerationId = input.selectedGenerationId;
@@ -306,7 +306,7 @@ export async function appendProjectArtifact(input: {
   delete payload.generationId;
   delete payload.selectedGenerationId;
   if (input.generationId !== undefined) {
-    const generation = await getOwnedGeneration(input.userId, project.id, input.generationId);
+    const generation = await getProjectGenerationForUser(input.userId, project.id, input.generationId);
     if (!generation) throw new ProjectStoreError("generation_not_found");
     payload.generationId = generation.id;
   }
@@ -391,6 +391,7 @@ export async function listProjectGenerations(
 export async function createProjectGeneration(input: {
   userId: string;
   projectId: string;
+  source?: "suno" | "lyria";
   externalId?: string | null;
   externalUrl?: string | null;
   label?: string | null;
@@ -412,7 +413,7 @@ export async function createProjectGeneration(input: {
     .insert({
       project_id: project.id,
       user_id: input.userId,
-      source: "suno",
+      source: input.source ?? "suno",
       external_id: input.externalId?.trim() || null,
       external_url: input.externalUrl ?? null,
       label: input.label?.trim().slice(0, 120) || null,
