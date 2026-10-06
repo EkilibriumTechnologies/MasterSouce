@@ -9,6 +9,8 @@ export type PlanDefinition = {
   monthlyMastersLimit: number | null;
   /** Song Architect blueprint generations included in the active period. */
   songArchitectGenerationsPerMonth: number;
+  /** Complete songs generated inside MasterSauce per month. Zero means the plan is not entitled. */
+  nativeSongGenerationsPerMonth: number;
   quality: PlanQuality;
   stems: boolean;
   priority: boolean;

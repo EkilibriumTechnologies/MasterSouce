@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
 import { JourneyProgress } from "@/components/projects/journey-progress";
+import { NativeSongGenerator } from "@/components/projects/native-song-generator";
 import { GenerationMatchPanel } from "@/components/song-architect/generation-match-panel";
 import { JOURNEY_STAGES, getJourneyStage, getJourneyStageIndex } from "@/lib/journeys/stages";
 import type { ProjectArtifact, ProjectGeneration, SongProject } from "@/lib/projects/types";
@@ -307,6 +308,13 @@ export default function SongProjectPage() {
           <JourneyProgress currentStage={project.currentStage} />
         </section>
 
+        {stylePrompt && lyricsForSuno && !earlyStage && !isComplete ? (
+          <NativeSongGenerator
+            projectId={project.id}
+            onGenerated={() => void refreshProject()}
+          />
+        ) : null}
+
         {stylePrompt && !earlyStage && !isComplete ? (
           <section style={{ ...cardStyle, marginTop: 18 }} aria-label="Suno prompt">
             <h2 style={{ margin: 0, fontSize: 20 }}>Generate in Suno</h2>
@@ -353,7 +361,7 @@ export default function SongProjectPage() {
             <h2 style={{ margin: 0, fontSize: 20 }}>Generations</h2>
             <div style={{ marginTop: 12, fontSize: 42, fontWeight: 900 }}>{generations.length}</div>
             <div style={{ color: "rgba(255,255,255,.48)", fontSize: 13 }}>
-              Suno candidates attached to this song
+              Suno + MasterSauce candidates attached to this song
               {selectedGeneration ? ` · locked: ${selectedGeneration.label ?? "selected version"}` : ""}
             </div>
 
@@ -378,7 +386,11 @@ export default function SongProjectPage() {
                         {generation.label || `Generation ${index + 1}`}
                       </div>
                       <div style={{ marginTop: 4, color: "rgba(255,255,255,.38)", fontSize: 11 }}>
-                        {selected ? "Locked for mastering" : "Analyzed candidate"}
+                        {selected
+                          ? "Locked for mastering"
+                          : generation.source === "lyria"
+                            ? "Generated inside MasterSauce"
+                            : "Analyzed candidate"}
                         {generation.externalUrl ? (
                           <>
                             {" · "}
@@ -393,6 +405,16 @@ export default function SongProjectPage() {
                           </>
                         ) : null}
                       </div>
+                      {generation.source === "lyria" ? (
+                        <audio
+                          controls
+                          preload="metadata"
+                          src={`/api/projects/${encodeURIComponent(project.id)}/generations/${encodeURIComponent(generation.id)}/audio`}
+                          style={{ width: "100%", marginTop: 10 }}
+                        >
+                          Your browser does not support audio playback.
+                        </audio>
+                      ) : null}
                       {!selected && canLockVersion ? (
                         <button
                           type="button"
@@ -409,7 +431,7 @@ export default function SongProjectPage() {
             ) : null}
 
             <div style={{ marginTop: 22, color: "rgba(255,255,255,.40)", fontSize: 12, lineHeight: 1.6 }}>
-              Audio file durability comes in the next storage milestone. This project already persists candidate metadata and analysis history.
+              MasterSauce-native generations are stored privately with the Journey. External Suno/Udio candidates keep their source metadata and analysis history.
             </div>
           </aside>
         </div>

@@ -11,7 +11,7 @@ import { PricingBottomHomeLink } from "./pricing-home-links";
 export const metadata: Metadata = buildPageMetadata({
   title: "Pricing | MasterSauce Plans",
   description:
-    "Compare Free, Creator, and Pro Studio plans for Analyze Your Song, Master Readiness, Song Architect, adaptive mastering, and professional WAV exports.",
+    "Compare Free, Creator, and Pro Studio plans for Analyze Your Song, Song Architect, native full-song generation, adaptive mastering, and professional WAV exports.",
   path: "/pricing",
   absoluteTitle: true
 });
