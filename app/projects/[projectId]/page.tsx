@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
 import { JourneyProgress } from "@/components/projects/journey-progress";
 import { GenerationMatchPanel } from "@/components/song-architect/generation-match-panel";
-import { getJourneyStage, getJourneyStageIndex } from "@/lib/journeys/stages";
+import { JOURNEY_STAGES, getJourneyStage, getJourneyStageIndex } from "@/lib/journeys/stages";
 import type { ProjectArtifact, ProjectGeneration, SongProject } from "@/lib/projects/types";
 import type { SongDNA } from "@/lib/song-architect/types";
 
@@ -159,7 +159,7 @@ export default function SongProjectPage() {
   if (error) {
     return (
       <main style={{ minHeight: "100vh", background: "#050505", color: "#fff" }}>
-        <MasterSauceBrandNav backHref="/projects" backLabel="← My Songs" />
+        <MasterSauceBrandNav backHref="/projects" backLabel="← Song Journeys" />
         <div style={{ width: "min(900px, calc(100% - 32px))", margin: "48px auto" }}>
           {error === "project_not_found" ? "This song project doesn't exist or isn't yours." : error}
         </div>
@@ -170,7 +170,7 @@ export default function SongProjectPage() {
   if (!data) {
     return (
       <main style={{ minHeight: "100vh", background: "#050505", color: "#fff" }}>
-        <MasterSauceBrandNav backHref="/projects" backLabel="← My Songs" />
+        <MasterSauceBrandNav backHref="/projects" backLabel="← Song Journeys" />
         <div style={{ width: "min(900px, calc(100% - 32px))", margin: "48px auto", color: "rgba(255,255,255,.55)" }}>
           Loading song project…
         </div>
@@ -181,6 +181,8 @@ export default function SongProjectPage() {
   const { project, generations } = data;
   const stage = getJourneyStage(project.currentStage);
   const stageIndex = getJourneyStageIndex(project.currentStage);
+  const journeyStepCount = JOURNEY_STAGES.filter((item) => item.id !== "complete").length;
+  const journeyStep = Math.min(stageIndex + 1, journeyStepCount);
   const earlyStage = stageIndex < getJourneyStageIndex("generation");
   const canLockVersion = stageIndex >= getJourneyStageIndex("generation") && generations.length > 0;
   const masteringStage = ["selected_generation", "master", "export"].includes(project.currentStage);
@@ -198,13 +200,15 @@ export default function SongProjectPage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#050505", color: "#fff" }}>
-      <MasterSauceBrandNav backHref="/projects" backLabel="← My Songs" />
+      <MasterSauceBrandNav backHref="/projects" backLabel="← Song Journeys" />
 
       <section style={{ width: "min(1180px, calc(100% - 32px))", margin: "0 auto", padding: "34px 0 90px" }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 520px", minWidth: 0 }}>
             <div style={{ color: "#6ee7b7", fontSize: 11, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase" }}>
-              Song Project · {stage.label}
+              {project.currentStage === "complete"
+                ? "Song Journey · Complete"
+                : `Song Journey · Step ${journeyStep} of ${journeyStepCount} · ${stage.label}`}
             </div>
             <input
               value={titleDraft}
@@ -287,9 +291,21 @@ export default function SongProjectPage() {
           </p>
         ) : null}
 
-        <div style={{ marginTop: 28 }}>
+        <section style={{ marginTop: 28 }} aria-label="Journey progress">
+          <div
+            style={{
+              marginBottom: 10,
+              color: "rgba(255,255,255,.5)",
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: ".14em",
+              textTransform: "uppercase"
+            }}
+          >
+            Your Song Journey
+          </div>
           <JourneyProgress currentStage={project.currentStage} />
-        </div>
+        </section>
 
         {stylePrompt && !earlyStage && !isComplete ? (
           <section style={{ ...cardStyle, marginTop: 18 }} aria-label="Suno prompt">
