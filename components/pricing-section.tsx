@@ -64,6 +64,9 @@ function buildPlanFeatureGroups(planId: PlanId): PricingFeatureGroup[] {
   const analyzeItems = [getHitAnalyzerAllowanceLabel(planId), "Master Readiness"];
   const createItems = [formatSongArchitectBlueprintFeature(plan.songArchitectGenerationsPerMonth)];
   if (isPaid) createItems.push("Advanced Song Architect output");
+  if (plan.nativeSongGenerationsPerMonth > 0) {
+    createItems.push(`${plan.nativeSongGenerationsPerMonth} full song generations / month`);
+  }
 
   const masterItems = ["All 7 genre presets", "Unlimited mastering previews"];
   if (isPaid) {
@@ -111,9 +114,9 @@ const PLAN_COPY: Record<
   },
   pro_studio_monthly: {
     positioning:
-      "For serious creators who need the highest-quality exports, priority processing, and more premium tools each month.",
+      "For serious creators who want to generate complete songs inside MasterSauce, then analyze, refine, master, and export them in one Journey.",
     ctaLabel: "Choose Pro Studio",
-    ctaHint: "Unlimited WAV exports plus float format."
+    ctaHint: "Includes 20 native song generations, unlimited WAV exports, and 32-bit float."
   }
 };
 
@@ -139,7 +142,13 @@ const FEATURE_GROUPS = [
         `${PLAN_DEFINITIONS.creator_monthly.songArchitectGenerationsPerMonth} / month`,
         `${PLAN_DEFINITIONS.pro_studio_monthly.songArchitectGenerationsPerMonth} / month`
       ],
-      ["Concept, lyrics + generation prompts", "Core output", "Advanced output", "Advanced output"]
+      ["Concept, lyrics + generation prompts", "Core output", "Advanced output", "Advanced output"],
+      [
+        "Generate full songs inside MasterSauce",
+        "—",
+        "—",
+        `${PLAN_DEFINITIONS.pro_studio_monthly.nativeSongGenerationsPerMonth} / month`
+      ]
     ]
   },
   {
