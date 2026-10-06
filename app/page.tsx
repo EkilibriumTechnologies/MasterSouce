@@ -23,6 +23,18 @@ type HomePageProps = {
   };
 };
 
+const JOURNEY_PREVIEW_STEPS = [
+  "Idea",
+  "Song DNA",
+  "Lyrics",
+  "Suno Prompt",
+  "Generate",
+  "Analyze & Refine",
+  "Lock Version",
+  "Master",
+  "Export"
+] as const;
+
 function getFirst(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -154,8 +166,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </span>
         </div>
         <div style={heroCtaRow}>
-          <a href="#master" style={ctaPrimaryStyle}>
-            Start mastering
+          <Link href="/projects" style={ctaPrimaryStyle}>
+            Start a Song Journey
+          </Link>
+          <a href="#master" style={ctaSecondaryStyle}>
+            I already have a song
           </a>
         </div>
         <p style={heroSunoLinkWrapStyle}>
@@ -183,6 +198,37 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <span style={pillStyle}>⚡ AI mastering — preset, prompt, or reference-guided</span>
           <span style={pillStyle}>🎧 Free MP3 previews before you export</span>
           <span style={pillStyle}>📀 HD WAV exports on premium plans</span>
+        </div>
+      </section>
+
+      <section id="song-journeys" style={journeySectionStyle} aria-labelledby="journeys-heading">
+        <p style={productBadgeStyle}>FROM IDEA TO FINISHED MASTER</p>
+        <h2 id="journeys-heading" style={sectionTitle}>
+          One song. One Journey. Every MasterSauce tool connected.
+        </h2>
+        <p style={journeyIntroStyle}>
+          Stop rebuilding context every time you move between tools. A Song Journey keeps the creative direction,
+          Song DNA, lyrics, generation prompts, versions, analysis, mastering decisions, and final export attached to
+          the same song — so you can leave MasterSauce, create in Suno or Udio, come back, and continue where you left off.
+        </p>
+
+        <div style={journeyStepsStyle} aria-label="Song Journey stages">
+          {JOURNEY_PREVIEW_STEPS.map((step, index) => (
+            <div key={step} style={journeyStepStyle}>
+              <span style={journeyStepNumberStyle}>{index + 1}</span>
+              <span style={journeyStepLabelStyle}>{step}</span>
+            </div>
+          ))}
+        </div>
+
+        <p style={journeySupportCopyStyle}>
+          Your Journey is saved to your account and stays available across visits.
+        </p>
+
+        <div style={productCtaRowStyle}>
+          <Link href="/projects" style={ctaPrimaryStyle}>
+            Start a Song Journey
+          </Link>
         </div>
       </section>
 
@@ -559,6 +605,19 @@ const ctaPrimaryStyle: React.CSSProperties = {
   padding: "15px 36px"
 };
 
+const ctaSecondaryStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  borderRadius: "999px",
+  border: "1px solid rgba(142, 155, 209, 0.34)",
+  background: "rgba(12, 18, 34, 0.72)",
+  color: "#dbe3ff",
+  fontWeight: 700,
+  padding: "15px 28px"
+};
+
 const pillRowStyle: React.CSSProperties = {
   marginTop: "22px",
   display: "flex",
@@ -589,6 +648,66 @@ const productFeatureSectionStyle: React.CSSProperties = {
   textAlign: "center",
   background:
     "radial-gradient(720px 280px at 50% 0%, rgba(143, 98, 255, 0.18), rgba(143, 98, 255, 0) 65%), linear-gradient(145deg, rgba(22, 29, 48, 0.94), rgba(12, 17, 30, 0.94))"
+};
+
+const journeySectionStyle: React.CSSProperties = {
+  ...sectionStyle,
+  textAlign: "center",
+  background:
+    "radial-gradient(760px 320px at 50% 0%, rgba(52, 211, 153, 0.16), rgba(52, 211, 153, 0) 68%), linear-gradient(145deg, rgba(20, 31, 47, 0.96), rgba(10, 16, 29, 0.96))"
+};
+
+const journeyIntroStyle: React.CSSProperties = {
+  margin: "16px auto 0",
+  maxWidth: "800px",
+  color: "#a8b5da",
+  lineHeight: 1.75,
+  fontSize: "1.05rem"
+};
+
+const journeyStepsStyle: React.CSSProperties = {
+  margin: "28px auto 0",
+  maxWidth: "980px",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: "10px"
+};
+
+const journeyStepStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  border: "1px solid rgba(110, 231, 183, 0.2)",
+  borderRadius: "14px",
+  background: "rgba(9, 20, 27, 0.58)",
+  padding: "12px 14px",
+  textAlign: "left"
+};
+
+const journeyStepNumberStyle: React.CSSProperties = {
+  flex: "0 0 auto",
+  width: "25px",
+  height: "25px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "999px",
+  background: "rgba(52, 211, 153, 0.16)",
+  color: "#6ee7b7",
+  fontSize: "0.75rem",
+  fontWeight: 800
+};
+
+const journeyStepLabelStyle: React.CSSProperties = {
+  color: "#e5edff",
+  fontSize: "0.9rem",
+  fontWeight: 700
+};
+
+const journeySupportCopyStyle: React.CSSProperties = {
+  margin: "18px auto 0",
+  color: "#7f90bb",
+  fontSize: "0.92rem"
 };
 
 const productBadgeStyle: React.CSSProperties = {
