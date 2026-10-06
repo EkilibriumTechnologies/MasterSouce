@@ -116,7 +116,7 @@ const PLAN_COPY: Record<
     positioning:
       "For serious creators who want to generate complete songs inside MasterSauce, then analyze, refine, master, and export them in one Journey.",
     ctaLabel: "Choose Pro Studio",
-    ctaHint: "Includes 20 native song generations, unlimited WAV exports, and 32-bit float."
+    ctaHint: "Unlimited WAV exports plus float format. Includes 20 native song generations / month."
   }
 };
 
