@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
-import { getJourneyStage } from "@/lib/journeys/stages";
+import { JOURNEY_STAGES, getJourneyStage, getJourneyStageIndex } from "@/lib/journeys/stages";
 import type { SongProject } from "@/lib/projects/types";
 
 type AccountUser = { id: string; email: string };
@@ -135,13 +135,14 @@ export default function ProjectsPage() {
       <section style={{ width: "min(1120px, calc(100% - 32px))", margin: "0 auto", padding: "44px 0 80px" }}>
         <div style={{ maxWidth: 760 }}>
           <div style={{ color: "#6ee7b7", fontSize: 12, fontWeight: 800, letterSpacing: ".18em", textTransform: "uppercase" }}>
-            Song Projects
+            MasterSauce Journeys
           </div>
           <h1 style={{ margin: "10px 0 12px", fontSize: "clamp(34px, 6vw, 68px)", lineHeight: 1.02 }}>
-            My Songs
+            Song Journeys
           </h1>
           <p style={{ margin: 0, color: "rgba(255,255,255,.62)", fontSize: 16, lineHeight: 1.7 }}>
-            One place for the whole journey — idea, Song DNA, lyrics, Suno prompt, generation refinement, mastering, and export.
+            Take a song from first idea to finished master without losing the thread. MasterSauce keeps your Song DNA, lyrics,
+            Suno prompt, generated versions, analysis, mastering decisions, and exports together in one guided Journey.
           </p>
         </div>
 
@@ -151,7 +152,7 @@ export default function ProjectsPage() {
 
         {view === "error" ? (
           <div style={{ marginTop: 36, border: "1px solid rgba(248,113,113,.3)", borderRadius: 20, padding: 22 }}>
-            Unable to load My Songs right now.
+            Unable to load your Song Journeys right now.
           </div>
         ) : null}
 
@@ -222,7 +223,7 @@ export default function ProjectsPage() {
                   cursor: busy ? "wait" : "pointer"
                 }}
               >
-                + New Song
+                + Start New Journey
               </button>
             </div>
 
@@ -242,15 +243,21 @@ export default function ProjectsPage() {
                   cursor: "pointer"
                 }}
               >
-                <strong style={{ display: "block", fontSize: 22 }}>Start your first song</strong>
+                <strong style={{ display: "block", fontSize: 22 }}>Start your first Song Journey</strong>
                 <span style={{ display: "block", marginTop: 8, color: "rgba(255,255,255,.56)" }}>
-                  MasterSauce will keep the project together from the first idea through the final master.
+                  Start with an idea and follow the Journey through Song DNA, lyrics, Suno, analysis, mastering, and export.
                 </span>
               </button>
             ) : (
               <div style={{ marginTop: 22, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
                 {projects.map((project) => {
                   const stage = getJourneyStage(project.currentStage);
+                  const journeyStepCount = JOURNEY_STAGES.filter((item) => item.id !== "complete").length;
+                  const journeyStageIndex = getJourneyStageIndex(project.currentStage);
+                  const journeyStep = Math.min(journeyStageIndex + 1, journeyStepCount);
+                  const journeyProgress = project.currentStage === "complete"
+                    ? 100
+                    : Math.max(8, Math.round((journeyStep / journeyStepCount) * 100));
                   return (
                     <button
                       key={project.id}
@@ -267,10 +274,31 @@ export default function ProjectsPage() {
                       }}
                     >
                       <div style={{ color: "#6ee7b7", fontSize: 11, fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase" }}>
-                        {stage.label}
+                        {project.currentStage === "complete"
+                          ? "Journey complete"
+                          : `Step ${journeyStep} of ${journeyStepCount} · ${stage.label}`}
                       </div>
                       <div style={{ marginTop: 9, fontSize: 21, fontWeight: 800 }}>{project.title}</div>
-                      <div style={{ marginTop: 8, color: "rgba(255,255,255,.52)", fontSize: 13, lineHeight: 1.5 }}>
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          height: 5,
+                          marginTop: 13,
+                          borderRadius: 999,
+                          background: "rgba(255,255,255,.08)",
+                          overflow: "hidden"
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${journeyProgress}%`,
+                            height: "100%",
+                            borderRadius: 999,
+                            background: "#34d399"
+                          }}
+                        />
+                      </div>
+                      <div style={{ marginTop: 10, color: "rgba(255,255,255,.52)", fontSize: 13, lineHeight: 1.5 }}>
                         {stage.description}
                       </div>
                       <div style={{ marginTop: 18, color: "rgba(255,255,255,.36)", fontSize: 11 }}>
