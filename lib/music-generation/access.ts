@@ -30,6 +30,14 @@ export function isNativeMusicGenerationEnabled(): boolean {
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
+function isNativeMusicGenerationAllowlisted(normalizedEmail: string): boolean {
+  const entries = (process.env.NATIVE_MUSIC_GENERATION_ALLOWLIST ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return entries.includes(normalizedEmail.trim().toLowerCase());
+}
+
 async function countNativeGenerationsThisMonth(userId: string): Promise<number> {
   const { start, end } = monthBoundsUtc();
   const supabase = getJourneyDb();
@@ -49,7 +57,8 @@ export async function resolveNativeMusicGenerationAccess(input: {
   normalizedEmail: string;
 }): Promise<NativeMusicGenerationAccess> {
   const subscription = await getBillingSubscriptionByEmail(input.normalizedEmail);
-  const planId: PlanId = subscription?.planId ?? "free";
+  const allowlisted = isNativeMusicGenerationAllowlisted(input.normalizedEmail);
+  const planId: PlanId = allowlisted ? "pro_studio_monthly" : subscription?.planId ?? "free";
   const limit = PLAN_DEFINITIONS[planId].nativeSongGenerationsPerMonth;
   const used = await countNativeGenerationsThisMonth(input.userId);
   const remaining = Math.max(limit - used, 0);
