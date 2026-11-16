@@ -121,7 +121,6 @@ export function TestimonialsSection() {
 const sectionStyle: React.CSSProperties = {
   padding: "48px clamp(16px, 5vw, 48px)",
   textAlign: "center",
-  overflowX: "hidden",
   width: "100%",
   boxSizing: "border-box"
 };
@@ -138,11 +137,10 @@ const subtitleStyle: React.CSSProperties = {
 };
 const gridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 90vw), 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
   gap: "16px",
   maxWidth: "960px",
   margin: "0 auto",
-  overflowX: "hidden",
   width: "100%"
 };
 const cardStyle: React.CSSProperties = {
