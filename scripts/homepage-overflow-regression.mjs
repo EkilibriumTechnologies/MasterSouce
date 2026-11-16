@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 
-const VIEWPORTS = [320, 375, 390, 393, 414, 430, 1024, 1280];
+const VIEWPORTS = [320, 360, 375, 390, 393, 414, 430, 768, 1024, 1280];
 const IPHONE_USER_AGENT =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 " +
   "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -183,35 +183,61 @@ try {
         clientWidth: document.documentElement.clientWidth,
         htmlScrollWidth: document.documentElement.scrollWidth,
         bodyScrollWidth: document.body.scrollWidth,
-        innerWidth: window.innerWidth
+        innerWidth: window.innerWidth,
+        viewportMeta: document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "",
+        visibleElements: Object.fromEntries(
+          ["main", 'nav[aria-label="Primary"]', ".home-hero", ".home-hero h1", ".home-hero-ctas", "#master", "#pricing"]
+            .map((selector) => {
+              const element = document.querySelector(selector);
+              if (!element) return [selector, null];
+              const rect = element.getBoundingClientRect();
+              return [selector, { left: Math.round(rect.left * 10) / 10, right: Math.round(rect.right * 10) / 10 }];
+            })
+        )
       })`,
       returnByValue: true
     });
     results.push(JSON.parse(evaluation.result.value));
   }
 
-  console.table(
-    results.map((result) => ({
-      Viewport: result.viewport,
-      clientWidth: result.clientWidth,
-      "html scrollWidth": result.htmlScrollWidth,
-      "body scrollWidth": result.bodyScrollWidth,
-      innerWidth: result.innerWidth,
-      Result:
-        result.htmlScrollWidth <= result.clientWidth + 0.99 &&
-        result.bodyScrollWidth <= result.innerWidth + 0.99
-          ? "PASS"
-          : "FAIL"
-    }))
-  );
+  const inspect = (result) => {
+    const violations = [];
+    // A page can appear desktop-sized on an iPhone even when scrollWidth === clientWidth.
+    if (Math.abs(result.innerWidth - result.viewport) > 1) {
+      violations.push(`layout viewport ${result.innerWidth}px != device ${result.viewport}px`);
+    }
+    if (!result.viewportMeta.includes("width=device-width")) {
+      violations.push("missing device-width viewport metadata");
+    }
+    if (result.htmlScrollWidth > result.clientWidth + 1 || result.bodyScrollWidth > result.innerWidth + 1) {
+      violations.push(`document overflow (html=${result.htmlScrollWidth}, body=${result.bodyScrollWidth})`);
+    }
+    for (const [selector, bounds] of Object.entries(result.visibleElements)) {
+      if (!bounds) {
+        violations.push(`missing ${selector}`);
+        continue;
+      }
+      // The primary UX surfaces must be fully visible without horizontal scrolling.
+      if (bounds.left < -1 || bounds.right > result.viewport + 1) {
+        violations.push(`${selector} clipped [${bounds.left}, ${bounds.right}]`);
+      }
+    }
+    return violations;
+  };
+  const failures = results.map((result) => ({ viewport: result.viewport, violations: inspect(result) }))
+    .filter((result) => result.violations.length > 0);
 
-  const failures = results.filter(
-    (result) =>
-      result.htmlScrollWidth > result.clientWidth + 0.99 ||
-      result.bodyScrollWidth > result.innerWidth + 0.99
-  );
+  console.table(results.map((result) => ({
+    viewport: result.viewport,
+    innerWidth: result.innerWidth,
+    htmlScrollWidth: result.htmlScrollWidth,
+    bodyScrollWidth: result.bodyScrollWidth,
+    result: inspect(result).length === 0 ? "PASS" : "FAIL"
+  })));
+
   if (failures.length > 0) {
-    throw new Error(`Homepage horizontal overflow detected at: ${failures.map((item) => item.viewport).join(", ")}px`);
+    throw new Error(`Homepage mobile layout failures:\n${failures.map((item) =>
+      `${item.viewport}px: ${item.violations.join("; ")}`).join("\n")}`);
   }
 } finally {
   client?.close();
