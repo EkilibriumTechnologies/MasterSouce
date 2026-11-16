@@ -85,13 +85,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           "@graph": getHomePageJsonLdGraph()
         }}
       />
-      <main style={mainStyle}>
-      <nav aria-label="Primary" style={topNavStyle}>
+      <main className="home-page" style={mainStyle}>
+      <nav aria-label="Primary" className="home-nav" style={topNavStyle}>
         <div style={topNavBrandWrap}>
           <span style={topNavBrandMark}>♫</span>
           <span style={topNavBrandText}>MasterSauce</span>
         </div>
-        <div style={topNavLinksWrap}>
+        <div className="home-nav-links" style={topNavLinksWrap}>
           <Link href="/learn" style={topNavLinkStyle}>
             Learn
           </Link>
@@ -130,7 +130,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
         <p style={heroEyebrowStyle}>Create with Suno. Finish with MasterSauce.</p>
         <h1 style={h1Style}>Your track sounds finished today — not almost ready.</h1>
-        <p style={subStyle}>
+        <p className="home-hero-summary" style={subStyle}>
           Analyze, improve, master, and prepare AI-generated music for release. MasterSauce analyzes your audio before
           mastering, recommends a mastering profile, and offers optional AI Audio Restoration when it may help — then
           preset, prompt-guided, or reference-guided mastering. Free MP3 previews; premium plans unlock HD WAV exports.
@@ -165,7 +165,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </svg>
           </span>
         </div>
-        <div style={heroCtaRow}>
+        <div className="home-hero-ctas" style={heroCtaRow}>
           <Link href="/projects" style={ctaPrimaryStyle}>
             Start a Song Journey
           </Link>
@@ -449,6 +449,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 }
 
 const mainStyle: React.CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  gridTemplateColumns: "minmax(0, 1fr)",
   maxWidth: "1080px",
   margin: "0 auto",
   /* top, right, bottom, left — respect iOS safe areas so the column stays visually centered */
@@ -850,10 +854,12 @@ const stepTextStyle: React.CSSProperties = {
 };
 const dualCardSectionStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
   gap: "14px"
 };
 const infoCardStyle: React.CSSProperties = {
+  minWidth: 0,
+  boxSizing: "border-box",
   background: "linear-gradient(145deg, rgba(22, 29, 48, 0.94), rgba(12, 17, 30, 0.94))",
   border: "1px solid rgba(142, 155, 209, 0.2)",
   borderRadius: "20px",
