@@ -35,3 +35,6 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Responsive layout regression (Chromium)
+        run: npm run test:homepage-overflow
