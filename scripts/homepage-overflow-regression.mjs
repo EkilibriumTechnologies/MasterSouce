@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 
-const VIEWPORTS = [320, 375, 390, 393, 414, 430, 1024, 1280];
+const VIEWPORTS = [320, 360, 375, 390, 393, 414, 430, 768, 1024, 1280];
 const IPHONE_USER_AGENT =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 " +
   "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -187,7 +187,32 @@ try {
       })`,
       returnByValue: true
     });
-    results.push(JSON.parse(evaluation.result.value));
+    // Horizontal scrollWidth alone misses children clipped inside overflow:hidden cards.
+    const mobileAudit = await client.send("Runtime.evaluate", {
+      expression: `JSON.stringify((() => {
+        const elements = document.querySelectorAll(
+          "main > nav, main > section, main > div, .home-primary-nav__links a, .home-hero__cta a, .home-hero-stats"
+        );
+        const clipped = Array.from(elements).flatMap((el) => {
+          if (!el.getClientRects().length) return [];
+          const rect = el.getBoundingClientRect();
+          if (rect.left >= -1 && rect.right <= window.innerWidth + 1) return [];
+          return [el.tagName.toLowerCase() + "." + String(el.className || "").replace(/\\s+/g, ".")];
+        });
+        const shortNavTargets = Array.from(document.querySelectorAll(".home-primary-nav__links a"))
+          .filter((el) => el.getBoundingClientRect().height < 43);
+        const stats = document.querySelector(".home-hero-stats");
+        const hero = document.querySelector(".home-hero");
+        if (stats && hero && stats.getBoundingClientRect().width > hero.clientWidth + 1) {
+          clipped.push("hero statistics wider than hero");
+        }
+        return { clipped, shortNavTargets: shortNavTargets.length };
+      })())`,
+      returnByValue: true
+    });
+    const result = JSON.parse(evaluation.result.value);
+    Object.assign(result, JSON.parse(mobileAudit.result.value));
+    results.push(result);
   }
 
   console.table(
@@ -197,9 +222,13 @@ try {
       "html scrollWidth": result.htmlScrollWidth,
       "body scrollWidth": result.bodyScrollWidth,
       innerWidth: result.innerWidth,
+      Clipped: result.clipped.join(", ") || "none",
+      "Small nav targets": result.viewport <= 430 ? result.shortNavTargets : "-",
       Result:
         result.htmlScrollWidth <= result.clientWidth + 0.99 &&
-        result.bodyScrollWidth <= result.innerWidth + 0.99
+        result.bodyScrollWidth <= result.innerWidth + 0.99 &&
+        result.clipped.length === 0 &&
+        (result.viewport > 430 || result.shortNavTargets === 0)
           ? "PASS"
           : "FAIL"
     }))
@@ -208,10 +237,12 @@ try {
   const failures = results.filter(
     (result) =>
       result.htmlScrollWidth > result.clientWidth + 0.99 ||
-      result.bodyScrollWidth > result.innerWidth + 0.99
+      result.bodyScrollWidth > result.innerWidth + 0.99 ||
+      result.clipped.length > 0 ||
+      (result.viewport <= 430 && result.shortNavTargets > 0)
   );
   if (failures.length > 0) {
-    throw new Error(`Homepage horizontal overflow detected at: ${failures.map((item) => item.viewport).join(", ")}px`);
+    throw new Error(`Homepage responsive layout failure at: ${failures.map((item) => item.viewport).join(", ")}px`);
   }
 } finally {
   client?.close();
