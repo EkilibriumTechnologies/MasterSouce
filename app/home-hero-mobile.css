@@ -1,6 +1,61 @@
+/* The homepage is one grid column. Without a zero minimum, a wide descendant
+   (e.g. the pricing comparison) can make the entire track wider than the phone. */
+.home-page > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 /* Homepage hero — viewports ≤639px only. Inline hero styles stay default from 640px (tablet+). */
 
 @media (max-width: 639px) {
+  /* Navigation must remain usable instead of pushing the hero off-screen. */
+  .home-nav {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+    gap: 12px;
+  }
+
+  .home-nav-links {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .home-nav-links a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: center;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+
+  .home-hero-ctas {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .home-hero-ctas a {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .home-hero-summary {
+    font-size: clamp(1rem, 4.2vw, 1.125rem) !important;
+    line-height: 1.6 !important;
+    overflow-wrap: break-word;
+  }
+
   .home-hero {
     display: flex;
     flex-direction: column;
