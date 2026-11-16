@@ -185,6 +185,8 @@ try {
         bodyScrollWidth: document.body.scrollWidth,
         innerWidth: window.innerWidth,
         viewportMeta: document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "",
+        undersizedNavLinks: Array.from(document.querySelectorAll(".home-nav-links a"))
+          .filter((link) => link.getBoundingClientRect().height < 43).length,
         visibleElements: Object.fromEntries(
           ["main", 'nav[aria-label="Primary"]', ".home-hero", ".home-hero h1", ".home-hero-ctas", "#master", "#pricing"]
             .map((selector) => {
@@ -205,6 +207,9 @@ try {
     // A page can appear desktop-sized on an iPhone even when scrollWidth === clientWidth.
     if (Math.abs(result.innerWidth - result.viewport) > 1) {
       violations.push(`layout viewport ${result.innerWidth}px != device ${result.viewport}px`);
+    }
+    if (result.viewport <= 430 && result.undersizedNavLinks > 0) {
+      violations.push(`${result.undersizedNavLinks} navigation links below 44px tap height`);
     }
     if (!result.viewportMeta.includes("width=device-width")) {
       violations.push("missing device-width viewport metadata");
