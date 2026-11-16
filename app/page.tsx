@@ -85,13 +85,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           "@graph": getHomePageJsonLdGraph()
         }}
       />
-      <main style={mainStyle}>
-      <nav aria-label="Primary" style={topNavStyle}>
+      <main className="home-main" style={mainStyle}>
+      <nav className="home-primary-nav" aria-label="Primary" style={topNavStyle}>
         <div style={topNavBrandWrap}>
           <span style={topNavBrandMark}>♫</span>
           <span style={topNavBrandText}>MasterSauce</span>
         </div>
-        <div style={topNavLinksWrap}>
+        <div className="home-primary-nav__links" style={topNavLinksWrap}>
           <Link href="/learn" style={topNavLinkStyle}>
             Learn
           </Link>
@@ -165,7 +165,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </svg>
           </span>
         </div>
-        <div style={heroCtaRow}>
+        <div className="home-hero__cta" style={heroCtaRow}>
           <Link href="/projects" style={ctaPrimaryStyle}>
             Start a Song Journey
           </Link>
@@ -212,7 +212,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           the same song — so you can leave MasterSauce, create in Suno or Udio, come back, and continue where you left off.
         </p>
 
-        <div style={journeyStepsStyle} aria-label="Song Journey stages">
+        <div className="home-journey-steps" style={journeyStepsStyle} aria-label="Song Journey stages">
           {JOURNEY_PREVIEW_STEPS.map((step, index) => (
             <div key={step} style={journeyStepStyle}>
               <span style={journeyStepNumberStyle}>{index + 1}</span>
@@ -328,7 +328,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <section id="how-it-works" style={sectionStyle}>
         <h2 style={sectionTitle}>How It Works</h2>
         <p style={sectionSubTitle}>Analyze once, preview freely, export when it locks in</p>
-        <div style={stepsGridStyle}>
+        <div className="home-steps-grid" style={stepsGridStyle}>
           <div style={stepCardStyle}>
             <div style={stepIconWrap}>⤴</div>
             <h3 style={stepTitleStyle}>Upload your mix</h3>
@@ -379,7 +379,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </dl>
       </section>
 
-      <section style={dualCardSectionStyle}>
+      <section className="home-info-grid" style={dualCardSectionStyle}>
         <div style={infoCardStyle}>
           <h2 style={infoTitleStyle}>Your Rights, Always</h2>
           <ul style={trustListStyle}>
@@ -449,7 +449,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 }
 
 const mainStyle: React.CSSProperties = {
+  width: "100%",
   maxWidth: "1080px",
+  boxSizing: "border-box",
+  minWidth: 0,
+  gridTemplateColumns: "minmax(0, 1fr)",
   margin: "0 auto",
   /* top, right, bottom, left — respect iOS safe areas so the column stays visually centered */
   padding: "18px max(20px, env(safe-area-inset-right, 0px)) 78px max(20px, env(safe-area-inset-left, 0px))",
