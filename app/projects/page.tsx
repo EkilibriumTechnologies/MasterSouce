@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
+import { SitePrimaryNav } from "@/components/navigation/site-primary-nav";
 import { JOURNEY_STAGES, getJourneyStage, getJourneyStageIndex } from "@/lib/journeys/stages";
 import type { SongProject } from "@/lib/projects/types";
 
@@ -109,9 +109,8 @@ export default function ProjectsPage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#050505", color: "#fff" }}>
-      <MasterSauceBrandNav
-        backHref="/"
-        backLabel="← MasterSauce"
+      <div className="ms-page-nav-shell">
+        <SitePrimaryNav
         trailing={
           view === "authenticated" ? (
             <button
@@ -130,7 +129,8 @@ export default function ProjectsPage() {
             </button>
           ) : null
         }
-      />
+        />
+      </div>
 
       <section style={{ width: "min(1120px, calc(100% - 32px))", margin: "0 auto", padding: "44px 0 80px" }}>
         <div style={{ maxWidth: 760 }}>
