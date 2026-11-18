@@ -38,7 +38,7 @@ export function SitePrimaryNav({ trailing }: SitePrimaryNavProps) {
       if (event.matches) setOpen(false);
     }
 
-    const wideScreen = window.matchMedia("(min-width: 768px)");
+    const wideScreen = window.matchMedia("(min-width: 821px)");
     document.addEventListener("pointerdown", onOutsideClick);
     document.addEventListener("keydown", onEscape);
     wideScreen.addEventListener("change", onWideViewport);
