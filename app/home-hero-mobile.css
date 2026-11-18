@@ -1,108 +1,140 @@
-/* The homepage is one grid column. Without a zero minimum, a wide descendant
-   (e.g. the pricing comparison) can make the entire track wider than the phone. */
+/* Mobile-first homepage: no duplicate hero branding or towering button-grid nav.
+   The shared SitePrimaryNav owns the compact header and its accessible drawer. */
 .home-page > * {
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
 }
 
-/* Homepage hero — viewports ≤639px only. Inline hero styles stay default from 640px (tablet+). */
-
-@media (max-width: 639px) {
-  /* Navigation must remain usable instead of pushing the hero off-screen. */
-  .home-nav {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: stretch;
-    gap: 12px;
-  }
-
-  .home-nav-links {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px !important;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .home-nav-links a {
-    display: flex;
-    min-height: 44px;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-    box-sizing: border-box;
-    text-align: center;
-    overflow-wrap: anywhere;
-    line-height: 1.25;
-  }
-
-  .home-hero-ctas {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .home-hero-ctas a {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    white-space: normal;
-    text-align: center;
-  }
-
-  .home-hero-summary {
-    font-size: clamp(1rem, 4.2vw, 1.125rem) !important;
-    line-height: 1.6 !important;
-    overflow-wrap: break-word;
+@media (max-width: 767px) {
+  .home-page {
+    padding: 12px max(12px, env(safe-area-inset-right, 0px)) 54px max(12px, env(safe-area-inset-left, 0px)) !important;
+    gap: 18px !important;
   }
 
   .home-hero {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
-    /* The page wrapper already applies safe-area insets; keep the card content centered within it. */
-    padding-top: 48px !important;
-    padding-right: 18px !important;
-    padding-bottom: 44px !important;
-    padding-left: 18px !important;
-    /* Replace single corner accent (0% 0%) with paired soft accents so the card reads centered */
+    align-items: stretch;
+    padding: 26px 18px 24px !important;
+    border-radius: 20px !important;
+    text-align: left !important;
     background:
-      radial-gradient(880px 320px at 50% -30%, rgba(155, 111, 255, 0.34), rgba(155, 111, 255, 0) 62%),
-      radial-gradient(480px 380px at 14% 6%, rgba(46, 177, 255, 0.09), rgba(46, 177, 255, 0) 56%),
-      radial-gradient(480px 380px at 86% 6%, rgba(46, 177, 255, 0.09), rgba(46, 177, 255, 0) 56%),
-      linear-gradient(145deg, #121a32 0%, #0d1428 52%, #090f1f 100%) !important;
+      radial-gradient(580px 260px at 50% -38%, rgba(155, 111, 255, 0.25), transparent 66%),
+      linear-gradient(145deg, #121b33 0%, #0c1428 75%, #090f1f 100%) !important;
+  }
+
+  /* MasterSauce is already visible in the navigation bar on phones. */
+  .home-hero-logo-wrap {
+    display: none !important;
   }
 
   .home-hero > * {
-    width: 100%;
     max-width: 100%;
     box-sizing: border-box;
   }
 
-  .home-hero h1,
-  .home-hero > p {
+  .home-hero > p,
+  .home-hero h1 {
+    text-align: left !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .home-hero > p:first-of-type {
+    font-size: 0.72rem !important;
+    letter-spacing: 0.09em !important;
+    line-height: 1.4 !important;
+  }
+
+  .home-hero h1 {
+    font-size: clamp(1.75rem, 7.8vw, 2.45rem) !important;
+    line-height: 1.12 !important;
+    letter-spacing: -0.03em !important;
+    overflow-wrap: break-word;
+    margin-bottom: 14px !important;
+  }
+
+  .home-hero-summary {
+    font-size: 0.97rem !important;
+    line-height: 1.55 !important;
+    color: #abb9dc !important;
+  }
+
+  .home-hero-ctas {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    margin-top: 22px !important;
+    width: 100%;
+  }
+
+  .home-hero-ctas a {
+    display: flex !important;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    box-sizing: border-box;
+    padding: 13px 14px !important;
+    white-space: normal;
     text-align: center;
   }
 
-  .home-hero-logo-wrap {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+  .home-hero-stats {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  .home-hero-logo {
-    width: min(168px, 86vw) !important;
+  .home-hero-stats > div > p:first-child {
+    font-size: clamp(1.5rem, 7vw, 2rem) !important;
+  }
+
+  .home-benefit-pills {
+    gap: 8px !important;
+    justify-content: flex-start !important;
+  }
+  .home-benefit-pills > span {
+    border-radius: 12px !important;
+    overflow-wrap: anywhere;
+  }
+
+  .home-page > section:not(.home-hero):not(.home-info-grid) {
+    border-radius: 18px !important;
+    padding: 22px 16px !important;
+  }
+  .home-page > .home-info-grid {
+    padding: 0 !important;
+  }
+
+  .home-page h2 {
+    font-size: clamp(1.5rem, 5.8vw, 2.2rem) !important;
+    line-height: 1.16 !important;
+  }
+  .home-page #master {
+    padding: 22px 14px !important;
+  }
+  .home-page #song-journeys [aria-label="Song Journey stages"] {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)) !important;
+  }
+  .home-page #how-it-works > div,
+  .home-page > .home-info-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .home-page :is(input, select, textarea) {
     max-width: 100%;
-    height: auto !important;
-    display: block !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
+    box-sizing: border-box;
   }
+  .home-page :is(p, h1, h2, h3, a) {
+    overflow-wrap: break-word;
+  }
+}
 
-  .home-hero .home-hero-stats {
-    margin-left: auto !important;
-    margin-right: auto !important;
+@media (max-width: 360px) {
+  .home-hero {
+    padding: 22px 14px !important;
+  }
+  .home-hero h1 {
+    font-size: 1.72rem !important;
   }
 }

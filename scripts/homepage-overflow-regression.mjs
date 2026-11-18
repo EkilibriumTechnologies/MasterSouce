@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 
 const VIEWPORTS = [320, 360, 375, 390, 393, 414, 430, 768, 1024, 1280];
+const PRODUCT_ROUTES = ["/learn", "/song-architect", "/ar-ai", "/projects", "/pricing"];
 const IPHONE_USER_AGENT =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 " +
   "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -111,6 +112,72 @@ async function waitForPage(client) {
   throw new Error("Homepage did not finish rendering.");
 }
 
+async function readNavigation(client) {
+  const evaluation = await client.send("Runtime.evaluate", {
+    expression: `JSON.stringify((() => {
+      const nav = document.querySelector(".ms-primary-nav");
+      const toggle = nav?.querySelector(".ms-primary-nav__toggle");
+      const panel = nav?.querySelector(".ms-primary-nav__links");
+      const navBounds = nav?.getBoundingClientRect();
+      const menuBounds = panel?.getBoundingClientRect();
+      const links = [...(panel?.querySelectorAll("a") ?? [])].filter((element) =>
+        getComputedStyle(element).display !== "none"
+      );
+      return {
+        navHeight: navBounds?.height ?? 0,
+        navLeft: navBounds?.left ?? -1,
+        navRight: navBounds?.right ?? -1,
+        toggleVisible: Boolean(toggle && getComputedStyle(toggle).display !== "none"),
+        expanded: toggle?.getAttribute("aria-expanded") ?? "",
+        panelVisible: Boolean(panel && getComputedStyle(panel).display !== "none"),
+        menuLeft: menuBounds?.left ?? -1,
+        menuRight: menuBounds?.right ?? -1,
+        links: links.map((element) => {
+          const rect = element.getBoundingClientRect();
+          return { height: rect.height, left: rect.left, right: rect.right };
+        })
+      };
+    })())`,
+    returnByValue: true
+  });
+  return JSON.parse(evaluation.result.value);
+}
+
+async function awaitMenuExpanded(client, expected) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const state = await readNavigation(client);
+    if (state.expanded === expected) return state;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Mobile menu never reached aria-expanded=${expected}`);
+}
+
+function validateNavigation(state, width, opened = false) {
+  const errors = [];
+  const mobileHeader = width <= 820;
+  if (state.navHeight <= 0 || state.navHeight > (mobileHeader ? 82 : 100)) {
+    errors.push(`navigation height ${state.navHeight}px`);
+  }
+  if (state.navLeft < -1 || state.navRight > width + 1) {
+    errors.push(`navigation goes offscreen [${state.navLeft}, ${state.navRight}]`);
+  }
+  if (mobileHeader) {
+    if (!state.toggleVisible) errors.push("mobile menu toggle missing");
+    if (opened !== state.panelVisible) errors.push("drawer visibility mismatch");
+    if (opened !== (state.expanded === "true")) errors.push("aria-expanded mismatch");
+    if (opened) {
+      if (state.menuLeft < -1 || state.menuRight > width + 1) errors.push("drawer offscreen");
+      if (state.links.length !== 6) errors.push(`drawer expected six links, got ${state.links.length}`);
+      if (state.links.some((link) => link.height < 43 || link.left < -1 || link.right > width + 1)) {
+        errors.push("mobile menu has clipped or undersized tap targets");
+      }
+    }
+  } else if (!state.panelVisible || state.toggleVisible) {
+    errors.push("desktop navigation not visible");
+  }
+  return errors;
+}
+
 let appProcess;
 let chromeProcess;
 let profileDirectory;
@@ -185,8 +252,6 @@ try {
         bodyScrollWidth: document.body.scrollWidth,
         innerWidth: window.innerWidth,
         viewportMeta: document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "",
-        undersizedNavLinks: Array.from(document.querySelectorAll(".home-nav-links a"))
-          .filter((link) => link.getBoundingClientRect().height < 43).length,
         visibleElements: Object.fromEntries(
           ["main", 'nav[aria-label="Primary"]', ".home-hero", ".home-hero h1", ".home-hero-ctas", "#master", "#pricing"]
             .map((selector) => {
@@ -199,7 +264,26 @@ try {
       })`,
       returnByValue: true
     });
-    results.push(JSON.parse(evaluation.result.value));
+    const result = JSON.parse(evaluation.result.value);
+    let navigation = await readNavigation(client);
+    result.navigationIssues = validateNavigation(navigation, width);
+    if (width <= 820) {
+      // Test the actual interactive drawer, not only DOM width at rest.
+      await client.send("Runtime.evaluate", {
+        expression: 'document.querySelector(".ms-primary-nav__toggle").click()',
+        returnByValue: true
+      });
+      navigation = await awaitMenuExpanded(client, "true");
+      result.navigationIssues.push(...validateNavigation(navigation, width, true));
+
+      await client.send("Runtime.evaluate", {
+        expression: 'document.dispatchEvent(new KeyboardEvent("keydown", {key:"Escape", bubbles:true}))',
+        returnByValue: true
+      });
+      navigation = await awaitMenuExpanded(client, "false");
+      result.navigationIssues.push(...validateNavigation(navigation, width));
+    }
+    results.push(result);
   }
 
   const inspect = (result) => {
@@ -208,9 +292,7 @@ try {
     if (Math.abs(result.innerWidth - result.viewport) > 1) {
       violations.push(`layout viewport ${result.innerWidth}px != device ${result.viewport}px`);
     }
-    if (result.viewport <= 430 && result.undersizedNavLinks > 0) {
-      violations.push(`${result.undersizedNavLinks} navigation links below 44px tap height`);
-    }
+    violations.push(...result.navigationIssues);
     if (!result.viewportMeta.includes("width=device-width")) {
       violations.push("missing device-width viewport metadata");
     }
@@ -239,6 +321,40 @@ try {
     bodyScrollWidth: result.bodyScrollWidth,
     result: inspect(result).length === 0 ? "PASS" : "FAIL"
   })));
+
+  // Smoke-test the shared navigation and horizontal fit on main product screens.
+  const productIssues = [];
+  for (const width of [320, 390, 768]) {
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 844,
+      deviceScaleFactor: 1,
+      mobile: width <= 430,
+      screenWidth: width,
+      screenHeight: 844
+    });
+    await client.send("Network.setUserAgentOverride", {
+      userAgent: width <= 430 ? IPHONE_USER_AGENT : DESKTOP_USER_AGENT
+    });
+    for (const route of PRODUCT_ROUTES) {
+      await client.send("Page.navigate", { url: `${baseUrl}${route}` });
+      await waitForPage(client);
+      const nav = await readNavigation(client);
+      const metrics = await client.send("Runtime.evaluate", {
+        expression: 'JSON.stringify({html:document.documentElement.scrollWidth,body:document.body.scrollWidth,viewport:document.documentElement.clientWidth})',
+        returnByValue: true
+      });
+      const widths = JSON.parse(metrics.result.value);
+      const violations = validateNavigation(nav, width);
+      if (widths.html > widths.viewport + 1 || widths.body > width + 1) {
+        violations.push(`document overflow (html=${widths.html}, body=${widths.body})`);
+      }
+      if (violations.length) productIssues.push(`${route} at ${width}px: ${violations.join("; ")}`);
+    }
+  }
+  if (productIssues.length) {
+    throw new Error(`Product screen mobile layout failures:\n${productIssues.join("\n")}`);
+  }
 
   if (failures.length > 0) {
     throw new Error(`Homepage mobile layout failures:\n${failures.map((item) =>

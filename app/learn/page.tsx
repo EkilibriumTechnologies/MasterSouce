@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { MasterSauceBrandHeroLogo, MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
+import { MasterSauceBrandHeroLogo } from "@/components/brand/mastersauce-brand-header";
+import { SitePrimaryNav } from "@/components/navigation/site-primary-nav";
 import { buildPageMetadata } from "@/lib/seo/page-metadata";
 
 import {
@@ -124,7 +125,7 @@ const articles: LearnArticleCard[] = [
 export default function LearnHubPage() {
   return (
     <main style={mainStyle}>
-      <MasterSauceBrandNav backHref="/" backLabel="Master a song" />
+      <SitePrimaryNav />
 
       <header style={heroStyle}>
         <MasterSauceBrandHeroLogo priority />

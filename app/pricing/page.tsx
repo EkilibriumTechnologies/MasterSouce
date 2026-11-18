@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import { Suspense } from "react";
 
-import { MasterSauceBrandNav } from "@/components/brand/mastersauce-brand-header";
+import { SitePrimaryNav } from "@/components/navigation/site-primary-nav";
 import { PricingSection } from "@/components/pricing-section";
 import { buildPageMetadata } from "@/lib/seo/page-metadata";
 
@@ -19,7 +19,7 @@ export const metadata: Metadata = buildPageMetadata({
 export default function PricingPage() {
   return (
     <main style={mainStyle}>
-      <MasterSauceBrandNav backHref="/" backLabel="← Back to Home" />
+      <SitePrimaryNav />
       <Suspense fallback={null}>
         <PricingSection />
       </Suspense>

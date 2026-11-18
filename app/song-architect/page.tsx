@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import { SitePrimaryNav } from "@/components/navigation/site-primary-nav";
 import { useEffect, useMemo, useState } from "react";
 import "@/components/brand/mastersauce-brand-header.css";
 import "./song-architect-form.css";
@@ -801,22 +801,7 @@ export default function SongArchitectPage() {
 
   return (
     <main style={mainStyle}>
-      <nav aria-label="Song Architect" style={topNavStyle}>
-        <Link href="/" style={brandWrapStyle}>
-          <Image
-            src="/mastersauce-logo.png"
-            alt="MasterSauce"
-            width={466}
-            height={381}
-            className="mastersauce-brand-nav__logo"
-            sizes="(max-width: 639px) 108px, 148px"
-            style={navLogoStyle}
-          />
-        </Link>
-        <Link href="/" style={backLinkStyle}>
-          Back to Mastering
-        </Link>
-      </nav>
+      <SitePrimaryNav />
 
       <section style={compactIntroStyle} aria-labelledby="song-architect-heading">
         <p style={eyebrowStyle}>Song Architect</p>

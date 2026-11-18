@@ -11,7 +11,7 @@ import { StaticBeforeAfterDemo } from "@/components/StaticBeforeAfterDemo";
 import { isHomepageBeforeAfterEnabled } from "@/lib/features/homepage-before-after";
 import { getHomeProductMetrics } from "@/lib/product-metrics";
 import { HOME_FAQ_ITEMS } from "@/lib/seo/home-faq";
-import { MobileMasterBanner } from "@/components/mobile-master-banner";
+import { SitePrimaryNav } from "@/components/navigation/site-primary-nav";
 import { getHomePageJsonLdGraph } from "@/lib/seo/home-json-ld";
 import { absoluteUrl, SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
 import { SOCIAL_PREVIEW_ALT, SOCIAL_PREVIEW_SIZE } from "@/lib/og/social-preview";
@@ -86,30 +86,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         }}
       />
       <main className="home-page" style={mainStyle}>
-      <nav aria-label="Primary" className="home-nav" style={topNavStyle}>
-        <div style={topNavBrandWrap}>
-          <span style={topNavBrandMark}>♫</span>
-          <span style={topNavBrandText}>MasterSauce</span>
-        </div>
-        <div className="home-nav-links" style={topNavLinksWrap}>
-          <Link href="/learn" style={topNavLinkStyle}>
-            Learn
-          </Link>
-          <Link href="/song-architect" style={topNavLinkStyle}>
-            Song Architect
-          </Link>
-          <Link href="/ar-ai" style={topNavLinkStyle}>
-            Hit Analyzer
-          </Link>
-          <Link href="/projects" style={topNavLinkStyle}>
-            Journeys
-          </Link>
-          <a href="#pricing" style={topNavLinkStyle}>
-            Pricing
-          </a>
-        </div>
-      </nav>
-      {showCheckoutSuccess ? (
+      <SitePrimaryNav />     {showCheckoutSuccess ? (
         <section style={successBannerStyle} aria-live="polite">
           <p style={successEyebrowStyle}>Purchase complete</p>
           <p style={successBodyStyle}>{checkoutSuccessMessage}</p>
@@ -131,11 +108,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <p style={heroEyebrowStyle}>Create with Suno. Finish with MasterSauce.</p>
         <h1 style={h1Style}>Your track sounds finished today — not almost ready.</h1>
         <p className="home-hero-summary" style={subStyle}>
-          Analyze, improve, master, and prepare AI-generated music for release. MasterSauce analyzes your audio before
-          mastering, recommends a mastering profile, and offers optional AI Audio Restoration when it may help — then
-          preset, prompt-guided, or reference-guided mastering. Free MP3 previews; premium plans unlock HD WAV exports.
-          No plugins. No studio time.
+          Analyze and master your Suno or AI-generated tracks with preset, prompt, or reference guidance.
+          Preview free MP3 masters, then export HD WAV on premium plans. No plugins required.
         </p>
+        <div className="home-hero-ctas" style={heroCtaRow}>
+          <Link href="/projects" style={ctaPrimaryStyle}>
+            Start a Song Journey
+          </Link>
+          <a href="#master" style={ctaSecondaryStyle}>
+            I already have a song
+          </a>
+        </div>
         <div style={platformRowStyle} aria-label="Streaming platform optimization">
           <span style={platformLabelStyle}>Optimized for:</span>
           <span style={platformIconsWrapStyle} aria-hidden="true">
@@ -165,14 +148,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </svg>
           </span>
         </div>
-        <div className="home-hero-ctas" style={heroCtaRow}>
-          <Link href="/projects" style={ctaPrimaryStyle}>
-            Start a Song Journey
-          </Link>
-          <a href="#master" style={ctaSecondaryStyle}>
-            I already have a song
-          </a>
-        </div>
         <p style={heroSunoLinkWrapStyle}>
           <Link href="/suno-mastering" style={learnHintLinkStyle}>
             Tools for Suno creators
@@ -194,12 +169,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           }}
         />
 
-        <div style={pillRowStyle}>
+        <div className="home-benefit-pills" style={pillRowStyle}>
           <span style={pillStyle}>⚡ AI mastering — preset, prompt, or reference-guided</span>
           <span style={pillStyle}>🎧 Free MP3 previews before you export</span>
           <span style={pillStyle}>📀 HD WAV exports on premium plans</span>
         </div>
       </section>
+
+      <UploadForm />
 
       <section id="song-journeys" style={journeySectionStyle} aria-labelledby="journeys-heading">
         <p style={productBadgeStyle}>FROM IDEA TO FINISHED MASTER</p>
@@ -321,9 +298,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </section>
 
       {showHomepageBeforeAfter ? <StaticBeforeAfterDemo /> : null}
-
-      <MobileMasterBanner />
-      <UploadForm />
 
       <section id="how-it-works" style={sectionStyle}>
         <h2 style={sectionTitle}>How It Works</h2>
@@ -459,59 +433,6 @@ const mainStyle: React.CSSProperties = {
   padding: "18px max(20px, env(safe-area-inset-right, 0px)) 78px max(20px, env(safe-area-inset-left, 0px))",
   display: "grid",
   gap: "34px"
-};
-
-const topNavStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
-  flexWrap: "wrap",
-  border: "1px solid rgba(84, 100, 148, 0.32)",
-  borderRadius: "16px",
-  background: "linear-gradient(140deg, rgba(17, 24, 44, 0.78), rgba(10, 16, 31, 0.82))",
-  boxShadow: "0 12px 24px rgba(2, 5, 14, 0.34)",
-  padding: "10px 14px"
-};
-
-const topNavBrandWrap: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px"
-};
-
-const topNavBrandMark: React.CSSProperties = {
-  width: "28px",
-  height: "28px",
-  borderRadius: "8px",
-  display: "grid",
-  placeItems: "center",
-  color: "#fff",
-  background: "linear-gradient(125deg, #8f62ff 0%, #6a7cff 100%)"
-};
-
-const topNavBrandText: React.CSSProperties = {
-  color: "#e7edff",
-  fontWeight: 700,
-  letterSpacing: "0.01em"
-};
-
-const topNavLinksWrap: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-  flexWrap: "wrap"
-};
-
-const topNavLinkStyle: React.CSSProperties = {
-  color: "#b9c6ef",
-  textDecoration: "none",
-  fontSize: "0.92rem",
-  fontWeight: 600,
-  border: "1px solid rgba(86, 102, 156, 0.34)",
-  borderRadius: "999px",
-  padding: "8px 12px",
-  background: "rgba(14, 22, 40, 0.68)"
 };
 
 const heroStyle: React.CSSProperties = {
