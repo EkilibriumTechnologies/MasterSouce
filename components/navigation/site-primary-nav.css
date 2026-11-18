@@ -86,7 +86,7 @@
   outline-offset: 3px;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 820px) {
   .ms-primary-nav {
     position: sticky;
     top: max(8px, env(safe-area-inset-top, 0px));
