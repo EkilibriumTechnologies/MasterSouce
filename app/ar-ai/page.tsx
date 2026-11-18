@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import { SitePrimaryNav } from "@/components/navigation/site-primary-nav";
 import {
   readProjectIdFromLocation,
   saveProjectArtifactRequest,
@@ -402,22 +402,7 @@ export default function ArAiPage() {
 
   return (
     <main style={mainStyle}>
-      <nav style={topNavStyle} aria-label="Site">
-        <Link href="/" style={navLogoLinkStyle}>
-          <Image
-            src="/mastersauce-logo.png"
-            alt="MasterSauce"
-            width={466}
-            height={381}
-            className="mastersauce-brand-nav__logo"
-            sizes="(max-width: 639px) 108px, 148px"
-            style={navLogoStyle}
-          />
-        </Link>
-        <Link href="/" style={backLinkStyle}>
-          ← Back to MasterSauce
-        </Link>
-      </nav>
+      <SitePrimaryNav />
 
       <header style={heroStyle}>
         <span style={releaseBadgeStyle}>A&amp;R RELEASE READINESS</span>
