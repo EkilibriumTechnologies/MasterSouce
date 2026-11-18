@@ -177,3 +177,40 @@
     display: none;
   }
 }
+
+.ms-primary-nav__mobile-trailing {
+  display: none;
+}
+.ms-page-nav-shell {
+  width: min(1120px, calc(100% - 24px));
+  margin: 0 auto 18px;
+}
+main > .ms-primary-nav {
+  margin-bottom: clamp(18px, 3vw, 28px);
+}
+.home-page > .ms-primary-nav {
+  margin-bottom: 0;
+}
+@media (max-width: 767px) {
+  .ms-primary-nav__trailing {
+    display: none;
+  }
+  .ms-primary-nav__mobile-trailing {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
+    padding: 8px 6px 0;
+    border-top: 1px solid rgba(100, 120, 174, 0.24);
+  }
+  .ms-primary-nav__mobile-trailing > button {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    width: 100%;
+    padding: 12px !important;
+    justify-content: center;
+  }
+  .ms-primary-nav ~ header .mastersauce-brand-hero-logo {
+    display: none;
+  }
+}
