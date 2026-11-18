@@ -4,8 +4,11 @@ import { readFileSync } from "node:fs";
 const projectsPage = readFileSync("app/projects/page.tsx", "utf8");
 const projectDetail = readFileSync("app/projects/[projectId]/page.tsx", "utf8");
 const home = readFileSync("app/page.tsx", "utf8");
+const navigation = readFileSync("components/navigation/site-primary-nav.tsx", "utf8");
 
-assert.match(home, />\s*Journeys\s*<\/Link>/, "Home nav exposes Journeys");
+assert.match(home, /<SitePrimaryNav\s*\/>/, "Homepage mounts the shared navigation");
+assert.match(navigation, /label: "Journeys"/, "Shared mobile navigation exposes Journeys");
+assert.match(navigation, /aria-expanded=\{open\}/, "Mobile navigation exposes its expanded state");
 assert.match(home, /id="song-journeys"/, "Homepage visibly features Song Journeys");
 assert.match(home, /Start a Song Journey/, "Homepage offers a primary Journey CTA");
 assert.match(home, /I already have a song/, "Homepage preserves the direct mastering path");
