@@ -88,6 +88,7 @@ export function SitePrimaryNav({ trailing }: SitePrimaryNavProps) {
         <Link href="/#master" className="ms-primary-nav__mobile-cta" onClick={() => setOpen(false)}>
           Master a song
         </Link>
+        {trailing ? <div className="ms-primary-nav__mobile-trailing">{trailing}</div> : null}
       </div>
     </nav>
   );
